@@ -1,0 +1,1 @@
+{"version":3,"file":"gotScraping.js","sourceRoot":"","sources":["../../src/internals/gotScraping.ts"],"names":[],"mappings":";;;AAGA,oKAAoK;AACpK,IAAI,WAAW,GAAG,CAAC,KAAK,EAAE,GAAG,IAA6B,EAAE,EAAE;IAC1D,CAAG,sBAAA,WAAW,GAAK,CAAA,MAAM,MAAM,CAAC,cAAc,CAAC,CAAA,YAAjC,CAAkC,CAAC;IAEjD,OAAO,WAAW,CAAC,GAAG,IAAI,CAAC,CAAC;AAChC,CAAC,CAAgB,CAAC;AAET,kCAAW"}

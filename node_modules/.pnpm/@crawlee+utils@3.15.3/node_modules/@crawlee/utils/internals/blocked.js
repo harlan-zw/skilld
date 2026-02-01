@@ -1,0 +1,23 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.ROTATE_PROXY_ERRORS = exports.RETRY_CSS_SELECTORS = exports.CLOUDFLARE_RETRY_CSS_SELECTORS = void 0;
+exports.CLOUDFLARE_RETRY_CSS_SELECTORS = ['#turnstile-wrapper iframe[src^="https://challenges.cloudflare.com"]'];
+/**
+ * CSS selectors for elements that should trigger a retry, as the crawler is likely getting blocked.
+ */
+exports.RETRY_CSS_SELECTORS = [
+    ...exports.CLOUDFLARE_RETRY_CSS_SELECTORS,
+    'div#infoDiv0 a[href*="//www.google.com/policies/terms/"]',
+    'iframe[src*="_Incapsula_Resource"]',
+];
+/**
+ * Content of proxy errors that should trigger a retry, as the proxy is likely getting blocked / is malfunctioning.
+ */
+exports.ROTATE_PROXY_ERRORS = [
+    'ECONNRESET',
+    'ECONNREFUSED',
+    'ERR_PROXY_CONNECTION_FAILED',
+    'ERR_TUNNEL_CONNECTION_FAILED',
+    'Proxy responded with',
+];
+//# sourceMappingURL=blocked.js.map

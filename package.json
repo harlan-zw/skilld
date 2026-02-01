@@ -1,0 +1,54 @@
+{
+  "name": "skilld",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "Generate searchable skills from documentation sites using llms.txt and crawling.",
+  "author": {
+    "name": "Harlan Wilton",
+    "email": "harlan@harlanzw.com",
+    "url": "https://harlanzw.com/"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/harlan-zw/skilld"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "bin": {
+    "skilld": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "skills"
+  ],
+  "scripts": {
+    "build": "obuild",
+    "dev:prepare": "obuild --stub",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest",
+    "prepack": "pnpm run build"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
+    "@mdream/crawl": "^0.15.3",
+    "citty": "^0.1.6",
+    "consola": "^3.4.2",
+    "mdream": "^0.15.3",
+    "retriv": "link:../retriv"
+  },
+  "devDependencies": {
+    "@antfu/eslint-config": "^6.7.3",
+    "@types/node": "^22.10.0",
+    "obuild": "^0.4.14",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
+  }
+}

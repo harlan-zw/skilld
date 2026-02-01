@@ -1,0 +1,126 @@
+{
+  "name": "figlet",
+  "version": "1.10.0",
+  "description": "Creates ASCII Art from text. A full implementation of the FIGfont spec.",
+  "keywords": [
+    "figlet",
+    "ascii",
+    "art",
+    "banner",
+    "ansi"
+  ],
+  "bin": "./bin/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/patorjk/figlet.js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/patorjk/figlet.js/issues"
+  },
+  "author": {
+    "name": "Patrick Gillespie",
+    "email": "patorjk@gmail.com",
+    "url": "http://patorjk.com/"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/node-figlet.cjs",
+  "module": "./dist/figlet.mjs",
+  "browser": "./dist/figlet.mjs",
+  "types": "./dist/types/cjs/node-figlet.d.cts",
+  "exports": {
+    ".": {
+      "browser": {
+        "import": {
+          "types": "./dist/types/esm/figlet.d.ts",
+          "default": "./dist/figlet.mjs"
+        },
+        "require": {
+          "types": "./dist/types/cjs/figlet.d.cts",
+          "default": "./dist/figlet.cjs"
+        }
+      },
+      "node": {
+        "import": {
+          "types": "./dist/types/esm/node-figlet.d.ts",
+          "default": "./dist/node-figlet.mjs"
+        },
+        "require": {
+          "types": "./dist/types/cjs/node-figlet.d.cts",
+          "default": "./dist/node-figlet.cjs"
+        }
+      },
+      "import": {
+        "types": "./dist/types/esm/figlet.d.ts",
+        "default": "./dist/figlet.mjs"
+      },
+      "require": {
+        "types": "./dist/types/cjs/figlet.d.cts",
+        "default": "./dist/figlet.js"
+      }
+    },
+    "./node": {
+      "import": {
+        "types": "./dist/types/esm/node-figlet.d.ts",
+        "default": "./dist/node-figlet.mjs"
+      },
+      "require": {
+        "types": "./dist/types/cjs/node-figlet.d.cts",
+        "default": "./dist/node-figlet.cjs"
+      }
+    },
+    "./browser": {
+      "import": {
+        "types": "./dist/types/esm/figlet.d.ts",
+        "default": "./dist/figlet.mjs"
+      },
+      "require": {
+        "types": "./dist/types/cjs/figlet.d.cts",
+        "default": "./dist/figlet.js"
+      }
+    },
+    "./fonts/*": {
+      "types": "./importable-fonts/*.d.ts",
+      "default": "./importable-fonts/*.js"
+    },
+    "./importable-fonts/*": "./importable-fonts/*"
+  },
+  "files": [
+    "dist",
+    "fonts",
+    "importable-fonts",
+    "README.md"
+  ],
+  "scripts": {
+    "pre-build-scripts": "node utils/create-font-list.js && node utils/flf-to-strings.js",
+    "prebuild": "npm run pre-build-scripts",
+    "build": "vite build && npm run commonJSFixes",
+    "dev": "vite build --watch",
+    "test": "vitest run",
+    "commonJSFixes": "node utils/copy-cjs-types.js",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
+    "prepare": "husky install"
+  },
+  "devDependencies": {
+    "@types/node": "^24.2.0",
+    "@vitest/ui": "^3.2.4",
+    "async": "~3.2.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.5",
+    "typescript": "^5.9.2",
+    "vite": "^7.0.6",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">= 17.0.0"
+  },
+  "lint-staged": {
+    "src/**/*": "prettier --write --ignore-unknown"
+  },
+  "dependencies": {
+    "commander": "^14.0.0"
+  }
+}

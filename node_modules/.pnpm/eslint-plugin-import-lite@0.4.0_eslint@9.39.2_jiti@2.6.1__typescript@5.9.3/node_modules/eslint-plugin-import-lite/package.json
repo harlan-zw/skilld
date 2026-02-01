@@ -1,0 +1,81 @@
+{
+  "name": "eslint-plugin-import-lite",
+  "type": "module",
+  "version": "0.4.0",
+  "packageManager": "pnpm@10.26.0",
+  "author": "Vida Xie<https://github.com/9romise>",
+  "license": "MIT",
+  "homepage": "https://github.com/9romise/eslint-plugin-import-lite#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/9romise/eslint-plugin-import-lite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/9romise/eslint-plugin-import-lite/issues"
+  },
+  "keywords": [],
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/dts/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.mjs"
+    },
+    "./rule-options": {
+      "types": "./dist/dts/rule-options.d.ts"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/dts/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": "^18.18.0 || ^20.9.0 || >=21.1.0"
+  },
+  "scripts": {
+    "dev": "tsdown --watch",
+    "build": "tsdown",
+    "test": "vitest",
+    "lint": "eslint .",
+    "update": "tsx scripts/update && eslint . --fix",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck",
+    "prepare": "npm run build"
+  },
+  "peerDependencies": {
+    "eslint": ">=9.0.0",
+    "typescript": ">=4.5"
+  },
+  "peerDependenciesMeta": {
+    "typescript": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "catalog:dev",
+    "@typescript-eslint/parser": "catalog:test",
+    "@typescript-eslint/utils": "catalog:dev",
+    "@vida0905/eslint-config": "catalog:dev",
+    "change-case": "catalog:dev",
+    "eslint": "catalog:dev",
+    "eslint-plugin-import-lite": "workspace:*",
+    "eslint-typegen": "catalog:dev",
+    "eslint-vitest-rule-tester": "catalog:test",
+    "json-schema-to-typescript-lite": "catalog:dev",
+    "nano-staged": "catalog:dev",
+    "simple-git-hooks": "catalog:dev",
+    "tinyglobby": "catalog:dev",
+    "tsdown": "catalog:dev",
+    "tsx": "catalog:dev",
+    "typescript": "catalog:dev",
+    "vitest": "catalog:test"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "npx nano-staged"
+  },
+  "nano-staged": {
+    "*": "eslint --fix"
+  }
+}

@@ -1,0 +1,5 @@
+shellEmulator: true
+
+trustPolicy: ignore
+ignoredBuiltDependencies:
+  - esbuild

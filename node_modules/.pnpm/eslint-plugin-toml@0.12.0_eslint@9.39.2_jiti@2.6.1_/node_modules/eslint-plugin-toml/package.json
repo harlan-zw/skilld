@@ -1,0 +1,120 @@
+{
+  "name": "eslint-plugin-toml",
+  "version": "0.12.0",
+  "description": "This ESLint plugin provides linting rules for TOML.",
+  "main": "lib/index.js",
+  "files": [
+    "lib"
+  ],
+  "engines": {
+    "node": "^12.22.0 || ^14.17.0 || >=16.0.0"
+  },
+  "scripts": {
+    "prebuild": "npm run -s clean",
+    "build": "npm run build:meta && npm run build:ts",
+    "build:meta": "ts-node --transpile-only ./tools/update-meta.ts",
+    "build:ts": "tsc --project ./tsconfig.build.json",
+    "clean": "rimraf .nyc_output dist coverage",
+    "lint": "eslint . --ignore-pattern playground",
+    "eslint-fix": "eslint . --ignore-pattern playground --fix",
+    "pretest:base": "cross-env DEBUG=eslint-plugin-toml*",
+    "test:base": "mocha --require ts-node/register \"tests/src/**/*.ts\" --reporter dot --timeout 60000",
+    "test": "npm run test:base",
+    "cover": "nyc --reporter=lcov npm run test:base",
+    "test:debug": "mocha --require ts-node/register/transpile-only --inspect \"tests/src/**/*.ts\" --reporter dot",
+    "update": "node --require ts-node/register ./tools/update.ts && npm run eslint-fix",
+    "new": "ts-node ./tools/new-rule.ts",
+    "predocs:watch": "npm run build:ts",
+    "docs:watch": "vitepress dev docs",
+    "docs:build": "npm run build:ts && vitepress build docs",
+    "preversion": "npm test && git add .",
+    "version": "env-cmd -e version npm run update && git add .",
+    "version:ci": "env-cmd -e version-ci npm run update && changeset version",
+    "prerelease": "npm run build",
+    "release": "changeset publish"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ota-meshi/eslint-plugin-toml.git"
+  },
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin",
+    "toml",
+    "lint",
+    "formatter"
+  ],
+  "author": "Yosuke Ota",
+  "funding": "https://github.com/sponsors/ota-meshi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ota-meshi/eslint-plugin-toml/issues"
+  },
+  "homepage": "https://ota-meshi.github.io/eslint-plugin-toml/",
+  "peerDependencies": {
+    "eslint": ">=6.0.0"
+  },
+  "dependencies": {
+    "debug": "^4.1.1",
+    "eslint-compat-utils": "^0.6.0",
+    "lodash": "^4.17.19",
+    "toml-eslint-parser": "^0.10.0"
+  },
+  "devDependencies": {
+    "@changesets/changelog-github": "^0.5.0",
+    "@changesets/cli": "^2.27.5",
+    "@eslint-community/eslint-plugin-eslint-comments": "^4.3.0",
+    "@eslint/json": "^0.8.0",
+    "@ota-meshi/eslint-plugin": "^0.17.6",
+    "@ota-meshi/site-kit-eslint-editor-vue": "^0.2.1",
+    "@types/debug": "^4.1.12",
+    "@types/eslint": "^9.0.0",
+    "@types/eslint-scope": "^3.7.7",
+    "@types/eslint-visitor-keys": "^3.3.0",
+    "@types/estree": "^1.0.5",
+    "@types/lodash": "^4.17.5",
+    "@types/mocha": "^10.0.7",
+    "@types/node": "^22.0.0",
+    "@types/semver": "^7.5.8",
+    "@typescript-eslint/eslint-plugin": "^8.16.0",
+    "@typescript-eslint/parser": "^8.16.0",
+    "cross-env": "^7.0.3",
+    "env-cmd": "^10.1.0",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.5.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-eslint-plugin": "^6.1.0",
+    "eslint-plugin-jsdoc": "^50.0.0",
+    "eslint-plugin-json-schema-validator": "^5.1.1",
+    "eslint-plugin-jsonc": "^2.16.0",
+    "eslint-plugin-markdown": "^5.0.0",
+    "eslint-plugin-n": "^17.9.0",
+    "eslint-plugin-node-dependencies": "^0.12.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "eslint-plugin-regexp": "^2.6.0",
+    "eslint-plugin-toml": "^0.11.0",
+    "eslint-plugin-vue": "^9.26.0",
+    "eslint-plugin-yml": "^1.14.0",
+    "events": "^3.3.0",
+    "mocha": "^10.4.0",
+    "nyc": "^17.0.0",
+    "pako": "^2.1.0",
+    "prettier": "^3.3.2",
+    "semver": "^7.6.2",
+    "stylelint": "^16.6.1",
+    "stylelint-config-recommended-vue": "^1.5.0",
+    "stylelint-config-standard": "^36.0.1",
+    "stylelint-config-standard-vue": "^1.0.0",
+    "stylelint-stylus": "^1.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.7.0",
+    "typescript-eslint": "^8.16.0",
+    "vite-plugin-eslint4b": "^0.5.0",
+    "vitepress": "^1.2.3",
+    "vue-eslint-parser": "^9.4.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

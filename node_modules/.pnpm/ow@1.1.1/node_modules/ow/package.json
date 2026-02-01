@@ -1,0 +1,118 @@
+{
+	"name": "ow",
+	"version": "1.1.1",
+	"description": "Function argument validation for humans",
+	"license": "MIT",
+	"repository": "sindresorhus/ow",
+	"funding": "https://github.com/sponsors/sindresorhus",
+	"author": {
+		"name": "Sindre Sorhus",
+		"email": "sindresorhus@gmail.com",
+		"url": "https://sindresorhus.com"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		},
+		"./dev-only": {
+			"types": "./dist/index.d.ts",
+			"default": "./dev-only.js"
+		}
+	},
+	"sideEffects": false,
+	"engines": {
+		"node": ">=14.16"
+	},
+	"scripts": {
+		"test": "xo && c8 ava",
+		"docs": "typedoc source/index.ts",
+		"build": "del-cli dist && tsc",
+		"prepare": "npm run build",
+		"postpublish": "npm run docs && gh-pages --dist docs --no-history --message \"Deploy documentation\"",
+		"example": "npm run build && node example.js"
+	},
+	"files": [
+		"dist",
+		"dev-only.js"
+	],
+	"keywords": [
+		"type",
+		"types",
+		"check",
+		"checking",
+		"guard",
+		"guards",
+		"assert",
+		"assertion",
+		"predicate",
+		"predicates",
+		"is",
+		"validate",
+		"validation",
+		"utility",
+		"util",
+		"typeof",
+		"instanceof",
+		"object"
+	],
+	"dependencies": {
+		"@sindresorhus/is": "^5.3.0",
+		"callsites": "^4.0.0",
+		"dot-prop": "^7.2.0",
+		"lodash.isequal": "^4.5.0",
+		"vali-date": "^1.0.0"
+	},
+	"devDependencies": {
+		"@sindresorhus/tsconfig": "^3.0.1",
+		"@types/lodash.isequal": "^4.5.6",
+		"@types/node": "^18.8.0",
+		"@types/vali-date": "^1.0.0",
+		"ava": "^4.3.3",
+		"c8": "^7.12.0",
+		"del-cli": "^5.0.0",
+		"expect-type": "^0.14.2",
+		"gh-pages": "^4.0.0",
+		"ts-node": "^10.9.1",
+		"typedoc": "^0.23.15",
+		"typescript": "^4.8.4",
+		"xo": "^0.52.3"
+	},
+	"browser": {
+		"./dist/utils/infer-label.js": "./dist/utils/infer-label.browser.js"
+	},
+	"xo": {
+		"ignores": [
+			"example.js",
+			"dev-only.js",
+			"source/utils/infer-label.browser.ts"
+		],
+		"rules": {
+			"no-useless-return": "off",
+			"@typescript-eslint/explicit-function-return-type": "error",
+			"@typescript-eslint/ban-types": "off",
+			"@typescript-eslint/no-explicit-any": "off",
+			"@typescript-eslint/no-empty-function": "off",
+			"@typescript-eslint/restrict-template-expressions": "off"
+		}
+	},
+	"ava": {
+		"files": [
+			"test/**",
+			"!test/fixtures/**"
+		],
+		"extensions": {
+			"ts": "module"
+		},
+		"nodeArguments": [
+			"--loader=ts-node/esm"
+		]
+	},
+	"c8": {
+		"reporter": [
+			"text",
+			"lcov"
+		]
+	}
+}

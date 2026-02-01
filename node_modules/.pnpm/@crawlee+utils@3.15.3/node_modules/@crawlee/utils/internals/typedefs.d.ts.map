@@ -1,0 +1,1 @@
+{"version":3,"file":"typedefs.d.ts","sourceRoot":"","sources":["../../src/internals/typedefs.ts"],"names":[],"mappings":"AAAA,cAAc;AACd,wBAAgB,OAAO,CAAC,CAAC,SAAS,EAAE,EAAE,GAAG,EAAE,CAAC,GACV,CAAC,MAAM,CAAC,EAAE,CAAC,CAAC,MAAM,CAAC,CAAC,CAAC,EAAE,CACxD;AAED,cAAc;AACd,wBAAgB,IAAI,CAAC,CAAC,SAAS,EAAE,EAAE,GAAG,EAAE,CAAC,GACV,CAAC,MAAM,CAAC,CAAC,EAAE,CACzC"}

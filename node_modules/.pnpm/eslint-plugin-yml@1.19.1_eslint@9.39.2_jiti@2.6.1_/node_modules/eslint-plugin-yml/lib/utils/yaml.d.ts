@@ -1,0 +1,15 @@
+import type { AST } from "yaml-eslint-parser";
+import type { RuleContext, YAMLNodeOrToken, Fix, RuleFixer, SourceCode } from "../types";
+export declare function hasTabIndent(context: RuleContext): boolean;
+export declare function calcExpectIndentForPairs(mapping: AST.YAMLMapping, context: RuleContext): string | null;
+export declare function calcExpectIndentForEntries(sequence: AST.YAMLFlowSequence, context: RuleContext): string | null;
+export declare function getActualIndent(node: YAMLNodeOrToken, context: RuleContext): string | null;
+export declare function getActualIndentFromLine(line: number, context: RuleContext): string;
+export declare function incIndent(indent: string, context: RuleContext): string;
+export declare function decIndent(indent: string, context: RuleContext): string;
+export declare function getNumOfIndent(context: RuleContext, optionValue?: number | null): number;
+export declare function compareIndent(a: string, b: string): number;
+export declare function isKeyNode(node: AST.YAMLContent | AST.YAMLWithMeta): boolean;
+export declare function unwrapMeta(node: AST.YAMLContent | AST.YAMLWithMeta | null): AST.YAMLContent | null;
+export declare function processIndentFix(fixer: RuleFixer, baseIndent: string, targetNode: AST.YAMLContent | AST.YAMLWithMeta | AST.YAMLPair, context: RuleContext): IterableIterator<Fix>;
+export declare function fixIndent(fixer: RuleFixer, sourceCode: SourceCode, indent: string, node: YAMLNodeOrToken): Fix;

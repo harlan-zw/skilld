@@ -1,0 +1,10 @@
+import type { TOMLToken } from "../types";
+export declare const LINEBREAK_MATCHER: RegExp;
+export declare function isCommentToken(token: TOMLToken | null): boolean;
+export declare function isCommaToken(token: TOMLToken | null): token is TOMLToken;
+export declare function isEqualSign(token: TOMLToken | null): token is TOMLToken;
+export declare function isClosingParenToken(token: TOMLToken | null): token is TOMLToken;
+export declare const isNotClosingParenToken: typeof isClosingParenToken;
+export declare function isClosingBracketToken(token: TOMLToken | null): token is TOMLToken;
+export declare function isClosingBraceToken(token: TOMLToken | null): token is TOMLToken;
+export declare function isTokenOnSameLine(left: TOMLToken | null, right: TOMLToken | null): boolean;

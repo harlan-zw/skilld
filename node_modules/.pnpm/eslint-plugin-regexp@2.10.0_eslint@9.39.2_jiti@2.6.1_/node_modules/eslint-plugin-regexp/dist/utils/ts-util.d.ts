@@ -1,0 +1,24 @@
+import type { Rule } from "eslint";
+import type * as TS from "typescript";
+type TypeScript = typeof import("typescript");
+export declare function getTypeScriptTools(context: Rule.RuleContext): {
+    tsNodeMap: ReadonlyMap<unknown, TS.Node>;
+    checker: TS.TypeChecker | null;
+    usedTS: boolean;
+    hasFullTypeInformation: boolean;
+};
+export declare function getTypeScript(): TypeScript | undefined;
+export declare function isArrayLikeObject(tsType: TS.Type): boolean;
+export declare function isClassOrInterface(tsType: TS.Type): tsType is TS.InterfaceType;
+export declare function isObject(tsType: TS.Type): tsType is TS.ObjectType;
+export declare function isReferenceObject(tsType: TS.Type): tsType is TS.TypeReference;
+export declare function isUnionOrIntersection(tsType: TS.Type): tsType is TS.UnionOrIntersectionType;
+export declare function isTypeParameter(tsType: TS.Type): tsType is TS.UnionOrIntersectionType;
+export declare function isAny(tsType: TS.Type): boolean;
+export declare function isUnknown(tsType: TS.Type): boolean;
+export declare function isStringLine(tsType: TS.Type): boolean;
+export declare function isNumberLike(tsType: TS.Type): boolean;
+export declare function isBooleanLike(tsType: TS.Type): boolean;
+export declare function isBigIntLike(tsType: TS.Type): boolean;
+export declare function isNull(tsType: TS.Type): boolean;
+export {};

@@ -1,0 +1,73 @@
+{
+  "name": "string-comparison",
+  "version": "1.3.0",
+  "description": "A library implementing different string similarity",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "engines": {
+    "node": "^16.0.0 || >=18.0.0"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "test": "mocha",
+    "lint": "eslint -c .eslintrc.json \"src/**/*.ts\"",
+    "lint:fix": "eslint -c .eslintrc.json \"src/**/*.ts\" --fix",
+    "build": "tsup src/index.ts --dts --format cjs,esm --minify",
+    "watch": "tsup src/index.ts --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rabbitzzc/js-string-comparision"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "strings",
+    "compare similarity",
+    "similarity",
+    "Dice's Coefficient",
+    "Cosine",
+    "Jaccard Index",
+    "Levenshtein",
+    "Longest Common Subsequence",
+    "Metric Longest Common Subsequence",
+    "difference",
+    "compare",
+    "comparision",
+    "similar",
+    "distance",
+    "match",
+    "sort match"
+  ],
+  "author": {
+    "name": "Rabbitzzc",
+    "email": "zzclovelcs@gmail.com"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@swc/core": "^1.3.76",
+    "@types/mocha": "^10.0.1",
+    "@types/node": "^20.5.0",
+    "@typescript-eslint/eslint-plugin": "^6.3.0",
+    "@typescript-eslint/parser": "^6.3.0",
+    "async": "^3.2.4",
+    "eslint": "^8.47.0",
+    "eslint-config-alloy": "^5.1.1",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "mocha": "^10.2.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.0.1",
+    "ts-node": "^10.9.1",
+    "tsup": "^7.2.0",
+    "typescript": "^5.1.6"
+  }
+}

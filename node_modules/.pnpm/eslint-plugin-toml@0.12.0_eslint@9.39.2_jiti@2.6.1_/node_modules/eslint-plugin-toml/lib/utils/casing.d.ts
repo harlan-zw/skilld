@@ -1,0 +1,15 @@
+export type CasingKind = "camelCase" | "kebab-case" | "PascalCase" | "snake_case" | "SCREAMING_SNAKE_CASE";
+export declare const allowedCaseOptions: CasingKind[];
+export declare function kebabCase(str: string): string;
+export declare function isKebabCase(str: string): boolean;
+export declare function snakeCase(str: string): string;
+export declare function isSnakeCase(str: string): boolean;
+export declare function screamingSnakeCase(str: string): string;
+export declare function isScreamingSnakeCase(str: string): boolean;
+export declare function camelCase(str: string): string;
+export declare function isCamelCase(str: string): boolean;
+export declare function pascalCase(str: string): string;
+export declare function isPascalCase(str: string): boolean;
+export declare function getChecker(name: CasingKind): (str: string) => boolean;
+export declare function getConverter(name: CasingKind): (str: string) => string;
+export declare function getExactConverter(name: CasingKind): (str: string) => string;
