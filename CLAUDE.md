@@ -7,33 +7,42 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm build          # Build with obuild
 pnpm dev:prepare    # Stub for development
-pnpm lint           # ESLint
 pnpm typecheck      # TypeScript check
 pnpm test           # Vitest (no tests yet)
 
 # CLI usage
-skilld                    # Auto-discover from package.json
-skilld vueuse             # By package name
-skilld https://nuxt.com   # By URL (crawls site)
+skilld                    # Interactive picker from package.json deps
+skilld <package>          # Sync single package
+skilld -q "<query>"       # Search global DB
 skilld -g                 # Install globally (~/.claude/skills)
 skilld -a cursor          # Target specific agent
+skilld -y                 # Skip prompts, use defaults
 ```
 
 ## Architecture
 
 CLI tool that generates skills from NPM package documentation and installs to coding agent directories.
 
+**Directory structure:**
+- `~/.skilld/references/<pkg>@<major.minor>/` - Global docs cache
+- `~/.skilld/search.db` - Hybrid BM25 + vector index
+- `.claude/skills/<pkg>/SKILL.md` - Project-specific skill
+- `.claude/skills/<pkg>/references/` → symlink to global cache
+
 **Source files:**
-- `cli.ts` - CLI entry point, orchestrates fetch/install
-- `npm.ts` - NPM registry lookup, GitHub README resolution via ungh
-- `agents.ts` - Agent detection, skill installation to directories
-- `index.ts` - Site crawling/indexing (for docs sites, not READMEs)
-- `split-text.ts` - Markdown-aware text chunking
+- `cli.ts` - CLI entry point with interactive picker, sync, and search modes
+- `cache.ts` - Global cache at `~/.skilld/`, version-keyed storage
+- `doc-resolver/` - NPM lookup, GitHub README, llms.txt parsing
+- `agent/` - Agent detection, LLM optimization (haiku/sonnet/gemini)
+- `retriv/` - Vector search with package-scoped queries
 
 **Flow:**
-1. Resolve package → npm registry → homepage/repo URL
-2. Fetch docs: llms.txt > docs site (crawl) > README (ungh)
-3. Detect installed agents (Claude Code, Cursor, etc.)
-4. Write SKILL.md to each agent's skill directory
+1. Resolve package → NPM registry → homepage/llms.txt/README
+2. Download docs to `~/.skilld/references/<pkg>@<version>/`
+3. Index into global `search.db`
+4. Generate SKILL.md via LLM (best-practices focus)
+5. Write to `.claude/skills/<pkg>/`, symlink references
+6. Add `Related:` line for linked dependencies
 
-**Output:** `.claude/skills/<package>/SKILL.md`, `.cursor/skills/<package>/SKILL.md`, etc.
+**Agent Support:**
+Detects via env vars (CLAUDE_CODE, CURSOR_SESSION, etc.) or project dirs. Each agent has skillsDir (project) and globalSkillsDir (user home).

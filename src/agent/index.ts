@@ -4,7 +4,7 @@
 
 // Types
 export type { AgentConfig, AgentType, SkillMetadata } from './types'
-export type { AvailableModel, CliProviderConfig, LLMProvider, ModelInfo, OptimizeModel, PromptPreset, PromptPresetId } from './llm'
+export type { ModelInfo, OptimizeModel, PromptPreset, PromptPresetId } from './llm'
 
 // Registry
 export { agents } from './registry'
@@ -20,27 +20,13 @@ export { generateSkillMd } from './skill'
 
 // LLM optimization
 export {
-  anthropicProvider,
   buildPrompt,
-  claudeProvider,
-  codexProvider,
-  createCliProvider,
   defaultPreset,
   detailedPreset,
-  geminiProvider,
   getAvailableModels,
   getPreset,
-  getProvider,
-  getProviders,
-  groqProvider,
-  hasCli,
   minimalPreset,
-  ollamaProvider,
-  openaiProvider,
-  opencodeProvider,
   optimizeDocs,
   presets,
-  registerProvider,
-  runCli,
   simplePreset,
 } from './llm'

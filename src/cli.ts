@@ -1,12 +1,107 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
-import consola from 'consola'
-import { resolvePackageDocs } from './npm'
-import { agents, detectCurrentAgent, sanitizeName } from './agents'
-import { type OptimizeModel, getAvailableModels, optimizeDocs } from './optimize'
+import {
+  CACHE_DIR,
+  SEARCH_DB,
+  ensureCacheDir,
+  getCacheDir,
+  getVersionKey,
+  isCached,
+  linkReferences,
+  writeToCache,
+} from './cache/index'
+import {
+  downloadLlmsDocs,
+  fetchLlmsTxt,
+  fetchNpmPackage,
+  fetchReadmeContent,
+  normalizeLlmsLinks,
+  readLocalDependencies,
+  resolvePackageDocs,
+} from './doc-resolver'
+import { type SearchSnippet, createIndex, searchSnippets } from './retriv'
+import {
+  type OptimizeModel,
+  agents,
+  detectCurrentAgent,
+  detectInstalledAgents,
+  optimizeDocs,
+  sanitizeName,
+} from './agent'
+
+// List installed skills
+function listSkills(args: { global?: boolean }) {
+  const installedAgents = detectInstalledAgents()
+  const cwd = process.cwd()
+  let hasSkills = false
+
+  // Local skills (project-level)
+  if (!args.global) {
+    console.log('\n\x1B[1mLocal Skills\x1B[0m (project)')
+    let localFound = false
+
+    for (const agentType of installedAgents) {
+      const agent = agents[agentType]
+      const skillsDir = join(cwd, agent.skillsDir)
+
+      if (existsSync(skillsDir)) {
+        const skills = readdirSync(skillsDir).filter(f => !f.startsWith('.'))
+        if (skills.length > 0) {
+          localFound = true
+          hasSkills = true
+          console.log(`  \x1B[36m${agent.displayName}\x1B[0m (${agent.skillsDir})`)
+          for (const skill of skills) {
+            const skillPath = join(skillsDir, skill, 'SKILL.md')
+            const hasSkillMd = existsSync(skillPath)
+            const icon = hasSkillMd ? '✓' : '○'
+            console.log(`    ${icon} ${skill}`)
+          }
+        }
+      }
+    }
+
+    if (!localFound) {
+      console.log('  \x1B[90m(none)\x1B[0m')
+    }
+  }
+
+  // Global skills
+  console.log('\n\x1B[1mGlobal Skills\x1B[0m')
+  let globalFound = false
+
+  for (const agentType of installedAgents) {
+    const agent = agents[agentType]
+    const globalDir = agent.globalSkillsDir
+
+    if (globalDir && existsSync(globalDir)) {
+      const skills = readdirSync(globalDir).filter(f => !f.startsWith('.'))
+      if (skills.length > 0) {
+        globalFound = true
+        hasSkills = true
+        console.log(`  \x1B[36m${agent.displayName}\x1B[0m (${globalDir})`)
+        for (const skill of skills) {
+          const skillPath = join(globalDir, skill, 'SKILL.md')
+          const hasSkillMd = existsSync(skillPath)
+          const icon = hasSkillMd ? '✓' : '○'
+          console.log(`    ${icon} ${skill}`)
+        }
+      }
+    }
+  }
+
+  if (!globalFound) {
+    console.log('  \x1B[90m(none)\x1B[0m')
+  }
+
+  if (!hasSkills) {
+    console.log('\nRun \x1B[1mskilld <package>\x1B[0m to install skills')
+  }
+
+  console.log()
+}
 
 const main = defineCommand({
   meta: {
@@ -16,8 +111,13 @@ const main = defineCommand({
   args: {
     package: {
       type: 'positional',
-      description: 'Package name to sync docs for',
+      description: 'Package name to sync docs for (use "list" to show installed)',
       required: false,
+    },
+    query: {
+      type: 'string',
+      alias: 'q',
+      description: 'Search docs: skilld -q "useFetch options"',
     },
     global: {
       type: 'boolean',
@@ -30,11 +130,6 @@ const main = defineCommand({
       alias: 'a',
       description: 'Target specific agent (claude-code, cursor, windsurf, etc.)',
     },
-    model: {
-      type: 'string',
-      alias: 'm',
-      description: 'LLM model (haiku, sonnet, opus, gemini-flash, gemini-pro)',
-    },
     yes: {
       type: 'boolean',
       alias: 'y',
@@ -43,43 +138,58 @@ const main = defineCommand({
     },
   },
   async run({ args }) {
+    // List command (handle as pseudo-subcommand)
+    if (args.package === 'list') {
+      return listSkills(args)
+    }
+
+    // Search mode
+    if (args.query) {
+      await searchMode(args.query)
+      return
+    }
+
+    p.intro('skilld')
+
     const currentAgent = args.agent as keyof typeof agents | undefined ?? detectCurrentAgent()
 
     if (!currentAgent) {
-      consola.warn('Could not detect agent. Use --agent <name>')
-      consola.info('Supported: ' + Object.keys(agents).join(', '))
+      p.log.warn('Could not detect agent. Use --agent <name>')
+      p.log.info(`Supported: ${Object.keys(agents).join(', ')}`)
+      p.outro('Exiting')
       return
     }
 
     const agent = agents[currentAgent]
-    consola.info(`Target: ${agent.displayName}`)
+    p.log.info(`Target: ${agent.displayName}`)
 
+    // No package specified - show interactive picker
     if (!args.package) {
-      consola.warn('Usage: skilld <package-name>')
+      const packages = await interactivePicker()
+      if (!packages || packages.length === 0) {
+        p.outro('No packages selected')
+        return
+      }
+
+      // Determine model once for all packages
+      const model = await selectModel(args.yes)
+      if (!model)
+        return
+
+      for (const pkg of packages) {
+        await syncPackage(pkg, {
+          global: args.global,
+          agent: currentAgent,
+          model,
+        })
+      }
       return
     }
 
-    // Determine model - from flag, prompt, or default
-    let model: OptimizeModel = 'haiku'
-
-    if (args.model) {
-      model = args.model as OptimizeModel
-    }
-    else if (!args.yes) {
-      const availableModels = await getAvailableModels()
-      if (availableModels.length > 0) {
-        const modelChoice = await consola.prompt('Select LLM for SKILL.md generation:', {
-          type: 'select',
-          options: availableModels.map(m => ({
-            label: m.recommended ? `${m.name} (Recommended)` : m.name,
-            value: m.id,
-            hint: m.description,
-          })),
-          initial: availableModels.find(m => m.recommended)?.id || availableModels[0]?.id,
-        }) as string
-        model = modelChoice as OptimizeModel
-      }
-    }
+    // Single package mode
+    const model = await selectModel(args.yes)
+    if (!model)
+      return
 
     await syncPackage(args.package, {
       global: args.global,
@@ -89,261 +199,365 @@ const main = defineCommand({
   },
 })
 
-async function syncPackage(packageName: string, config: {
-  global: boolean
-  agent: keyof typeof agents
-  model: 'haiku' | 'sonnet' | 'opus' | 'gemini-flash' | 'gemini-pro'
-}) {
-  consola.start(`Resolving ${packageName}...`)
-
-  const resolved = await resolvePackageDocs(packageName)
-  if (!resolved) {
-    consola.error(`Could not find docs for: ${packageName}`)
+async function searchMode(query: string) {
+  if (!existsSync(SEARCH_DB)) {
+    console.log('No docs indexed yet. Run `skilld <package>` first.')
     return
   }
 
+  const start = performance.now()
+  const results = await searchSnippets(query, { dbPath: SEARCH_DB }, { limit: 5 })
+  const elapsed = ((performance.now() - start) / 1000).toFixed(2)
+
+  if (results.length === 0) {
+    console.log(`No results for "${query}"`)
+    return
+  }
+
+  console.log()
+  for (const r of results) {
+    formatSnippet(r)
+  }
+  console.log(`${results.length} results (${elapsed}s)`)
+}
+
+function formatSnippet(r: SearchSnippet) {
+  console.log(`${r.package} | ${r.source}:${r.line}`)
+  console.log(`  ${r.content.replace(/\n/g, '\n  ')}`)
+  console.log()
+}
+
+async function interactivePicker(): Promise<string[] | null> {
+  const deps = await readLocalDependencies(process.cwd()).catch(() => [])
+
+  if (deps.length === 0) {
+    p.log.warn('No package.json found or no dependencies')
+    return null
+  }
+
+  const options = deps.map(d => ({
+    label: d.name,
+    value: d.name,
+    hint: d.version,
+  }))
+
+  const selected = await p.multiselect({
+    message: 'Select packages to sync',
+    options,
+    required: false,
+  })
+
+  if (p.isCancel(selected)) {
+    p.cancel('Cancelled')
+    return null
+  }
+
+  return selected as string[]
+}
+
+const availableModels: Array<{ id: OptimizeModel, name: string, hint: string, recommended?: boolean }> = [
+  { id: 'haiku', name: 'Claude Haiku', hint: 'Fast, cheap', recommended: true },
+  { id: 'sonnet', name: 'Claude Sonnet', hint: 'Balanced' },
+  { id: 'gemini-flash', name: 'Gemini Flash', hint: 'Fast, free' },
+  { id: 'codex', name: 'Codex CLI', hint: 'OpenAI o4-mini' },
+]
+
+async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | null> {
+  if (skipPrompt)
+    return 'haiku'
+
+  const modelChoice = await p.select({
+    message: 'Select LLM for SKILL.md generation',
+    options: availableModels.map(m => ({
+      label: m.recommended ? `${m.name} (Recommended)` : m.name,
+      value: m.id,
+      hint: m.hint,
+    })),
+    initialValue: 'haiku',
+  })
+
+  if (p.isCancel(modelChoice)) {
+    p.cancel('Cancelled')
+    return null
+  }
+
+  return modelChoice as OptimizeModel
+}
+
+async function syncPackage(packageName: string, config: {
+  global: boolean
+  agent: keyof typeof agents
+  model: OptimizeModel
+}) {
+  const spin = p.spinner()
+  spin.start(`Resolving ${packageName}`)
+
+  const resolved = await resolvePackageDocs(packageName)
+  if (!resolved) {
+    spin.stop(`Could not find docs for: ${packageName}`)
+    return
+  }
+
+  const version = resolved.version || 'latest'
+  const versionKey = getVersionKey(version)
+
+  // Check cache
+  const useCache = isCached(packageName, version)
+  if (useCache) {
+    spin.stop(`Using cached ${packageName}@${versionKey}`)
+  }
+  else {
+    spin.stop(`Resolved ${packageName}@${version}`)
+  }
+
+  ensureCacheDir()
+
   const agent = agents[config.agent]
   const baseDir = config.global
-    ? join(homedir(), '.claude/skills')
+    ? join(CACHE_DIR, 'skills')
     : join(process.cwd(), agent.skillsDir)
 
   const skillDir = join(baseDir, sanitizeName(packageName))
-  const docsDir = join(skillDir, 'docs')
+  mkdirSync(skillDir, { recursive: true })
 
-  mkdirSync(docsDir, { recursive: true })
+  // Fetch and cache docs (if not cached)
+  let llmsRaw: string | null = null
+  const docsToIndex: Array<{ id: string, content: string, metadata: Record<string, any> }> = []
 
-  // Fetch llms.txt and download all referenced .md files
-  let llmsContent: string | null = null
-  if (resolved.llmsUrl) {
-    consola.start('Fetching llms.txt...')
-    llmsContent = await fetchText(resolved.llmsUrl)
-    if (llmsContent) {
-      // Normalize links to relative paths for local access
-      const normalizedLlms = llmsContent.replace(/\]\(\/([^)]+\.md)\)/g, '](./docs/$1)')
-      writeFileSync(join(skillDir, 'llms.txt'), normalizedLlms)
-      consola.success('Saved llms.txt')
+  if (!useCache) {
+    const cachedDocs: Array<{ path: string, content: string }> = []
 
-      // Parse and download all .md files
-      const baseUrl = resolved.docsUrl || new URL(resolved.llmsUrl).origin
-      const mdUrls = parseMarkdownLinks(llmsContent)
+    if (resolved.llmsUrl) {
+      spin.start('Fetching llms.txt')
+      const llmsContent = await fetchLlmsTxt(resolved.llmsUrl)
+      if (llmsContent) {
+        llmsRaw = llmsContent.raw
+        cachedDocs.push({ path: 'llms.txt', content: normalizeLlmsLinks(llmsContent.raw) })
 
-      if (mdUrls.length > 0) {
-        consola.start(`Downloading ${mdUrls.length} doc files...`)
-        let downloaded = 0
+        if (llmsContent.links.length > 0) {
+          spin.stop('Saved llms.txt')
+          spin.start(`Downloading ${llmsContent.links.length} doc files`)
+          const baseUrl = resolved.docsUrl || new URL(resolved.llmsUrl).origin
+          const docs = await downloadLlmsDocs(llmsContent, baseUrl)
 
-        for (const mdPath of mdUrls) {
-          const url = mdPath.startsWith('http') ? mdPath : `${baseUrl.replace(/\/$/, '')}${mdPath}`
-          const content = await fetchText(url)
-          if (content && content.length > 100) {
-            // Save with path structure: docs/guide/essentials/reactivity.md
-            const localPath = mdPath.startsWith('/') ? mdPath.slice(1) : mdPath
-            const filePath = join(docsDir, localPath)
-            mkdirSync(dirname(filePath), { recursive: true })
-            writeFileSync(filePath, content)
-            downloaded++
+          for (const doc of docs) {
+            const localPath = doc.url.startsWith('/') ? doc.url.slice(1) : doc.url
+            cachedDocs.push({ path: `docs/${localPath}`, content: doc.content })
+
+            docsToIndex.push({
+              id: doc.url,
+              content: doc.content,
+              metadata: { package: packageName, source: localPath },
+            })
           }
-        }
 
-        consola.success(`Downloaded ${downloaded}/${mdUrls.length} docs`)
+          spin.stop(`Downloaded ${docs.length}/${llmsContent.links.length} docs`)
+        }
+      }
+      else {
+        spin.stop('No llms.txt found')
+      }
+    }
+
+    // Fallback to README
+    if (resolved.readmeUrl && cachedDocs.length === 0) {
+      spin.start('Fetching README')
+      const content = await fetchReadmeContent(resolved.readmeUrl)
+      if (content) {
+        cachedDocs.push({ path: 'docs/README.md', content })
+        docsToIndex.push({
+          id: 'README.md',
+          content,
+          metadata: { package: packageName, source: 'README.md' },
+        })
+        spin.stop('Saved README.md')
+      }
+      else {
+        spin.stop('No README found')
+      }
+    }
+
+    // Write to global cache
+    if (cachedDocs.length > 0) {
+      writeToCache(packageName, version, cachedDocs)
+
+      // Index into global search.db
+      if (docsToIndex.length > 0) {
+        spin.start('Indexing docs')
+        await createIndex(docsToIndex, { dbPath: SEARCH_DB })
+        spin.stop(`Indexed ${docsToIndex.length} docs`)
       }
     }
   }
 
-  // Fallback to README
-  if (resolved.readmeUrl && !existsSync(join(docsDir, 'llms.txt'))) {
-    consola.start('Fetching README...')
-    const content = await fetchReadme(resolved.readmeUrl)
-    if (content) {
-      writeFileSync(join(docsDir, 'README.md'), content)
-      consola.success('Saved README.md')
-    }
+  // Create symlink to cached references
+  try {
+    linkReferences(skillDir, packageName, version)
+  }
+  catch {
+    // Symlink may fail on some systems, fallback to direct path
   }
 
-  // Generate SKILL.md using Haiku
-  // Read best-practices docs from local files
+  // Generate SKILL.md
   let docsContent: string | null = null
+  const cacheDir = getCacheDir(packageName, version)
 
-  if (llmsContent) {
-    // Find and read best-practices related docs
-    const bestPracticesPaths = parseMarkdownLinks(llmsContent).filter(p =>
-      p.includes('/style-guide/') || p.includes('/best-practices/') || p.includes('/typescript/'),
-    )
+  // Read llms.txt from cache if we didn't fetch it
+  if (!llmsRaw && existsSync(join(cacheDir, 'llms.txt'))) {
+    llmsRaw = readFileSync(join(cacheDir, 'llms.txt'), 'utf-8')
+  }
+
+  if (llmsRaw) {
+    const { parseMarkdownLinks } = await import('./doc-resolver')
+    const bestPracticesPaths = parseMarkdownLinks(llmsRaw)
+      .map(l => l.url)
+      .filter(lp => lp.includes('/style-guide/') || lp.includes('/best-practices/') || lp.includes('/typescript/'))
 
     const sections: string[] = []
     for (const mdPath of bestPracticesPaths) {
       const localPath = mdPath.startsWith('/') ? mdPath.slice(1) : mdPath
-      const filePath = join(docsDir, localPath)
+      const filePath = join(cacheDir, 'docs', localPath)
       if (existsSync(filePath)) {
         const content = readFileSync(filePath, 'utf-8')
         sections.push(`# ${mdPath}\n\n${content}`)
       }
     }
 
-    docsContent = sections.length > 0 ? sections.join('\n\n---\n\n') : llmsContent
+    docsContent = sections.length > 0 ? sections.join('\n\n---\n\n') : llmsRaw
   }
-  else if (existsSync(join(docsDir, 'README.md'))) {
-    docsContent = readFileSync(join(docsDir, 'README.md'), 'utf-8')
+  else {
+    const readmePath = join(cacheDir, 'docs', 'README.md')
+    if (existsSync(readmePath)) {
+      docsContent = readFileSync(readmePath, 'utf-8')
+    }
   }
 
   if (docsContent) {
-    consola.start(`Generating SKILL.md with ${config.model}...`)
+    p.log.step(`Calling ${config.model} to generate SKILL.md...`)
     const { optimized, wasOptimized } = await optimizeDocs(
       docsContent,
       packageName,
-      config.agent,
       config.model,
     )
 
+    const relatedSkills = await findRelatedSkills(packageName, baseDir)
+
     if (wasOptimized) {
-      // Clean up output
-      let skillMd = optimized
-        .replace(/^```markdown\n?/m, '')
-        .replace(/\n?```$/m, '')
-        .trim()
+      let skillMd = cleanSkillMd(optimized)
 
-      // Find the first frontmatter block (skip any header before it)
-      const frontmatterMatch = skillMd.match(/^(.*?)(---\n[\s\S]*?\n---)/m)
-      if (frontmatterMatch && frontmatterMatch[2]) {
-        // Use content starting from frontmatter
-        skillMd = skillMd.slice(skillMd.indexOf('---'))
-      }
-
-      // Ensure frontmatter exists
+      // Ensure frontmatter
       if (!skillMd.startsWith('---')) {
-        skillMd = `---
-name: ${sanitizeName(packageName)}
-description: "${resolved.description || packageName} - Use this skill when working with ${packageName}."
-version: "${resolved.version || 'latest'}"
----
-
-${skillMd}`
+        skillMd = generateFrontmatter(packageName, resolved.description, version) + skillMd
       }
 
-      // Add documentation navigation section
-      skillMd += `
+      // Add related skills and query instruction
+      skillMd += generateFooter(packageName, relatedSkills)
 
-## Documentation
-
-For deeper information, read the local docs. The \`llms.txt\` file contains an index with relative links to all documentation files:
-
-\`\`\`
-./llms.txt          # Index with links to all docs
-./docs/api/         # API reference
-./docs/guide/       # Guides and tutorials
-./docs/style-guide/ # Style guide rules
-\`\`\`
-
-Follow relative links in llms.txt to read specific documentation files.
-`
       writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
-      consola.success('Generated SKILL.md')
+      p.log.success('Generated SKILL.md')
     }
     else {
-      consola.warn('Haiku not available, creating minimal SKILL.md')
-      const skillMd = `---
-name: ${sanitizeName(packageName)}
-description: "${resolved.description || packageName} - Use this skill when working with ${packageName}."
-version: "${resolved.version || 'latest'}"
----
-
-# ${packageName}
-
-${resolved.description || ''}
-
-## Documentation
-
-Raw docs in \`docs/\` - use skill-creator to generate optimized content.
-`
+      p.log.warn('LLM unavailable, creating minimal SKILL.md')
+      const skillMd = generateMinimalSkill(packageName, resolved.description, version, relatedSkills)
       writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
     }
   }
 
-  consola.success(`Synced ${packageName} to ${skillDir}`)
+  p.outro(`Synced ${packageName} to ${skillDir}`)
 }
 
-async function fetchText(url: string): Promise<string | null> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
+async function findRelatedSkills(packageName: string, skillsDir: string): Promise<string[]> {
+  const related: string[] = []
 
-  if (!res?.ok) return null
-  return res.text()
-}
+  // Get npm dependencies for this package
+  const npmInfo = await fetchNpmPackage(packageName)
+  if (!npmInfo?.dependencies)
+    return related
 
-async function fetchReadme(url: string): Promise<string | null> {
-  // Handle ungh:// URLs
-  if (url.startsWith('ungh://')) {
-    const parts = url.replace('ungh://', '').split('/')
-    const owner = parts[0]
-    const repo = parts[1]
-    const subdir = parts.slice(2).join('/')
+  const deps = Object.keys(npmInfo.dependencies)
 
-    const unghUrl = subdir
-      ? `https://ungh.cc/repos/${owner}/${repo}/files/main/${subdir}/README.md`
-      : `https://ungh.cc/repos/${owner}/${repo}/readme`
+  // Check which deps have skills installed
+  if (!existsSync(skillsDir))
+    return related
 
-    const res = await fetch(unghUrl, {
-      headers: { 'User-Agent': 'skilld/1.0' },
-    }).catch(() => null)
+  const { readdirSync } = await import('node:fs')
+  const installedSkills = readdirSync(skillsDir)
 
-    if (!res?.ok) return null
-
-    const text = await res.text()
-    try {
-      const json = JSON.parse(text) as { markdown?: string, file?: { contents?: string } }
-      return json.markdown || json.file?.contents || null
-    }
-    catch {
-      return text
+  for (const skill of installedSkills) {
+    if (deps.some(d => sanitizeName(d) === skill)) {
+      related.push(skill)
     }
   }
 
-  return fetchText(url)
+  return related.slice(0, 5) // Max 5 related
 }
 
-/**
- * Parse markdown links from llms.txt to get .md file paths
- */
-function parseMarkdownLinks(content: string): string[] {
-  const links: string[] = []
-  const linkRegex = /\[([^\]]+)\]\(([^)]+\.md)\)/g
-  let match
+function cleanSkillMd(content: string): string {
+  let cleaned = content
+    .replace(/^```markdown\n?/m, '')
+    .replace(/\n?```$/m, '')
+    .trim()
 
-  while ((match = linkRegex.exec(content)) !== null) {
-    const url = match[2]!
-    if (!links.includes(url)) {
-      links.push(url)
-    }
+  // Skip to frontmatter if there's content before it
+  const frontmatterStart = cleaned.indexOf('---')
+  if (frontmatterStart > 0) {
+    cleaned = cleaned.slice(frontmatterStart)
   }
 
-  return links
+  return cleaned
 }
 
-/**
- * Extract sections from llms-full.txt by URL patterns
- * Format: ---\nurl: /path.md\n---\n<content>\n\n---\nurl: ...
- */
-function extractSections(content: string, patterns: string[]): string | null {
-  const sections: string[] = []
-  const parts = content.split(/\n---\n/)
+function generateFrontmatter(name: string, description: string | undefined, version: string): string {
+  return `---
+name: ${sanitizeName(name)}
+description: "${description || name} - Use this skill when working with ${name}."
+version: "${version}"
+---
 
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i]!
-    const urlMatch = part.match(/^url:\s*(.+)$/m)
-    if (!urlMatch) continue
+`
+}
 
-    const url = urlMatch[1]!
-    if (patterns.some(p => url.includes(p))) {
-      // Include content after the url line
-      const contentStart = part.indexOf('\n', part.indexOf('url:'))
-      if (contentStart > -1) {
-        sections.push(part.slice(contentStart + 1))
-      }
-    }
+function generateFooter(packageName: string, relatedSkills: string[]): string {
+  let footer = `
+
+## Documentation
+
+Query docs: \`skilld -q "${packageName} <your question>"\`
+`
+
+  if (relatedSkills.length > 0) {
+    footer += `\nRelated: ${relatedSkills.join(', ')}\n`
   }
 
-  if (sections.length === 0) return null
-  return sections.join('\n\n---\n\n')
+  return footer
+}
+
+function generateMinimalSkill(
+  name: string,
+  description: string | undefined,
+  version: string,
+  relatedSkills: string[],
+): string {
+  let content = `---
+name: ${sanitizeName(name)}
+description: "${description || name} - Use this skill when working with ${name}."
+version: "${version}"
+---
+
+# ${name}
+
+${description || ''}
+
+## Documentation
+
+Query docs: \`skilld -q "${name} <your question>"\`
+`
+
+  if (relatedSkills.length > 0) {
+    content += `\nRelated: ${relatedSkills.join(', ')}\n`
+  }
+
+  return content
 }
 
 runMain(main)

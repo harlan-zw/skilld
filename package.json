@@ -37,8 +37,14 @@
     "prepack": "pnpm run build"
   },
   "dependencies": {
+    "@ai-sdk/provider": "^3.0.7",
+    "@clack/prompts": "^1.0.0",
     "@huggingface/transformers": "^3.8.1",
     "@mdream/crawl": "^0.15.3",
+    "ai": "^6.0.67",
+    "ai-sdk-provider-claude-code": "^3.3.5",
+    "ai-sdk-provider-codex-cli": "^1.0.5",
+    "ai-sdk-provider-gemini-cli": "^2.0.1",
     "citty": "^0.1.6",
     "consola": "^3.4.2",
     "mdream": "^0.15.3",
@@ -47,6 +53,7 @@
   "devDependencies": {
     "@antfu/eslint-config": "^6.7.3",
     "@types/node": "^22.10.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "obuild": "^0.4.14",
     "typescript": "^5.9.3",
     "vitest": "^4.0.16"

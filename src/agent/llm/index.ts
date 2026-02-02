@@ -1,77 +1,102 @@
 /**
- * LLM-based documentation optimization
+ * LLM-based documentation optimization using AI SDK
  */
 
-import type { AgentType } from '../types'
-import { buildPrompt } from './prompts'
-import { findProviderForModel, getProvider } from './registry'
+import { execSync } from 'node:child_process'
+import { generateText } from 'ai'
+import { claudeCode } from 'ai-sdk-provider-claude-code'
+import { createGeminiProvider } from 'ai-sdk-provider-gemini-cli'
+import { codexCli } from 'ai-sdk-provider-codex-cli'
+import { buildPrompt } from '../prompts'
 
-export type { AvailableModel, LLMProvider, ModelInfo } from './types'
-export type { CliProviderConfig } from './cli'
-export type { PromptPreset } from './prompts'
-export { registerProvider, getAvailableModels, getProviders, getProvider } from './registry'
-export { buildPrompt, defaultPreset, detailedPreset, getPreset, minimalPreset, presets, simplePreset } from './prompts'
-export { createCliProvider, hasCli, runCli } from './cli'
+export type { PromptPreset } from '../prompts'
+export { buildPrompt, defaultPreset, detailedPreset, getPreset, minimalPreset, presets, simplePreset } from '../prompts'
 
-// Re-export providers
-export {
-  anthropicProvider,
-  claudeProvider,
-  codexProvider,
-  geminiProvider,
-  groqProvider,
-  ollamaProvider,
-  openaiProvider,
-  opencodeProvider,
-} from './providers'
-
-export type OptimizeModel =
-  // Claude
-  | 'haiku' | 'sonnet' | 'opus'
-  // Gemini
-  | 'gemini-flash' | 'gemini-pro'
-  // Codex
-  | 'codex-o4-mini' | 'codex-o3' | 'codex-gpt-4.1'
-  // OpenCode
-  | 'opencode-claude' | 'opencode-gpt4'
-  // Ollama
-  | 'llama3.3' | 'qwen2.5-coder' | 'deepseek-r1' | 'mistral'
-  // OpenAI
-  | 'gpt-4o' | 'gpt-4o-mini' | 'o3-mini'
-  // Groq
-  | 'llama-3.3-70b' | 'llama-3.1-8b' | 'deepseek-r1-70b'
-
+export type OptimizeModel = 'haiku' | 'sonnet' | 'gemini-flash' | 'codex'
 export type PromptPresetId = 'detailed' | 'simple' | 'minimal'
 
+export interface ModelInfo {
+  id: OptimizeModel
+  name: string
+  hint: string
+  recommended?: boolean
+}
+
+const models = {
+  haiku: claudeCode('haiku'),
+  sonnet: claudeCode('sonnet'),
+  'gemini-flash': createGeminiProvider()('gemini-2.0-flash'),
+  codex: codexCli('o4-mini'),
+}
+
+const modelInfo: ModelInfo[] = [
+  { id: 'haiku', name: 'Claude Haiku', hint: 'Fast, cheap', recommended: true },
+  { id: 'sonnet', name: 'Claude Sonnet', hint: 'Balanced' },
+  { id: 'gemini-flash', name: 'Gemini Flash', hint: 'Fast, free' },
+  { id: 'codex', name: 'Codex CLI', hint: 'OpenAI o4-mini' },
+]
+
+const cliCommands: Record<OptimizeModel, string> = {
+  haiku: 'claude',
+  sonnet: 'claude',
+  'gemini-flash': 'gemini',
+  codex: 'codex',
+}
+
+function hasCli(command: string): boolean {
+  try {
+    execSync(`which ${command}`, { stdio: 'ignore' })
+    return true
+  }
+  catch {
+    return false
+  }
+}
+
+/** Get available models based on installed CLIs */
+export function getAvailableModels(): ModelInfo[] {
+  const checked = new Set<string>()
+  return modelInfo.filter((m) => {
+    const cmd = cliCommands[m.id]
+    if (checked.has(cmd)) return checked.has(cmd) && hasCli(cmd)
+    checked.add(cmd)
+    return hasCli(cmd)
+  })
+}
+
 /**
- * Optimize documentation using available LLM providers
- * Falls back gracefully if no LLM available
+ * Optimize documentation using AI SDK providers
+ * Falls back gracefully if LLM unavailable
  */
 export async function optimizeDocs(
   content: string,
   packageName: string,
-  _agent: AgentType | null,
   model: OptimizeModel = 'haiku',
   preset: PromptPresetId = 'simple',
 ): Promise<{ optimized: string, wasOptimized: boolean }> {
   const prompt = buildPrompt(packageName, content, preset)
 
-  // Find provider for this model
-  const provider = findProviderForModel(model)
-  if (provider) {
-    const result = await provider.generate(prompt, model)
-    if (result) return { optimized: result, wasOptimized: true }
+  try {
+    const { text } = await generateText({
+      model: models[model],
+      prompt,
+    })
+    return { optimized: text, wasOptimized: true }
   }
-
-  // Fallback: try Claude provider with haiku if different model failed
-  if (model !== 'haiku') {
-    const claudeProvider = getProvider('claude')
-    if (claudeProvider?.isAvailable()) {
-      const result = await claudeProvider.generate(prompt, 'haiku')
-      if (result) return { optimized: result, wasOptimized: true }
+  catch {
+    // Fallback to haiku if other model fails
+    if (model !== 'haiku') {
+      try {
+        const { text } = await generateText({
+          model: models.haiku,
+          prompt,
+        })
+        return { optimized: text, wasOptimized: true }
+      }
+      catch {
+        return { optimized: content, wasOptimized: false }
+      }
     }
+    return { optimized: content, wasOptimized: false }
   }
-
-  // No LLM available
-  return { optimized: content, wasOptimized: false }
 }
