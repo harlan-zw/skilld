@@ -24,6 +24,8 @@ export interface AgentConfig {
   globalSkillsDir: string | undefined
   /** Check if agent is installed on the system */
   detectInstalled: () => boolean
+  /** CLI command name (if agent has a CLI) */
+  cli?: string
 }
 
 export interface SkillMetadata {

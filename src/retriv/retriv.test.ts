@@ -40,10 +40,8 @@ describe('retriv types', () => {
   it('SearchOptions has optional fields', () => {
     const options: SearchOptions = {
       limit: 5,
-      package: 'vue',
     }
     expect(options.limit).toBe(5)
-    expect(options.package).toBe('vue')
   })
 
   it('SearchResult has all required fields', () => {

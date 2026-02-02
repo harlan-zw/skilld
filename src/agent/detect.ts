@@ -2,6 +2,7 @@
  * Agent detection - identify installed and active agents
  */
 
+import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { AgentType } from './types'
@@ -72,4 +73,28 @@ export function detectCurrentAgent(): AgentType | null {
   }
 
   return null
+}
+
+/**
+ * Get the version of an agent's CLI (if available)
+ */
+export function getAgentVersion(agentType: AgentType): string | null {
+  const agent = agents[agentType]
+  if (!agent.cli) return null
+
+  try {
+    const output = execSync(`${agent.cli} --version`, {
+      encoding: 'utf-8',
+      timeout: 3000,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim()
+
+    // Extract version number from output
+    // Common formats: "v1.2.3", "1.2.3", "cli 1.2.3", "name v1.2.3"
+    const match = output.match(/v?(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)/)
+    return match ? match[1] : output.split('\n')[0]
+  }
+  catch {
+    return null
+  }
 }

@@ -19,6 +19,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     skillsDir: '.claude/skills',
     globalSkillsDir: join(claudeHome, 'skills'),
     detectInstalled: () => existsSync(claudeHome),
+    cli: 'claude',
   },
   cursor: {
     name: 'cursor',
@@ -47,6 +48,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     skillsDir: '.codex/skills',
     globalSkillsDir: join(codexHome, 'skills'),
     detectInstalled: () => existsSync(codexHome),
+    cli: 'codex',
   },
   'github-copilot': {
     name: 'github-copilot',
@@ -61,6 +63,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     skillsDir: '.gemini/skills',
     globalSkillsDir: join(home, '.gemini/skills'),
     detectInstalled: () => existsSync(join(home, '.gemini')),
+    cli: 'gemini',
   },
   goose: {
     name: 'goose',
@@ -68,6 +71,7 @@ export const agents: Record<AgentType, AgentConfig> = {
     skillsDir: '.goose/skills',
     globalSkillsDir: join(configHome, 'goose/skills'),
     detectInstalled: () => existsSync(join(configHome, 'goose')),
+    cli: 'goose',
   },
   amp: {
     name: 'amp',

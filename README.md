@@ -18,11 +18,11 @@ Agents already know how most packages work from training data. Skills should foc
 
 **Alternative approaches have friction:**
 
-| Approach | Problem |
-|----------|---------|
+| Approach | Problem                            |
+|----------|------------------------------------|
 | Bundled skills in packages | Requires package authors to opt-in |
 | Git-cloned skill repos | Version mismatch with installed packages |
-| Manual CLAUDE.md maintenance | Doesn't scale, quickly outdated |
+| Manual CLAUDE.md maintenance | Doesn't scale, quickly outdated    |
 
 **skilld solves this differently:** generate skills from the package's *actual* documentation using your existing agent. No author opt-in. No version drift.
 

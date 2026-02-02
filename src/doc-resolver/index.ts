@@ -9,19 +9,28 @@ export type {
   LlmsLink,
   LocalDependency,
   NpmPackageInfo,
+  ResolveAttempt,
   ResolvedPackage,
+  ResolveResult,
 } from './types'
 
 // NPM
+export type { LocalPackageInfo, ResolveOptions } from './npm'
 export {
   fetchNpmPackage,
   getInstalledSkillVersion,
+  parseVersionSpecifier,
   readLocalDependencies,
+  readLocalPackageInfo,
+  resolveLocalPackageDocs,
   resolvePackageDocs,
+  resolvePackageDocsWithAttempts,
 } from './npm'
 
 // GitHub
+export type { GitDocsResult } from './github'
 export {
+  fetchGitDocs,
   fetchGitHubRepoMeta,
   fetchReadme,
   fetchReadmeContent,

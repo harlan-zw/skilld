@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSy
 import { join } from 'node:path'
 import type { CachedDoc, CachedPackage } from './types'
 import { REFERENCES_DIR } from './config'
-import { getCacheDir, getVersionKey } from './version'
+import { getCacheDir, getCacheKey, getVersionKey } from './version'
 
 /**
  * Check if package is cached at given version
@@ -43,18 +43,59 @@ export function writeToCache(
 }
 
 /**
- * Create symlink from project skill dir to cached references
+ * Create references directory with symlinked docs
+ *
+ * Structure:
+ *   .claude/skills/<skill>/references/
+ *     docs -> ~/.skilld/references/<pkg>@<version>/docs
+ *     dist -> node_modules/<pkg>/dist (added by linkDist)
+ *
+ * The symlinks are gitignored. After clone, `skilld install` recreates from lockfile.
  */
 export function linkReferences(skillDir: string, name: string, version: string): void {
   const cacheDir = getCacheDir(name, version)
-  const linkPath = join(skillDir, 'references')
+  const referencesDir = join(skillDir, 'references')
+  const docsLinkPath = join(referencesDir, 'docs')
+  const cachedDocsPath = join(cacheDir, 'docs')
 
-  // Remove existing link/dir
-  if (existsSync(linkPath)) {
-    unlinkSync(linkPath)
+  // Create references dir if needed
+  mkdirSync(referencesDir, { recursive: true })
+
+  // Symlink docs from cache
+  if (existsSync(docsLinkPath)) {
+    unlinkSync(docsLinkPath)
   }
+  if (existsSync(cachedDocsPath)) {
+    symlinkSync(cachedDocsPath, docsLinkPath, 'junction')
+  }
+}
 
-  symlinkSync(cacheDir, linkPath, 'junction')
+/**
+ * Create symlink from references dir to node_modules dist
+ *
+ * Structure:
+ *   .claude/skills/<skill>/references/dist -> node_modules/<pkg>/dist
+ */
+export function linkDist(skillDir: string, name: string, cwd: string): void {
+  const candidates = ['dist', 'lib', 'build', 'esm']
+  const nodeModulesPath = join(cwd, 'node_modules', name)
+
+  if (!existsSync(nodeModulesPath)) return
+
+  const referencesDir = join(skillDir, 'references')
+  mkdirSync(referencesDir, { recursive: true })
+
+  for (const candidate of candidates) {
+    const distPath = join(nodeModulesPath, candidate)
+    if (existsSync(distPath)) {
+      const distLinkPath = join(referencesDir, 'dist')
+      if (existsSync(distLinkPath)) {
+        unlinkSync(distLinkPath)
+      }
+      symlinkSync(distPath, distLinkPath, 'junction')
+      return
+    }
+  }
 }
 
 /**
@@ -125,4 +166,36 @@ export function clearAllCache(): number {
     clearCache(pkg.name, pkg.version)
   }
   return packages.length
+}
+
+/**
+ * List files in references directory (docs + dist) as relative paths for prompt context
+ * Returns paths like ./references/docs/api.md, ./references/dist/index.ts
+ */
+export function listReferenceFiles(skillDir: string, maxDepth = 3): string[] {
+  const referencesDir = join(skillDir, 'references')
+  if (!existsSync(referencesDir)) return []
+
+  const files: string[] = []
+
+  function walk(dir: string, prefix: string, depth: number) {
+    if (depth > maxDepth) return
+    try {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const relativePath = `${prefix}/${entry.name}`
+        if (entry.isDirectory()) {
+          walk(join(dir, entry.name), relativePath, depth + 1)
+        }
+        else {
+          files.push(`.${relativePath}`)
+        }
+      }
+    }
+    catch {
+      // Broken symlink or permission error
+    }
+  }
+
+  walk(referencesDir, '/references', 0)
+  return files
 }

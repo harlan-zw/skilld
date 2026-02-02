@@ -25,8 +25,6 @@ export interface SearchResult {
 export interface SearchOptions {
   /** Max results */
   limit?: number
-  /** Filter by package name */
-  package?: string
 }
 
 export interface SearchSnippet {

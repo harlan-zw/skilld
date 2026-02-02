@@ -6,7 +6,7 @@
 export type { CachedDoc, CachedPackage, CacheConfig } from './types'
 
 // Config
-export { CACHE_DIR, REFERENCES_DIR, SEARCH_DB } from './config'
+export { CACHE_DIR, getPackageDbPath, REFERENCES_DIR, SEARCH_DB } from './config'
 
 // Version utilities
 export { getCacheDir, getCacheKey, getVersionKey } from './version'
@@ -17,8 +17,10 @@ export {
   clearCache,
   ensureCacheDir,
   isCached,
+  linkDist,
   linkReferences,
   listCached,
+  listReferenceFiles,
   readCachedDocs,
   writeToCache,
 } from './storage'

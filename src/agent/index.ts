@@ -4,13 +4,13 @@
 
 // Types
 export type { AgentConfig, AgentType, SkillMetadata } from './types'
-export type { ModelInfo, OptimizeModel, PromptPreset, PromptPresetId } from './llm'
+export type { ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './llm'
 
 // Registry
 export { agents } from './registry'
 
 // Detection
-export { detectCurrentAgent, detectInstalledAgents } from './detect'
+export { detectCurrentAgent, detectInstalledAgents, getAgentVersion } from './detect'
 
 // Installation
 export { installSkillForAgents, sanitizeName } from './install'
@@ -18,15 +18,13 @@ export { installSkillForAgents, sanitizeName } from './install'
 // Skill generation
 export { generateSkillMd } from './skill'
 
+// Import detection
+export { detectImportedPackages } from './detect-imports'
+
 // LLM optimization
 export {
   buildPrompt,
-  defaultPreset,
-  detailedPreset,
   getAvailableModels,
-  getPreset,
-  minimalPreset,
+  getModelName,
   optimizeDocs,
-  presets,
-  simplePreset,
 } from './llm'

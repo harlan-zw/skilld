@@ -10,3 +10,5 @@ dist
 coverage
 .retriv
 .skilld-temp
+# Skilld references symlinks (recreated by `skilld install`)
+.claude/skills/*/references

@@ -5,6 +5,7 @@ import { fetchNpmPackage, getInstalledSkillVersion, readLocalDependencies, resol
 vi.mock('../src/doc-resolver/github', () => ({
   fetchGitHubRepoMeta: vi.fn(),
   fetchReadme: vi.fn(),
+  fetchGitDocs: vi.fn(),
 }))
 
 vi.mock('../src/doc-resolver/llms', () => ({

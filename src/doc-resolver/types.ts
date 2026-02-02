@@ -26,6 +26,10 @@ export interface ResolvedPackage {
   llmsUrl?: string
   readmeUrl?: string
   repoUrl?: string
+  /** Git docs folder - versioned docs from repo */
+  gitDocsUrl?: string
+  /** Git tag/ref used for gitDocsUrl */
+  gitRef?: string
 }
 
 export interface LocalDependency {
@@ -48,4 +52,16 @@ export interface FetchedDoc {
   url: string
   title: string
   content: string
+}
+
+export interface ResolveAttempt {
+  source: 'npm' | 'github-docs' | 'github-meta' | 'llms.txt' | 'readme'
+  url?: string
+  status: 'success' | 'not-found' | 'error'
+  message?: string
+}
+
+export interface ResolveResult {
+  package: ResolvedPackage | null
+  attempts: ResolveAttempt[]
 }
