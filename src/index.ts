@@ -7,8 +7,6 @@
 // Cache management
 export {
   CACHE_DIR,
-  REFERENCES_DIR,
-  SEARCH_DB,
   clearAllCache,
   clearCache,
   ensureCacheDir,
@@ -19,23 +17,11 @@ export {
   linkReferences,
   listCached,
   readCachedDocs,
+  REFERENCES_DIR,
+  SEARCH_DB,
   writeToCache,
 } from './cache/index'
-export type { CachedDoc, CachedPackage, CacheConfig } from './cache/index'
-
-// Search
-export {
-  createIndex,
-  search,
-  searchSnippets,
-} from './retriv'
-export type {
-  Document,
-  IndexConfig,
-  SearchOptions,
-  SearchResult,
-  SearchSnippet,
-} from './retriv'
+export type { CacheConfig, CachedDoc, CachedPackage } from './cache/index'
 
 // Doc resolver
 export {
@@ -56,3 +42,18 @@ export type {
   NpmPackageInfo,
   ResolvedPackage,
 } from './doc-resolver'
+
+// Search
+export {
+  createIndex,
+  search,
+  searchSnippets,
+} from './retriv'
+export type {
+  Document,
+  IndexConfig,
+  SearchFilter,
+  SearchOptions,
+  SearchResult,
+  SearchSnippet,
+} from './retriv'

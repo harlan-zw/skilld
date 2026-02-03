@@ -11,7 +11,7 @@ export type { RemoveOptions } from './remove'
 
 export { searchCommand } from './search'
 
-export { syncCommand, selectModel } from './sync'
+export { selectModel, syncCommand } from './sync'
 export type { SyncOptions } from './sync'
 
 export { uninstallCommand } from './uninstall'

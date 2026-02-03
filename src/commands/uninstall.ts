@@ -1,7 +1,8 @@
+import type { AgentType } from '../agent'
 import { existsSync, readdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
-import { type AgentType, agents } from '../agent'
+import { agents } from '../agent'
 import { CACHE_DIR } from '../cache'
 import { getRegisteredProjects, unregisterProject } from '../core/config'
 import { readLock } from '../core/lockfile'
@@ -49,7 +50,8 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
   const agentFilter = opts.agent ? [opts.agent] : undefined
 
   const addToRemove = (label: string, path: string, version?: string) => {
-    if (seenPaths.has(path)) return
+    if (seenPaths.has(path))
+      return
     seenPaths.add(path)
     toRemove.push({ label, path, version })
   }
@@ -81,7 +83,8 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
 
   // Helper to find untracked skills in a directory
   const findUntrackedSkills = (skillsDir: string, trackedNames: string[]): string[] => {
-    if (!existsSync(skillsDir)) return []
+    if (!existsSync(skillsDir))
+      return []
     const tracked = new Set(trackedNames)
     return readdirSync(skillsDir)
       .filter(f => !f.startsWith('.') && f !== 'skilld-lock.yaml' && !tracked.has(f))
@@ -93,7 +96,8 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
 
   // Helper to process a skills directory (with deduping)
   const processSkillsDir = (skillsDir: string, label: string) => {
-    if (processedDirs.has(skillsDir)) return
+    if (processedDirs.has(skillsDir))
+      return
     processedDirs.add(skillsDir)
 
     const tracked = addSkillsFromLock(skillsDir, label)
@@ -160,7 +164,8 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
   if (untrackedByDir.size > 0) {
     const groupedUntracked = new Map<string, Set<string>>()
     for (const [_dir, { label, skills }] of untrackedByDir) {
-      if (!groupedUntracked.has(label)) groupedUntracked.set(label, new Set())
+      if (!groupedUntracked.has(label))
+        groupedUntracked.set(label, new Set())
       for (const s of skills) groupedUntracked.get(label)!.add(s)
     }
 
@@ -182,7 +187,8 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
     const [prefix, name] = item.label.includes(': ')
       ? item.label.split(': ', 2)
       : ['other', item.label]
-    if (!groups.has(prefix)) groups.set(prefix, [])
+    if (!groups.has(prefix))
+      groups.set(prefix, [])
     groups.get(prefix)!.push({ name, version: item.version })
   }
 

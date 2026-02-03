@@ -61,7 +61,8 @@ export async function detectImportedPackages(cwd: string = process.cwd()): Promi
       for (const imp of findDynamicImports(content)) {
         // expression includes quotes, extract string value
         const match = imp.expression.match(/^['"]([^'"]+)['"]$/)
-        if (match) addPackage(counts, match[1]!)
+        if (match)
+          addPackage(counts, match[1]!)
       }
     }))
 
@@ -78,11 +79,43 @@ export async function detectImportedPackages(cwd: string = process.cwd()): Promi
 }
 
 const NODE_BUILTINS = new Set([
-  'assert', 'buffer', 'child_process', 'cluster', 'console', 'constants',
-  'crypto', 'dgram', 'dns', 'domain', 'events', 'fs', 'http', 'https',
-  'module', 'net', 'os', 'path', 'perf_hooks', 'process', 'punycode',
-  'querystring', 'readline', 'repl', 'stream', 'string_decoder', 'sys',
-  'timers', 'tls', 'tty', 'url', 'util', 'v8', 'vm', 'wasi', 'worker_threads', 'zlib',
+  'assert',
+  'buffer',
+  'child_process',
+  'cluster',
+  'console',
+  'constants',
+  'crypto',
+  'dgram',
+  'dns',
+  'domain',
+  'events',
+  'fs',
+  'http',
+  'https',
+  'module',
+  'net',
+  'os',
+  'path',
+  'perf_hooks',
+  'process',
+  'punycode',
+  'querystring',
+  'readline',
+  'repl',
+  'stream',
+  'string_decoder',
+  'sys',
+  'timers',
+  'tls',
+  'tty',
+  'url',
+  'util',
+  'v8',
+  'vm',
+  'wasi',
+  'worker_threads',
+  'zlib',
 ])
 
 function isNodeBuiltin(pkg: string): boolean {

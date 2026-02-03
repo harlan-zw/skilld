@@ -3,22 +3,26 @@
  *
  * After cloning a repo, the references symlinks are missing (gitignored).
  * This command recreates them from the lockfile:
- *   .claude/skills/<skill>/references/docs -> ~/.skilld/references/<pkg>@<version>/docs
- *   .claude/skills/<skill>/references/dist -> node_modules/<pkg>/dist
+ *   .claude/skills/<skill>/references/pkg -> node_modules/<pkg> (always)
+ *   .claude/skills/<skill>/references/docs -> ~/.skilld/references/<pkg>@<version>/docs (if external)
  */
 
-import { existsSync, lstatSync, mkdirSync, symlinkSync, unlinkSync } from 'node:fs'
+import type { AgentType } from '../agent'
+import type { SkillInfo } from '../core/lockfile'
+import { existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
-import { type AgentType, agents } from '../agent'
+import { agents } from '../agent'
 import {
   ensureCacheDir,
   getCacheDir,
   getPackageDbPath,
+  getShippedSkills,
   isCached,
+  linkShippedSkill,
   writeToCache,
 } from '../cache'
-import { readLock, type SkillInfo } from '../core/lockfile'
+import { readLock } from '../core/lockfile'
 import {
   downloadLlmsDocs,
   fetchGitDocs,
@@ -53,17 +57,30 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 
   // Find skills with missing/broken references symlinks
   for (const [name, info] of skills) {
-    if (!info.version) continue
+    if (!info.version)
+      continue
+
+    // Shipped skills: the skill dir IS the symlink, no references/ subdir
+    if (info.source === 'shipped') {
+      const skillDir = join(skillsDir, name)
+      if (!existsSync(skillDir)) {
+        toRestore.push({ name, info })
+      }
+      continue
+    }
 
     const skillDir = join(skillsDir, name)
     const referencesPath = join(skillDir, 'references')
+    const skillMdPath = join(skillDir, 'SKILL.md')
 
-    // Check if symlink exists and resolves
+    // Check if skill dir is missing entirely, or has broken symlinks
     const needsRestore = !existsSync(skillDir)
+      || !existsSync(skillMdPath)
       || !existsSync(referencesPath)
       || (lstatSync(referencesPath).isSymbolicLink() && !existsSync(referencesPath))
+      || (existsSync(skillMdPath) && lstatSync(skillMdPath).isSymbolicLink() && !existsSync(skillMdPath))
 
-    if (needsRestore && existsSync(skillDir)) {
+    if (needsRestore) {
       toRestore.push({ name, info })
     }
   }
@@ -79,6 +96,21 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   for (const { name, info } of toRestore) {
     const version = info.version!
     const pkgName = info.packageName || unsanitizeName(name, info.source)
+
+    // Shipped skills: re-link from node_modules
+    if (info.source === 'shipped') {
+      const shipped = getShippedSkills(pkgName, cwd)
+      const match = shipped.find(s => s.skillName === name)
+      if (match) {
+        linkShippedSkill(skillsDir, name, match.skillDir)
+        p.log.success(`Linked ${name}`)
+      }
+      else {
+        p.log.warn(`${name}: package ${pkgName} no longer ships this skill`)
+      }
+      continue
+    }
+
     const skillDir = join(skillsDir, name)
     const referencesPath = join(skillDir, 'references')
     const globalCachePath = getCacheDir(pkgName, version)
@@ -87,12 +119,31 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     // Check if already in global cache - just create symlinks
     if (isCached(pkgName, version)) {
       spin.start(`Linking ${name}`)
+      mkdirSync(skillDir, { recursive: true })
       mkdirSync(referencesPath, { recursive: true })
-      const docsLink = join(referencesPath, 'docs')
-      const cachedDocs = join(globalCachePath, 'docs')
-      if (existsSync(docsLink)) unlinkSync(docsLink)
-      if (existsSync(cachedDocs)) symlinkSync(cachedDocs, docsLink, 'junction')
-      linkDistSymlink(referencesPath, pkgName, cwd)
+      linkPkgSymlink(referencesPath, pkgName, cwd)
+      // Only link external docs if package doesn't ship its own and has more than just README
+      if (!pkgHasShippedDocs(pkgName, cwd) && !isReadmeOnly(globalCachePath)) {
+        const docsLink = join(referencesPath, 'docs')
+        const cachedDocs = join(globalCachePath, 'docs')
+        if (existsSync(docsLink))
+          unlinkSync(docsLink)
+        if (existsSync(cachedDocs))
+          symlinkSync(cachedDocs, docsLink, 'junction')
+      }
+      // Link issues and releases
+      const issuesLink = join(referencesPath, 'issues')
+      const cachedIssues = join(globalCachePath, 'issues')
+      if (existsSync(issuesLink))
+        unlinkSync(issuesLink)
+      if (existsSync(cachedIssues))
+        symlinkSync(cachedIssues, issuesLink, 'junction')
+      const releasesLink = join(referencesPath, 'releases')
+      const cachedReleases = join(globalCachePath, 'releases')
+      if (existsSync(releasesLink))
+        unlinkSync(releasesLink)
+      if (existsSync(cachedReleases))
+        symlinkSync(cachedReleases, releasesLink, 'junction')
       spin.stop(`Linked ${name}`)
       continue
     }
@@ -114,7 +165,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     if (resolved.gitDocsUrl && resolved.repoUrl) {
       const gh = parseGitHubUrl(resolved.repoUrl)
       if (gh) {
-        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version)
+        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version, pkgName)
         if (gitDocs?.files.length) {
           const BATCH_SIZE = 20
           for (let i = 0; i < gitDocs.files.length; i += BATCH_SIZE) {
@@ -123,14 +174,15 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
               batch.map(async (file) => {
                 const url = `${gitDocs.baseUrl}/${file}`
                 const res = await fetch(url, { headers: { 'User-Agent': 'skilld/1.0' } }).catch(() => null)
-                if (!res?.ok) return null
+                if (!res?.ok)
+                  return null
                 return { file, content: await res.text() }
               }),
             )
             for (const r of results) {
               if (r) {
                 cachedDocs.push({ path: r.file, content: r.content })
-                docsToIndex.push({ id: r.file, content: r.content, metadata: { package: pkgName, source: r.file } })
+                docsToIndex.push({ id: r.file, content: r.content, metadata: { package: pkgName, source: r.file, type: 'doc' } })
               }
             }
           }
@@ -150,7 +202,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
             const localPath = doc.url.startsWith('/') ? doc.url.slice(1) : doc.url
             const cachePath = `docs/${localPath}`
             cachedDocs.push({ path: cachePath, content: doc.content })
-            docsToIndex.push({ id: doc.url, content: doc.content, metadata: { package: pkgName, source: cachePath } })
+            docsToIndex.push({ id: doc.url, content: doc.content, metadata: { package: pkgName, source: cachePath, type: 'doc' } })
           }
         }
       }
@@ -161,7 +213,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       const content = await fetchReadmeContent(resolved.readmeUrl)
       if (content) {
         cachedDocs.push({ path: 'docs/README.md', content })
-        docsToIndex.push({ id: 'README.md', content, metadata: { package: pkgName, source: 'docs/README.md' } })
+        docsToIndex.push({ id: 'README.md', content, metadata: { package: pkgName, source: 'docs/README.md', type: 'doc' } })
       }
     }
 
@@ -169,11 +221,16 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       writeToCache(pkgName, version, cachedDocs)
 
       mkdirSync(referencesPath, { recursive: true })
-      const docsLink = join(referencesPath, 'docs')
-      const cachedDocsDir = join(globalCachePath, 'docs')
-      if (existsSync(docsLink)) unlinkSync(docsLink)
-      if (existsSync(cachedDocsDir)) symlinkSync(cachedDocsDir, docsLink, 'junction')
-      linkDistSymlink(referencesPath, pkgName, cwd)
+      linkPkgSymlink(referencesPath, pkgName, cwd)
+      // Link fetched docs unless it's just a README (already in pkg/)
+      if (!isReadmeOnly(globalCachePath)) {
+        const docsLink = join(referencesPath, 'docs')
+        const cachedDocsDir = join(globalCachePath, 'docs')
+        if (existsSync(docsLink))
+          unlinkSync(docsLink)
+        if (existsSync(cachedDocsDir))
+          symlinkSync(cachedDocsDir, docsLink, 'junction')
+      }
 
       if (docsToIndex.length > 0) {
         await createIndex(docsToIndex, { dbPath: getPackageDbPath(pkgName, version) })
@@ -193,31 +250,56 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 function unsanitizeName(sanitized: string, source?: string): string {
   if (source?.includes('ungh://')) {
     const match = source.match(/ungh:\/\/([^/]+)\/(.+)/)
-    if (match) return `@${match[1]}/${match[2]}`
+    if (match)
+      return `@${match[1]}/${match[2]}`
   }
 
-  if (sanitized.startsWith('antfu-')) return `@antfu/${sanitized.slice(6)}`
-  if (sanitized.startsWith('clack-')) return `@clack/${sanitized.slice(6)}`
-  if (sanitized.startsWith('nuxt-')) return `@nuxt/${sanitized.slice(5)}`
-  if (sanitized.startsWith('vue-')) return `@vue/${sanitized.slice(4)}`
-  if (sanitized.startsWith('vueuse-')) return `@vueuse/${sanitized.slice(7)}`
+  if (sanitized.startsWith('antfu-'))
+    return `@antfu/${sanitized.slice(6)}`
+  if (sanitized.startsWith('clack-'))
+    return `@clack/${sanitized.slice(6)}`
+  if (sanitized.startsWith('nuxt-'))
+    return `@nuxt/${sanitized.slice(5)}`
+  if (sanitized.startsWith('vue-'))
+    return `@vue/${sanitized.slice(4)}`
+  if (sanitized.startsWith('vueuse-'))
+    return `@vueuse/${sanitized.slice(7)}`
 
   return sanitized
 }
 
-/** Create dist symlink inside references dir */
-function linkDistSymlink(referencesDir: string, name: string, cwd: string): void {
-  const candidates = ['dist', 'lib', 'build', 'esm']
+/** Create pkg symlink inside references dir (links to entire package) */
+function linkPkgSymlink(referencesDir: string, name: string, cwd: string): void {
   const nodeModulesPath = join(cwd, 'node_modules', name)
-  if (!existsSync(nodeModulesPath)) return
+  if (!existsSync(nodeModulesPath))
+    return
 
-  for (const candidate of candidates) {
-    const distPath = join(nodeModulesPath, candidate)
-    if (existsSync(distPath)) {
-      const distLink = join(referencesDir, 'dist')
-      if (existsSync(distLink)) unlinkSync(distLink)
-      symlinkSync(distPath, distLink, 'junction')
-      return
-    }
+  const pkgLink = join(referencesDir, 'pkg')
+  if (existsSync(pkgLink))
+    unlinkSync(pkgLink)
+  symlinkSync(nodeModulesPath, pkgLink, 'junction')
+}
+
+/** Check if cache only has docs/README.md (pkg/ already has this) */
+function isReadmeOnly(cacheDir: string): boolean {
+  const docsDir = join(cacheDir, 'docs')
+  if (!existsSync(docsDir))
+    return false
+  const files = readdirSync(docsDir)
+  return files.length === 1 && files[0] === 'README.md'
+}
+
+/** Check if package ships its own docs folder */
+function pkgHasShippedDocs(name: string, cwd: string): boolean {
+  const nodeModulesPath = join(cwd, 'node_modules', name)
+  if (!existsSync(nodeModulesPath))
+    return false
+
+  const docsCandidates = ['docs', 'documentation', 'doc']
+  for (const candidate of docsCandidates) {
+    const docsPath = join(nodeModulesPath, candidate)
+    if (existsSync(docsPath))
+      return true
   }
+  return false
 }

@@ -32,5 +32,18 @@ describe('agent/skill', () => {
       const result = generateSkillMd({ name: 'pkg' }, 'Body')
       expect(result).not.toContain('version:')
     })
+
+    it('includes releasedAt when provided', () => {
+      const result = generateSkillMd(
+        { name: 'pkg', version: '1.0.0', releasedAt: '2024-02-01T12:00:00Z' },
+        'Body',
+      )
+      expect(result).toContain('releasedAt: "2024-02-01"')
+    })
+
+    it('omits releasedAt if not provided', () => {
+      const result = generateSkillMd({ name: 'pkg', version: '1.0.0' }, 'Body')
+      expect(result).not.toContain('releasedAt:')
+    })
   })
 })

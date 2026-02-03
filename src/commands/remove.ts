@@ -1,9 +1,9 @@
+import type { AgentType } from '../agent'
+import type { ProjectState, SkillEntry } from '../core/skills'
 import { existsSync, rmSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { removeLockEntry } from '../core/lockfile'
-import type { ProjectState, SkillEntry } from '../core/skills'
-import { iterateSkills, getSkillsDir } from '../core/skills'
-import type { AgentType } from '../agent'
+import { getSkillsDir, iterateSkills } from '../core/skills'
 
 export interface RemoveOptions {
   packages?: string[]

@@ -1,5 +1,5 @@
 import * as p from '@clack/prompts'
-import { type AgentType, agents, getAvailableModels } from '../agent'
+import { agents, getAvailableModels } from '../agent'
 import { readConfig, updateConfig } from '../core/config'
 
 export async function configCommand(): Promise<void> {
@@ -40,7 +40,8 @@ export async function configCommand(): Promise<void> {
         initialValue: config.model || '',
       })
 
-      if (p.isCancel(model)) return
+      if (p.isCancel(model))
+        return
 
       updateConfig({ model: (model || undefined) as typeof config.model })
       p.log.success(model ? `Default model set to ${model}` : 'Model will be prompted each time')
@@ -61,7 +62,8 @@ export async function configCommand(): Promise<void> {
         initialValue: config.agent || '',
       })
 
-      if (p.isCancel(agentChoice)) return
+      if (p.isCancel(agentChoice))
+        return
 
       updateConfig({ agent: agentChoice || undefined })
       p.log.success(agentChoice ? `Default agent set to ${agentChoice}` : 'Agent will be auto-detected')

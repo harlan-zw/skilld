@@ -105,7 +105,8 @@ describe('doc-resolver/npm', () => {
       vi.mocked(existsSync).mockReturnValue(false)
 
       await expect(readLocalDependencies('/test'))
-        .rejects.toThrow('No package.json found')
+        .rejects
+        .toThrow('No package.json found')
     })
   })
 
@@ -228,6 +229,7 @@ description: Vue skill
       const { fetchGitHubRepoMeta, fetchReadme } = await import('../src/doc-resolver/github')
       const { fetchLlmsUrl } = await import('../src/doc-resolver/llms')
 
+      // First fetch: package info
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
@@ -237,6 +239,11 @@ description: Vue skill
           homepage: 'https://vuejs.org',
           repository: { url: 'git+https://github.com/vuejs/core.git' },
         }),
+      })
+      // Second fetch: package time info for release date
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ time: { '3.4.21': '2024-02-01T12:00:00Z' } }),
       })
 
       vi.mocked(fetchLlmsUrl).mockResolvedValue('https://vuejs.org/llms.txt')
@@ -248,6 +255,7 @@ description: Vue skill
       expect(result).toMatchObject({
         name: 'vue',
         version: '3.4.21',
+        releasedAt: '2024-02-01T12:00:00Z',
         description: 'Progressive framework',
         docsUrl: 'https://vuejs.org',
         repoUrl: 'https://github.com/vuejs/core',
@@ -267,6 +275,10 @@ description: Vue skill
           homepage: 'https://github.com/owner/repo',
           repository: { url: 'https://github.com/owner/repo' },
         }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ time: { '1.0.0': '2024-01-01T00:00:00Z' } }),
       })
 
       vi.mocked(fetchGitHubRepoMeta).mockResolvedValue({ homepage: 'https://docs.example.com' })
@@ -291,6 +303,10 @@ description: Vue skill
           repository: { url: 'https://github.com/owner/repo' },
         }),
       })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ time: { '1.0.0': '2024-01-01T00:00:00Z' } }),
+      })
 
       vi.mocked(fetchGitHubRepoMeta).mockResolvedValue(null)
       vi.mocked(fetchReadme).mockResolvedValue('https://raw.githubusercontent.com/owner/repo/main/README.md')
@@ -312,6 +328,10 @@ description: Vue skill
           version: '1.0.0',
           // No homepage, no repository
         }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ time: { '1.0.0': '2024-01-01T00:00:00Z' } }),
       })
 
       vi.mocked(fetchGitHubRepoMeta).mockResolvedValue(null)
@@ -337,6 +357,10 @@ description: Vue skill
             directory: 'packages/kit',
           },
         }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ time: { '3.10.0': '2024-01-01T00:00:00Z' } }),
       })
 
       vi.mocked(fetchGitHubRepoMeta).mockResolvedValue(null)

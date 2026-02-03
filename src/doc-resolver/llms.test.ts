@@ -31,9 +31,24 @@ describe('parseMarkdownLinks', () => {
 })
 
 describe('normalizeLlmsLinks', () => {
-  it('converts absolute paths to relative ./docs/', () => {
+  it('converts root-relative paths to ./docs/', () => {
     const content = '[Guide](/guide/intro.md)'
     expect(normalizeLlmsLinks(content)).toBe('[Guide](./docs/guide/intro.md)')
+  })
+
+  it('converts absolute URLs to ./docs/ when baseUrl provided', () => {
+    const content = '[Guide](https://example.com/docs/intro.md)'
+    expect(normalizeLlmsLinks(content, 'https://example.com/docs')).toBe('[Guide](./docs/intro.md)')
+  })
+
+  it('handles mixed absolute and root-relative links', () => {
+    const content = `
+[A](https://example.com/a.md)
+[B](/b.md)
+`
+    const result = normalizeLlmsLinks(content, 'https://example.com')
+    expect(result).toContain('./docs/a.md')
+    expect(result).toContain('./docs/b.md')
   })
 
   it('handles multiple links', () => {

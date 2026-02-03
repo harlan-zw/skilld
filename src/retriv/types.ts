@@ -13,6 +13,8 @@ export interface IndexConfig {
   dbPath: string
   model?: string
   chunking?: ChunkingOptions
+  /** Progress callback (current, total) */
+  onProgress?: (current: number, total: number) => void
 }
 
 export interface SearchResult {
@@ -20,11 +22,28 @@ export interface SearchResult {
   content: string
   score: number
   metadata: Record<string, any>
+  highlights: string[]
 }
+
+export type FilterOperator
+  = | { $eq: string | number | boolean }
+    | { $ne: string | number | boolean }
+    | { $gt: number }
+    | { $gte: number }
+    | { $lt: number }
+    | { $lte: number }
+    | { $in: (string | number)[] }
+    | { $prefix: string }
+    | { $exists: boolean }
+
+export type FilterValue = string | number | boolean | FilterOperator
+export type SearchFilter = Record<string, FilterValue>
 
 export interface SearchOptions {
   /** Max results */
   limit?: number
+  /** Filter by metadata fields */
+  filter?: SearchFilter
 }
 
 export interface SearchSnippet {
@@ -32,10 +51,14 @@ export interface SearchSnippet {
   package: string
   /** Source file path */
   source: string
-  /** Line number (approximate) */
-  line: number
-  /** Snippet content */
+  /** Start line number */
+  lineStart: number
+  /** End line number */
+  lineEnd: number
+  /** Snippet content (5 lines around best match) */
   content: string
   /** Relevance score */
   score: number
+  /** Matched query terms, ordered by BM25 score */
+  highlights: string[]
 }

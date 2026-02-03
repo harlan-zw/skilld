@@ -2,29 +2,30 @@
  * Agent module - detection, installation, and skill optimization
  */
 
-// Types
-export type { AgentConfig, AgentType, SkillMetadata } from './types'
-export type { ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './llm'
-
-// Registry
-export { agents } from './registry'
-
 // Detection
 export { detectCurrentAgent, detectInstalledAgents, getAgentVersion } from './detect'
-
-// Installation
-export { installSkillForAgents, sanitizeName } from './install'
-
-// Skill generation
-export { generateSkillMd } from './skill'
-
 // Import detection
 export { detectImportedPackages } from './detect-imports'
+// Installation
+export { installSkillForAgents, sanitizeName } from './install'
+export type { ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './llm'
 
 // LLM optimization
 export {
-  buildPrompt,
+  buildSkillPrompt,
   getAvailableModels,
   getModelName,
   optimizeDocs,
 } from './llm'
+
+// Skill generation
+export { generateSkillMd } from './prompts'
+
+export type { SkillOptions } from './prompts'
+// Registry
+export { agents } from './registry'
+
+// Types
+export type { AgentConfig, AgentType, SkillMetadata } from './types'
+
+export { FILE_PATTERN_MAP } from './types'

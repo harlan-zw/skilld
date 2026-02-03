@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
 [![license](https://img.shields.io/github/license/harlan-zw/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE.md)
 
-> AI-generated skills and semantic search from your NPM dependencies real docs.
+> Skilld gives your AI agent expert skill knowledge about any of your dependencies gathered from versioned docs, source code and github issues.
 
 ## Why?
 
@@ -228,8 +228,24 @@ skilld https://nuxt.com  # Uses /llms.txt automatically
 - [ ] **CI integration** - GitHub Action to auto-regenerate skills on dependency updates
 - [ ] **Smart presets** - Auto-detect recommended packages from project config (nuxt.config.ts → nuxt, vue, nitro, h3)
 
+## Shipped Skills (skills-npm)
+
+skilld supports the [skills-npm](https://github.com/antfu/skills-npm) convention. If a package ships a `skills/` directory, skilld symlinks it directly — no doc fetching, no caching, no LLM generation, no tokens spent.
+
+```
+node_modules/@slidev/cli/skills/
+  slidev/
+    SKILL.md
+    references/
+
+→ .claude/skills/slidev -> node_modules/@slidev/cli/skills/slidev
+```
+
+Package authors can ship skills alongside their code. skilld detects and links them automatically during sync. Generation is the fallback for packages that haven't adopted the convention yet.
+
 ## Related
 
+- [skills-npm](https://github.com/antfu/skills-npm) - Convention for shipping agent skills in npm packages
 - [mdream](https://github.com/harlan-zw/mdream) - HTML to Markdown converter used for crawling
 - [retriv](https://github.com/harlan-zw/retriv) - Vector database abstraction layer
 

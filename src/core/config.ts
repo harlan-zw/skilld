@@ -1,7 +1,7 @@
+import type { OptimizeModel } from '../agent'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import type { OptimizeModel } from '../agent'
 
 export interface SkilldConfig {
   model?: OptimizeModel
@@ -13,7 +13,8 @@ const CONFIG_DIR = join(homedir(), '.skilld')
 const CONFIG_PATH = join(CONFIG_DIR, 'config.yaml')
 
 export function readConfig(): SkilldConfig {
-  if (!existsSync(CONFIG_PATH)) return {}
+  if (!existsSync(CONFIG_PATH))
+    return {}
 
   const content = readFileSync(CONFIG_PATH, 'utf-8')
   const config: SkilldConfig = {}
@@ -34,11 +35,14 @@ export function readConfig(): SkilldConfig {
     }
     const [key, ...rest] = line.split(':')
     const value = rest.join(':').trim().replace(/^["']|["']$/g, '')
-    if (key === 'model' && value) config.model = value as OptimizeModel
-    if (key === 'agent' && value) config.agent = value
+    if (key === 'model' && value)
+      config.model = value as OptimizeModel
+    if (key === 'agent' && value)
+      config.agent = value
   }
 
-  if (projects.length > 0) config.projects = projects
+  if (projects.length > 0)
+    config.projects = projects
   return config
 }
 
@@ -46,8 +50,10 @@ export function writeConfig(config: SkilldConfig): void {
   mkdirSync(CONFIG_DIR, { recursive: true })
 
   let yaml = ''
-  if (config.model) yaml += `model: ${config.model}\n`
-  if (config.agent) yaml += `agent: ${config.agent}\n`
+  if (config.model)
+    yaml += `model: ${config.model}\n`
+  if (config.agent)
+    yaml += `agent: ${config.agent}\n`
   if (config.projects?.length) {
     yaml += 'projects:\n'
     for (const p of config.projects) {

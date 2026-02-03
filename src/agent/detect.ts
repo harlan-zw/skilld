@@ -2,10 +2,10 @@
  * Agent detection - identify installed and active agents
  */
 
+import type { AgentType } from './types'
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AgentType } from './types'
 import { agents } from './registry'
 
 /**
@@ -80,7 +80,8 @@ export function detectCurrentAgent(): AgentType | null {
  */
 export function getAgentVersion(agentType: AgentType): string | null {
   const agent = agents[agentType]
-  if (!agent.cli) return null
+  if (!agent.cli)
+    return null
 
   try {
     const output = execSync(`${agent.cli} --version`, {

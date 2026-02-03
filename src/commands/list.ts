@@ -1,16 +1,17 @@
+import type { SkillInfo } from '../core/lockfile'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { agents, detectInstalledAgents } from '../agent'
 import { formatSkillLineSimple, printLegend } from '../core/formatting'
-import { readLock, parseSkillFrontmatter } from '../core/lockfile'
-import type { SkillInfo } from '../core/lockfile'
+import { parseSkillFrontmatter, readLock } from '../core/lockfile'
 
 export interface ListOptions {
   global?: boolean
 }
 
 function getSkillInfo(skillsDir: string, skill: string, lock: ReturnType<typeof readLock>): SkillInfo | null {
-  if (lock?.skills[skill]) return lock.skills[skill]
+  if (lock?.skills[skill])
+    return lock.skills[skill]
   return parseSkillFrontmatter(join(skillsDir, skill, 'SKILL.md'))
 }
 

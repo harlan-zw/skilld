@@ -1,34 +1,44 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import type { AgentType, OptimizeModel } from '../agent'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import * as p from '@clack/prompts'
 import logUpdate from 'log-update'
 import pLimit from 'p-limit'
-import * as p from '@clack/prompts'
+import {
+  agents,
+
+  generateSkillMd,
+  optimizeDocs,
+
+  sanitizeName,
+
+} from '../agent'
 import {
   CACHE_DIR,
   ensureCacheDir,
   getCacheDir,
   getPackageDbPath,
+  getShippedSkills,
   getVersionKey,
+  hasShippedDocs,
   isCached,
-  linkDist,
+  linkIssues,
+  linkPkg,
   linkReferences,
+  linkReleases,
+  linkShippedSkill,
   listReferenceFiles,
   writeToCache,
 } from '../cache'
-import {
-  type AgentType,
-  type OptimizeModel,
-  type StreamProgress,
-  agents,
-  optimizeDocs,
-  sanitizeName,
-} from '../agent'
+import { registerProject } from '../core/config'
+import { writeLock } from '../core/lockfile'
 import {
   downloadLlmsDocs,
   fetchGitDocs,
   fetchLlmsTxt,
   fetchNpmPackage,
   fetchReadmeContent,
+  fetchReleaseNotes,
   normalizeLlmsLinks,
   parseGitHubUrl,
   parseMarkdownLinks,
@@ -37,10 +47,10 @@ import {
   resolvePackageDocs,
 } from '../doc-resolver'
 import { createIndex } from '../retriv'
-import { registerProject } from '../core/config'
-import { writeLock } from '../core/lockfile'
 
-type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'thinking' | 'generating' | 'done' | 'error'
+import { selectModel } from './sync'
+
+type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'exploring' | 'thinking' | 'generating' | 'done' | 'error'
 
 interface PackageState {
   name: string
@@ -55,6 +65,7 @@ const STATUS_ICONS: Record<PackageStatus, string> = {
   resolving: '◐',
   downloading: '◒',
   embedding: '◓',
+  exploring: '◔',
   thinking: '◔',
   generating: '◑',
   done: '✓',
@@ -66,6 +77,7 @@ const STATUS_COLORS: Record<PackageStatus, string> = {
   resolving: '\x1B[36m',
   downloading: '\x1B[36m',
   embedding: '\x1B[36m',
+  exploring: '\x1B[34m', // Blue for exploring
   thinking: '\x1B[35m', // Magenta for thinking
   generating: '\x1B[33m',
   done: '\x1B[32m',
@@ -76,7 +88,8 @@ export interface ParallelSyncConfig {
   packages: string[]
   global: boolean
   agent: AgentType
-  model: OptimizeModel
+  model?: OptimizeModel
+  yes?: boolean
   concurrency?: number
 }
 
@@ -116,16 +129,15 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     state.status = status
     state.message = message
     state.streamPreview = undefined // Clear preview on status change
-    if (version) state.version = version
+    if (version)
+      state.version = version
     render()
   }
 
-  function updatePreview(pkg: string, preview: string) {
+  function updatePreview(pkg: string, content: string, isReasoning = false) {
     const state = states.get(pkg)!
-    // Truncate and clean preview for display (last ~30 chars, single line)
-    const cleaned = preview.replace(/\s+/g, ' ').trim()
-    const truncated = cleaned.length > 30 ? `...${cleaned.slice(-30)}` : cleaned
-    state.streamPreview = truncated
+    const words = content.split(/\s+/).filter(Boolean).length
+    state.streamPreview = isReasoning ? `${words}w thought` : `${words}w`
     render()
   }
 
@@ -134,57 +146,88 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
   const limit = pLimit(concurrency)
 
-  const results = await Promise.allSettled(
+  // Phase 1: Generate base skills (no LLM)
+  const baseResults = await Promise.allSettled(
     packages.map(pkg =>
-      limit(() => syncSinglePackageWithProgress(pkg, config, cwd, update, updatePreview)),
+      limit(() => syncBaseSkill(pkg, config, cwd, update)),
     ),
   )
 
-  // Persist final output
   logUpdate.done()
 
-  // Collect errors with package names
+  // Collect successful packages for LLM phase (exclude shipped — they need no LLM)
+  const successfulPkgs: string[] = []
   const errors: Array<{ pkg: string, reason: string }> = []
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i]!
-    if (r.status === 'rejected') {
+  for (let i = 0; i < baseResults.length; i++) {
+    const r = baseResults[i]!
+    if (r.status === 'fulfilled' && r.value !== 'shipped') {
+      successfulPkgs.push(packages[i]!)
+    }
+    else if (r.status === 'rejected') {
       const reason = r.reason instanceof Error ? r.reason.message : String(r.reason)
       errors.push({ pkg: packages[i]!, reason })
     }
   }
 
-  // Summary
-  const succeeded = results.filter(r => r.status === 'fulfilled').length
+  p.log.success(`Created ${successfulPkgs.length} base skills`)
 
   if (errors.length > 0) {
-    p.log.warn(`Completed with ${errors.length} error(s)`)
     for (const { pkg, reason } of errors) {
       p.log.error(`  ${pkg}: ${reason}`)
     }
   }
 
-  p.outro(`Synced ${succeeded}/${packages.length} packages`)
+  // Phase 2: Ask about LLM enhancement (skip if -y without model)
+  if (successfulPkgs.length > 0 && !(config.yes && !config.model)) {
+    const wantOptimize = config.model || await p.confirm({
+      message: 'Generate best practices with LLM?',
+      initialValue: true,
+    })
+
+    if (wantOptimize && !p.isCancel(wantOptimize)) {
+      const model = config.model ?? await selectModel(false)
+
+      if (model) {
+        // Reset states for LLM phase
+        for (const pkg of successfulPkgs) {
+          states.set(pkg, { name: pkg, status: 'pending', message: 'Waiting...' })
+        }
+        render()
+
+        const llmResults = await Promise.allSettled(
+          successfulPkgs.map(pkg =>
+            limit(() => enhanceWithLLM(pkg, { ...config, model }, cwd, update, updatePreview)),
+          ),
+        )
+
+        logUpdate.done()
+
+        const llmSucceeded = llmResults.filter(r => r.status === 'fulfilled').length
+        p.log.success(`Enhanced ${llmSucceeded}/${successfulPkgs.length} skills with LLM`)
+      }
+    }
+  }
+
+  p.outro(`Synced ${successfulPkgs.length}/${packages.length} packages`)
 }
 
 type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: string) => void
-type UpdatePreviewFn = (pkg: string, preview: string) => void
+type UpdatePreviewFn = (pkg: string, content: string, isReasoning?: boolean) => void
 
-async function syncSinglePackageWithProgress(
+/** Phase 1: Generate base skill (no LLM). Returns 'shipped' if shipped skill was linked. */
+async function syncBaseSkill(
   packageName: string,
   config: ParallelSyncConfig,
   cwd: string,
   update: UpdateFn,
-  updatePreview: UpdatePreviewFn,
-): Promise<void> {
+): Promise<'shipped' | 'synced'> {
   update(packageName, 'resolving', 'Looking up...')
 
   const localDeps = await readLocalDependencies(cwd).catch(() => [])
   const localVersion = localDeps.find(d => d.name === packageName)?.version
 
-  // Try npm first
   let resolved = await resolvePackageDocs(packageName, { version: localVersion })
 
-  // If npm fails, check if it's a link: dep and try local resolution
   if (!resolved) {
     const pkgPath = join(cwd, 'package.json')
     if (existsSync(pkgPath)) {
@@ -209,6 +252,31 @@ async function syncSinglePackageWithProgress(
   const version = localVersion || resolved.version || 'latest'
   const versionKey = getVersionKey(version)
 
+  // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
+  const shippedSkills = getShippedSkills(packageName, cwd)
+  if (shippedSkills.length > 0) {
+    const agent = agents[config.agent]
+    const baseDir = config.global
+      ? join(CACHE_DIR, 'skills')
+      : join(cwd, agent.skillsDir)
+    mkdirSync(baseDir, { recursive: true })
+
+    for (const shipped of shippedSkills) {
+      linkShippedSkill(baseDir, shipped.skillName, shipped.skillDir)
+      writeLock(baseDir, shipped.skillName, {
+        packageName,
+        version,
+        source: 'shipped',
+        syncedAt: new Date().toISOString().split('T')[0],
+        generator: 'skilld',
+      })
+    }
+    if (!config.global)
+      registerProject(cwd)
+    update(packageName, 'done', 'Shipped', versionKey)
+    return 'shipped'
+  }
+
   const useCache = isCached(packageName, version)
   if (useCache) {
     update(packageName, 'downloading', 'Using cache', versionKey)
@@ -225,8 +293,8 @@ async function syncSinglePackageWithProgress(
   const skillDir = join(baseDir, sanitizeName(packageName))
   mkdirSync(skillDir, { recursive: true })
 
-  let llmsRaw: string | null = null
   let docSource: string = resolved.readmeUrl || 'readme'
+  let docsType: 'llms.txt' | 'readme' | 'docs' = 'readme'
   const docsToIndex: Array<{ id: string, content: string, metadata: Record<string, any> }> = []
 
   if (!useCache) {
@@ -236,7 +304,7 @@ async function syncSinglePackageWithProgress(
     if (resolved.gitDocsUrl && resolved.repoUrl) {
       const gh = parseGitHubUrl(resolved.repoUrl)
       if (gh) {
-        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version)
+        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version, packageName)
         if (gitDocs && gitDocs.files.length > 0) {
           update(packageName, 'downloading', `${gitDocs.files.length} docs @ ${gitDocs.ref}`, versionKey)
 
@@ -249,7 +317,8 @@ async function syncSinglePackageWithProgress(
               batch.map(async (file) => {
                 const url = `${gitDocs.baseUrl}/${file}`
                 const res = await fetch(url, { headers: { 'User-Agent': 'skilld/1.0' } }).catch(() => null)
-                if (!res?.ok) return null
+                if (!res?.ok)
+                  return null
                 const content = await res.text()
                 return { file, content }
               }),
@@ -263,13 +332,16 @@ async function syncSinglePackageWithProgress(
               docsToIndex.push({
                 id: r.file,
                 content: r.content,
-                metadata: { package: packageName, source: r.file },
+                metadata: { package: packageName, source: r.file, type: 'doc' },
               })
             }
           }
 
           const downloaded = results.filter(Boolean).length
-          if (downloaded > 0) docSource = `${resolved.repoUrl}/tree/${gitDocs.ref}/docs`
+          if (downloaded > 0) {
+            docSource = `${resolved.repoUrl}/tree/${gitDocs.ref}/docs`
+            docsType = 'docs'
+          }
         }
       }
     }
@@ -278,8 +350,8 @@ async function syncSinglePackageWithProgress(
       update(packageName, 'downloading', 'llms.txt...', versionKey)
       const llmsContent = await fetchLlmsTxt(resolved.llmsUrl)
       if (llmsContent) {
-        llmsRaw = llmsContent.raw
         docSource = resolved.llmsUrl!
+        docsType = 'llms.txt'
         cachedDocs.push({ path: 'llms.txt', content: normalizeLlmsLinks(llmsContent.raw) })
 
         if (llmsContent.links.length > 0) {
@@ -295,7 +367,7 @@ async function syncSinglePackageWithProgress(
             docsToIndex.push({
               id: doc.url,
               content: doc.content,
-              metadata: { package: packageName, source: cachePath },
+              metadata: { package: packageName, source: cachePath, type: 'doc' },
             })
           }
         }
@@ -311,7 +383,7 @@ async function syncSinglePackageWithProgress(
         docsToIndex.push({
           id: 'README.md',
           content,
-          metadata: { package: packageName, source: 'docs/README.md' },
+          metadata: { package: packageName, source: 'docs/README.md', type: 'doc' },
         })
       }
     }
@@ -320,148 +392,270 @@ async function syncSinglePackageWithProgress(
     if (cachedDocs.length > 0) {
       writeToCache(packageName, version, cachedDocs)
 
-      // Index into per-package search.db
       if (docsToIndex.length > 0) {
-        update(packageName, 'embedding', `Vectorizing ${docsToIndex.length} docs`, versionKey)
         const dbPath = getPackageDbPath(packageName, version)
-        await createIndex(docsToIndex, { dbPath })
+        await createIndex(docsToIndex, {
+          dbPath,
+          onProgress: (current, total) => {
+            update(packageName, 'embedding', `Indexing ${Math.round((current / total) * 100)}%`, versionKey)
+          },
+        })
+      }
+    }
+  }
+  else {
+    // Detect docs type from cache
+    const cacheDir = getCacheDir(packageName, version)
+    if (existsSync(join(cacheDir, 'docs', 'index.md')) || existsSync(join(cacheDir, 'docs', 'guide'))) {
+      docsType = 'docs'
+    }
+    else if (existsSync(join(cacheDir, 'llms.txt'))) {
+      docsType = 'llms.txt'
+    }
+  }
+
+  // Fetch release notes
+  const releasesPath = join(getCacheDir(packageName, version), 'releases')
+  if (resolved.repoUrl && !existsSync(releasesPath)) {
+    const gh = parseGitHubUrl(resolved.repoUrl)
+    if (gh) {
+      update(packageName, 'downloading', 'Release notes...', versionKey)
+      const releaseDocs = await fetchReleaseNotes(gh.owner, gh.repo, version, resolved.gitRef)
+      if (releaseDocs.length > 0) {
+        writeToCache(packageName, version, releaseDocs)
+        const dbPath = getPackageDbPath(packageName, version)
+        const releaseDocsIndex = releaseDocs.map(doc => ({
+          id: doc.path,
+          content: doc.content,
+          metadata: { package: packageName, source: doc.path, type: 'release' },
+        }))
+        await createIndex(releaseDocsIndex, { dbPath })
       }
     }
   }
 
-  // Create symlinks to cached references and dist
+  // Create symlinks: pkg always, docs only if fetched externally and not just README
   try {
-    linkReferences(skillDir, packageName, version)
-    linkDist(skillDir, packageName, cwd)
+    linkPkg(skillDir, packageName, cwd)
+    if (!hasShippedDocs(packageName, cwd) && docsType !== 'readme') {
+      linkReferences(skillDir, packageName, version)
+    }
+    linkIssues(skillDir, packageName, version)
+    linkReleases(skillDir, packageName, version)
   }
-  catch {
-    // Symlink may fail on some systems
-  }
+  catch {}
 
-  // Index from cache if per-package DB doesn't exist
+  // Index from cache if needed
   const dbPath = getPackageDbPath(packageName, version)
   if (!existsSync(dbPath)) {
     const { readCachedDocs } = await import('../cache/storage')
     const cachedDocs = readCachedDocs(packageName, version)
 
     if (cachedDocs.length > 0) {
-      update(packageName, 'embedding', `Vectorizing ${cachedDocs.length} cached docs`, versionKey)
       const docsToIndex = cachedDocs.map(doc => ({
         id: doc.path,
         content: doc.content,
-        metadata: { package: packageName, source: doc.path },
+        metadata: { package: packageName, source: doc.path, type: 'doc' },
       }))
-      await createIndex(docsToIndex, { dbPath })
+      await createIndex(docsToIndex, {
+        dbPath,
+        onProgress: (current, total) => {
+          update(packageName, 'embedding', `Indexing ${current}/${total}`, versionKey)
+        },
+      })
     }
   }
 
-  // Generate SKILL.md
-  let docsContent: string | null = null
+  const hasReleases = existsSync(releasesPath)
+  const hasChangelog = existsSync(join(cwd, 'node_modules', packageName, 'CHANGELOG.md'))
+
+  const relatedSkills = await findRelatedSkills(packageName, baseDir)
+  const shippedDocs = hasShippedDocs(packageName, cwd)
+
+  // Write base SKILL.md
+  const skillMd = generateSkillMd({
+    name: packageName,
+    version,
+    releasedAt: resolved.releasedAt,
+    description: resolved.description,
+    relatedSkills,
+    hasIssues: false,
+    hasReleases,
+    hasChangelog,
+    docsType,
+    hasShippedDocs: shippedDocs,
+  })
+  writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+
+  writeLock(baseDir, sanitizeName(packageName), {
+    packageName,
+    version,
+    source: docSource,
+    syncedAt: new Date().toISOString().split('T')[0],
+    generator: 'skilld',
+  })
+
+  if (!config.global) {
+    registerProject(cwd)
+  }
+
+  update(packageName, 'done', 'Base skill', versionKey)
+  return 'synced'
+}
+
+/** Phase 2: Enhance skill with LLM */
+async function enhanceWithLLM(
+  packageName: string,
+  config: ParallelSyncConfig & { model: OptimizeModel },
+  cwd: string,
+  update: UpdateFn,
+  updatePreview: UpdatePreviewFn,
+): Promise<void> {
+  const localDeps = await readLocalDependencies(cwd).catch(() => [])
+  const localVersion = localDeps.find(d => d.name === packageName)?.version
+  const resolved = await resolvePackageDocs(packageName, { version: localVersion })
+  if (!resolved)
+    throw new Error('Package not found')
+
+  const version = localVersion || resolved.version || 'latest'
+  const versionKey = getVersionKey(version)
+
+  const agent = agents[config.agent]
+  const baseDir = config.global
+    ? join(CACHE_DIR, 'skills')
+    : join(cwd, agent.skillsDir)
+
+  const skillDir = join(baseDir, sanitizeName(packageName))
   const cacheDir = getCacheDir(packageName, version)
+  const dbPath = getPackageDbPath(packageName, version)
 
-  // Detect source from cache if we didn't fetch
-  if (useCache) {
-    if (existsSync(join(cacheDir, 'docs', 'index.md')) || existsSync(join(cacheDir, 'docs', 'guide'))) {
-      docSource = resolved.repoUrl ? `${resolved.repoUrl}/tree/v${version}/docs` : 'git'
-    }
-    else if (existsSync(join(cacheDir, 'llms.txt'))) {
-      docSource = resolved.llmsUrl || 'llms.txt'
-    }
+  // Load docs content
+  let docsContent: string | null = null
+  let llmsRaw: string | null = null
+  let docsType: 'llms.txt' | 'readme' | 'docs' = 'readme'
+
+  // Detect docs type
+  if (existsSync(join(cacheDir, 'docs', 'index.md')) || existsSync(join(cacheDir, 'docs', 'guide'))) {
+    docsType = 'docs'
+  }
+  else if (existsSync(join(cacheDir, 'llms.txt'))) {
+    docsType = 'llms.txt'
   }
 
-  // Read llms.txt from cache if we didn't fetch it
-  if (!llmsRaw && existsSync(join(cacheDir, 'llms.txt'))) {
-    llmsRaw = readFileSync(join(cacheDir, 'llms.txt'), 'utf-8')
-  }
-
-  if (llmsRaw) {
-    const bestPracticesPaths = parseMarkdownLinks(llmsRaw)
-      .map(l => l.url)
-      .filter(lp => lp.includes('/style-guide/') || lp.includes('/best-practices/') || lp.includes('/typescript/'))
-
+  // Priority 1: Git docs
+  const guideDir = join(cacheDir, 'docs', 'guide')
+  const docsDir = join(cacheDir, 'docs')
+  if (existsSync(guideDir) || existsSync(join(docsDir, 'index.md'))) {
     const sections: string[] = []
-    for (const mdPath of bestPracticesPaths) {
-      const localPath = mdPath.startsWith('/') ? mdPath.slice(1) : mdPath
-      const filePath = join(cacheDir, 'docs', localPath)
-      if (existsSync(filePath)) {
-        const content = readFileSync(filePath, 'utf-8')
-        sections.push(`# ${mdPath}\n\n${content}`)
+    const indexPath = join(docsDir, 'index.md')
+    if (existsSync(indexPath)) {
+      sections.push(readFileSync(indexPath, 'utf-8'))
+    }
+    if (existsSync(guideDir)) {
+      const priorityFiles = ['index.md', 'features.md', 'migration.md', 'why.md']
+      const guideFiles = readdirSync(guideDir, { withFileTypes: true })
+        .filter(f => f.isFile() && f.name.endsWith('.md'))
+        .map(f => f.name)
+        .sort((a, b) => {
+          const aIdx = priorityFiles.indexOf(a)
+          const bIdx = priorityFiles.indexOf(b)
+          if (aIdx >= 0 && bIdx >= 0)
+            return aIdx - bIdx
+          if (aIdx >= 0)
+            return -1
+          if (bIdx >= 0)
+            return 1
+          return a.localeCompare(b)
+        })
+      for (const file of guideFiles.slice(0, 10)) {
+        const content = readFileSync(join(guideDir, file), 'utf-8')
+        sections.push(`# guide/${file}\n\n${content}`)
       }
     }
-
-    docsContent = sections.length > 0 ? sections.join('\n\n---\n\n') : llmsRaw
+    if (sections.length > 0)
+      docsContent = sections.join('\n\n---\n\n')
   }
-  else {
+
+  // Priority 2: llms.txt
+  if (!docsContent) {
+    if (existsSync(join(cacheDir, 'llms.txt'))) {
+      llmsRaw = readFileSync(join(cacheDir, 'llms.txt'), 'utf-8')
+    }
+    if (llmsRaw) {
+      const bestPracticesPaths = parseMarkdownLinks(llmsRaw)
+        .map(l => l.url)
+        .filter(lp => lp.includes('/style-guide/') || lp.includes('/best-practices/') || lp.includes('/typescript/'))
+      const sections: string[] = []
+      for (const mdPath of bestPracticesPaths) {
+        const localPath = mdPath.startsWith('/') ? mdPath.slice(1) : mdPath
+        const filePath = join(cacheDir, 'docs', localPath)
+        if (existsSync(filePath)) {
+          const content = readFileSync(filePath, 'utf-8')
+          sections.push(`# ${mdPath}\n\n${content}`)
+        }
+      }
+      docsContent = sections.length > 0 ? sections.join('\n\n---\n\n') : llmsRaw
+    }
+  }
+
+  // Priority 3: README
+  if (!docsContent) {
     const readmePath = join(cacheDir, 'docs', 'README.md')
     if (existsSync(readmePath)) {
       docsContent = readFileSync(readmePath, 'utf-8')
     }
   }
 
-  if (docsContent) {
-    update(packageName, 'generating', `Calling ${config.model}...`, versionKey)
-    const referenceFiles = listReferenceFiles(skillDir)
-    const { optimized, wasOptimized, error } = await optimizeDocs({
-      content: docsContent,
-      packageName,
-      model: config.model,
-      referenceFiles,
-      onProgress: (progress) => {
-        // Update status based on whether we're reasoning or generating
-        const status = progress.type === 'reasoning' ? 'thinking' : 'generating'
-        const preview = progress.chunk.replace(/\s+/g, ' ').trim()
-        update(packageName, status, config.model, versionKey)
-        if (preview) updatePreview(packageName, preview)
-      },
-    })
+  const issuesPath = join(cacheDir, 'issues')
+  const hasIssues = existsSync(issuesPath)
+  const hasReleases = existsSync(join(cacheDir, 'releases'))
+  const hasChangelog = existsSync(join(cwd, 'node_modules', packageName, 'CHANGELOG.md'))
 
-    if (error) {
-      update(packageName, 'error', error, versionKey)
-      throw new Error(error)
-    }
+  const docFiles = listReferenceFiles(skillDir)
+  update(packageName, 'generating', config.model, versionKey)
+  const { optimized, wasOptimized, error } = await optimizeDocs({
+    packageName,
+    skillDir,
+    dbPath,
+    model: config.model,
+    version,
+    hasIssues,
+    hasReleases,
+    hasChangelog,
+    docFiles,
+    onProgress: (progress) => {
+      const isReasoning = progress.type === 'reasoning'
+      const status = isReasoning ? 'exploring' : 'generating'
+      const label = progress.chunk.startsWith('[') ? progress.chunk : config.model
+      update(packageName, status, label, versionKey)
+    },
+  })
 
+  if (error) {
+    update(packageName, 'error', error, versionKey)
+    throw new Error(error)
+  }
+
+  if (wasOptimized) {
     const relatedSkills = await findRelatedSkills(packageName, baseDir)
-
-    if (wasOptimized) {
-      let skillMd = cleanSkillMd(optimized)
-
-      // Ensure frontmatter + IMPORTANT block
-      if (!skillMd.startsWith('---')) {
-        skillMd = generateFrontmatter(packageName) + generateImportantBlock(packageName) + skillMd
-      }
-      else {
-        // Insert IMPORTANT block after frontmatter
-        const endFm = skillMd.indexOf('---', 3)
-        if (endFm > 0) {
-          const afterFm = skillMd.slice(endFm + 3).replace(/^\n+/, '\n\n')
-          skillMd = skillMd.slice(0, endFm + 3) + '\n\n' + generateImportantBlock(packageName) + afterFm.trim()
-        }
-      }
-
-      skillMd += generateFooter(relatedSkills)
-
-      writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
-    }
-    else {
-      const skillMd = generateMinimalSkill(packageName, resolved.description, relatedSkills)
-      writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
-    }
-
-    writeLock(baseDir, sanitizeName(packageName), {
-      packageName,
+    const shippedDocs = hasShippedDocs(packageName, cwd)
+    const body = cleanSkillMd(optimized)
+    const skillMd = generateSkillMd({
+      name: packageName,
       version,
-      source: docSource,
-      syncedAt: new Date().toISOString().split('T')[0],
-      generator: 'skilld',
+      releasedAt: resolved.releasedAt,
+      body,
+      relatedSkills,
+      hasIssues,
+      hasReleases,
+      hasChangelog,
+      docsType,
+      hasShippedDocs: shippedDocs,
     })
+    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
 
-  // Register project in global config (for uninstall tracking)
-  if (!config.global) {
-    registerProject(cwd)
-  }
-
-  update(packageName, 'done', 'Synced', versionKey)
+  update(packageName, 'done', 'Enhanced', versionKey)
 }
 
 async function findRelatedSkills(packageName: string, skillsDir: string): Promise<string[]> {
@@ -510,41 +704,4 @@ function cleanSkillMd(content: string): string {
   }
 
   return cleaned
-}
-
-function generateFrontmatter(name: string): string {
-  return `---
-name: ${sanitizeName(name)}
-description: Load skill when using anything from the package "${name}".
----
-
-`
-}
-
-function generateImportantBlock(packageName: string): string {
-  return `> **IMPORTANT:** Search docs with \`skilld -q "pkg:${packageName} <query>"\`
-> Read docs at \`./references/docs/\`, source at \`./references/dist/\`
-
-`
-}
-
-function generateFooter(relatedSkills: string[]): string {
-  if (relatedSkills.length === 0) return ''
-  return `\nRelated: ${relatedSkills.join(', ')}\n`
-}
-
-function generateMinimalSkill(
-  name: string,
-  description: string | undefined,
-  relatedSkills: string[],
-): string {
-  return `---
-name: ${sanitizeName(name)}
-description: Load skill when using anything from the package "${name}".
----
-
-${generateImportantBlock(name)}# ${name}
-
-${description || ''}
-${generateFooter(relatedSkills)}`
 }

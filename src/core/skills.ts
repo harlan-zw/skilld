@@ -1,8 +1,10 @@
+import type { AgentType } from '../agent'
+import type { SkillInfo } from './lockfile'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { type AgentType, agents, detectInstalledAgents } from '../agent'
+import { agents, detectInstalledAgents } from '../agent'
 import { readLocalDependencies } from '../doc-resolver'
-import { type SkillInfo, parseSkillFrontmatter, readLock } from './lockfile'
+import { parseSkillFrontmatter, readLock } from './lockfile'
 
 export interface SkillEntry {
   name: string
@@ -84,7 +86,8 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
 }
 
 export function isOutdated(skill: SkillEntry, depVersion: string): boolean {
-  if (!skill.info?.version) return true
+  if (!skill.info?.version)
+    return true
 
   const skillMajorMinor = skill.info.version.split('.').slice(0, 2).join('.')
   const depMajorMinor = depVersion.replace(/^[\^~]/, '').split('.').slice(0, 2).join('.')
@@ -102,6 +105,13 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
   // Build skill name -> entry map (for lookup by package name)
   const skillByName = new Map(skills.map(s => [s.name, s]))
 
+  // Secondary lookup: packageName from lockfile (shipped skills have different names)
+  const skillByPkgName = new Map<string, SkillEntry>()
+  for (const s of skills) {
+    if (s.info?.packageName)
+      skillByPkgName.set(s.info.packageName, s)
+  }
+
   const missing: string[] = []
   const outdated: SkillEntry[] = []
   const synced: SkillEntry[] = []
@@ -109,7 +119,7 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
   for (const [pkgName, version] of deps) {
     // Normalize package name (e.g., @scope/pkg -> scope-pkg)
     const normalizedName = pkgName.replace(/^@/, '').replace(/\//g, '-')
-    const skill = skillByName.get(normalizedName) || skillByName.get(pkgName)
+    const skill = skillByName.get(normalizedName) || skillByName.get(pkgName) || skillByPkgName.get(pkgName)
 
     if (!skill) {
       missing.push(pkgName)

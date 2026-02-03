@@ -21,6 +21,8 @@ export interface NpmPackageInfo {
 export interface ResolvedPackage {
   name: string
   version?: string
+  /** ISO date string when this version was released */
+  releasedAt?: string
   description?: string
   docsUrl?: string
   llmsUrl?: string

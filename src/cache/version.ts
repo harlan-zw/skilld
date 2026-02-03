@@ -6,15 +6,14 @@ import { join } from 'node:path'
 import { REFERENCES_DIR } from './config'
 
 /**
- * Get major.minor version key from full semver
+ * Get exact version key for cache keying
  */
 export function getVersionKey(version: string): string {
-  const match = version.match(/^(\d+)\.(\d+)/)
-  return match ? `${match[1]}.${match[2]}` : version
+  return version
 }
 
 /**
- * Get cache key for a package: name@major.minor
+ * Get cache key for a package: name@version
  */
 export function getCacheKey(name: string, version: string): string {
   return `${name}@${getVersionKey(version)}`

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
+import { stdin, stdout } from 'node:process'
 import { createInterface } from 'node:readline'
-import { stdout, stdin } from 'node:process'
 
 const rl = createInterface({
   input: stdin,
@@ -62,7 +62,8 @@ async function main(): Promise<void> {
   if (continueAnswer.toLowerCase() === 'yes' || continueAnswer.toLowerCase() === 'y') {
     await spinner(2000)
     showCompletion()
-  } else {
+  }
+  else {
     stdout.write('\nSetup cancelled.\n\n')
   }
 

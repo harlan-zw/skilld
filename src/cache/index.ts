@@ -2,25 +2,31 @@
  * Cache module - global doc caching with symlinks
  */
 
-// Types
-export type { CachedDoc, CachedPackage, CacheConfig } from './types'
-
 // Config
 export { CACHE_DIR, getPackageDbPath, REFERENCES_DIR, SEARCH_DB } from './config'
 
-// Version utilities
-export { getCacheDir, getCacheKey, getVersionKey } from './version'
-
 // Storage operations
+export type { ShippedSkill } from './storage'
+
 export {
   clearAllCache,
   clearCache,
   ensureCacheDir,
+  getShippedSkills,
+  hasShippedDocs,
   isCached,
-  linkDist,
+  linkIssues,
+  linkPkg,
   linkReferences,
+  linkReleases,
+  linkShippedSkill,
   listCached,
   listReferenceFiles,
   readCachedDocs,
   writeToCache,
 } from './storage'
+
+// Types
+export type { CacheConfig, CachedDoc, CachedPackage } from './types'
+// Version utilities
+export { getCacheDir, getCacheKey, getVersionKey } from './version'

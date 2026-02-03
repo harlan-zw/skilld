@@ -12,7 +12,8 @@ export async function fetchText(url: string): Promise<string | null> {
     headers: { 'User-Agent': USER_AGENT },
   }).catch(() => null)
 
-  if (!res?.ok) return null
+  if (!res?.ok)
+    return null
   return res.text()
 }
 
@@ -25,7 +26,8 @@ export async function verifyUrl(url: string): Promise<boolean> {
     headers: { 'User-Agent': USER_AGENT },
   }).catch(() => null)
 
-  if (!res?.ok) return false
+  if (!res?.ok)
+    return false
 
   const contentType = res.headers.get('content-type') || ''
   return !contentType.includes('text/html')
@@ -49,7 +51,8 @@ export function isGitHubRepoUrl(url: string): boolean {
  */
 export function parseGitHubUrl(url: string): { owner: string, repo: string } | null {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)/)
-  if (!match) return null
+  if (!match)
+    return null
   return { owner: match[1]!, repo: match[2]! }
 }
 

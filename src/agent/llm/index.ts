@@ -3,26 +3,41 @@
  * Uses fullStream for reasoning visibility + text extraction
  */
 
-import { createHash } from 'node:crypto'
 import { exec } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { smoothStream, streamText } from 'ai'
+import { generateText, smoothStream, stepCountIs, streamText, tool } from 'ai'
 import { claudeCode } from 'ai-sdk-provider-claude-code'
-import { createGeminiProvider } from 'ai-sdk-provider-gemini-cli'
 import { codexCli } from 'ai-sdk-provider-codex-cli'
-import { buildPrompt } from '../prompts'
+import { createGeminiProvider } from 'ai-sdk-provider-gemini-cli'
+import { z } from 'zod'
+import { detectInstalledAgents } from '../detect'
+import { buildSkillPrompt } from '../prompts'
+import { agents } from '../registry'
 
 /** Response cache directory */
 const CACHE_DIR = join(homedir(), '.skilld', 'llm-cache')
 
 const execAsync = promisify(exec)
 
-export { buildPrompt } from '../prompts'
+export { buildSkillPrompt } from '../prompts'
 
-export type OptimizeModel = 'haiku' | 'sonnet' | 'gemini-flash' | 'codex'
+export type OptimizeModel
+  // Claude Code
+  = | 'opus'
+    | 'sonnet'
+    | 'haiku'
+  // Gemini CLI
+    | 'gemini-3-pro'
+    | 'gemini-3-flash'
+    | 'gemini-2.5-pro'
+    | 'gemini-2.5-flash'
+    | 'gemini-2.5-flash-lite'
+  // Codex
+    | 'codex'
 
 /** Model-specific configuration */
 interface ModelConfig {
@@ -36,6 +51,8 @@ interface ModelConfig {
   recommended?: boolean
   /** CLI command to check availability */
   cli: string
+  /** Agent that provides this model */
+  agentId: 'claude-code' | 'gemini-cli' | 'codex'
   /** Temperature (lower = more consistent) */
   temperature: number
   /** Max output tokens */
@@ -46,42 +63,99 @@ interface ModelConfig {
 
 /** Model configurations with pricing and settings */
 const MODEL_CONFIG: Record<OptimizeModel, ModelConfig> = {
-  haiku: {
-    model: claudeCode('haiku'),
-    name: 'Claude Haiku',
-    hint: 'Fast',
+  // Claude Code models
+  'opus': {
+    model: claudeCode('opus'),
+    name: 'Opus 4.5',
+    hint: 'Most capable',
+    cli: 'claude',
+    agentId: 'claude-code',
+    temperature: 0.3,
+    maxOutputTokens: 8000,
+    pricing: { input: 15.0, output: 75.0 },
+  },
+  'sonnet': {
+    model: claudeCode('sonnet'),
+    name: 'Sonnet 4.5',
+    hint: 'Balanced',
     recommended: true,
     cli: 'claude',
-    temperature: 0.4, // Slightly higher - haiku is already concise
+    agentId: 'claude-code',
+    temperature: 0.3,
     maxOutputTokens: 8000,
-    pricing: { input: 0.25, output: 1.25 }, // $0.25/1M in, $1.25/1M out
+    pricing: { input: 3.0, output: 15.0 },
   },
-  sonnet: {
-    model: claudeCode('sonnet'),
-    name: 'Claude Sonnet',
-    hint: 'Balanced',
+  'haiku': {
+    model: claudeCode('haiku'),
+    name: 'Haiku 4.5',
+    hint: 'Fastest',
     cli: 'claude',
-    temperature: 0.3, // Lower for consistency
+    agentId: 'claude-code',
+    temperature: 0.4,
     maxOutputTokens: 8000,
-    pricing: { input: 3.0, output: 15.0 }, // $3/1M in, $15/1M out
+    pricing: { input: 0.25, output: 1.25 },
   },
-  'gemini-flash': {
+  // Gemini CLI models
+  'gemini-3-pro': {
+    model: createGeminiProvider()('gemini-3-pro-preview'),
+    name: 'Gemini 3 Pro',
+    hint: 'Most capable',
+    cli: 'gemini',
+    agentId: 'gemini-cli',
+    temperature: 0.3,
+    maxOutputTokens: 8000,
+    pricing: { input: 1.25, output: 5.0 },
+  },
+  'gemini-3-flash': {
     model: createGeminiProvider()('gemini-3-flash-preview'),
     name: 'Gemini 3 Flash',
     hint: 'Fast',
     cli: 'gemini',
+    agentId: 'gemini-cli',
     temperature: 0.3,
     maxOutputTokens: 8000,
-    pricing: { input: 0.075, output: 0.30 }, // Very cheap
+    pricing: { input: 0.075, output: 0.30 },
   },
-  codex: {
-    model: codexCli('o4-mini'),
-    name: 'Codex CLI',
-    hint: 'OpenAI o4-mini',
-    cli: 'codex',
-    temperature: 0.2, // Lower - reasoning model
+  'gemini-2.5-pro': {
+    model: createGeminiProvider()('gemini-2.5-pro'),
+    name: 'Gemini 2.5 Pro',
+    hint: 'Thinking model',
+    cli: 'gemini',
+    agentId: 'gemini-cli',
+    temperature: 0.3,
     maxOutputTokens: 8000,
-    pricing: { input: 1.10, output: 4.40 }, // o4-mini pricing
+    pricing: { input: 1.25, output: 10.0 },
+  },
+  'gemini-2.5-flash': {
+    model: createGeminiProvider()('gemini-2.5-flash'),
+    name: 'Gemini 2.5 Flash',
+    hint: 'Fast thinking',
+    cli: 'gemini',
+    agentId: 'gemini-cli',
+    temperature: 0.3,
+    maxOutputTokens: 8000,
+    pricing: { input: 0.15, output: 0.60 },
+  },
+  'gemini-2.5-flash-lite': {
+    model: createGeminiProvider()('gemini-2.5-flash-lite'),
+    name: 'Gemini 2.5 Flash Lite',
+    hint: 'Cheapest',
+    cli: 'gemini',
+    agentId: 'gemini-cli',
+    temperature: 0.3,
+    maxOutputTokens: 8000,
+    pricing: { input: 0.075, output: 0.30 },
+  },
+  // Codex CLI
+  'codex': {
+    model: codexCli('o4-mini'),
+    name: 'Codex o4-mini',
+    hint: 'OpenAI reasoning',
+    cli: 'codex',
+    agentId: 'codex',
+    temperature: 0.2,
+    maxOutputTokens: 8000,
+    pricing: { input: 1.10, output: 4.40 },
   },
 }
 
@@ -111,12 +185,14 @@ function getCachedResponse(prompt: string, model: OptimizeModel, maxAge = 7 * 24
   const hash = hashPrompt(prompt, model)
   const cachePath = join(CACHE_DIR, `${hash}.json`)
 
-  if (!existsSync(cachePath)) return null
+  if (!existsSync(cachePath))
+    return null
 
   try {
     const cached = JSON.parse(readFileSync(cachePath, 'utf-8')) as CachedResponse
     // Check if cache is expired (default 7 days)
-    if (Date.now() - cached.timestamp > maxAge) return null
+    if (Date.now() - cached.timestamp > maxAge)
+      return null
     return cached
   }
   catch {
@@ -152,6 +228,10 @@ export interface ModelInfo {
   name: string
   hint: string
   recommended?: boolean
+  /** Agent that provides this model */
+  agentId: string
+  /** Agent display name */
+  agentName: string
 }
 
 /** Calculate estimated cost from token usage */
@@ -167,8 +247,10 @@ export function estimateCost(
 
 /** Format cost for display */
 export function formatCost(cost: number): string {
-  if (cost < 0.001) return '<$0.001'
-  if (cost < 0.01) return `~$${cost.toFixed(4)}`
+  if (cost < 0.001)
+    return '<$0.001'
+  if (cost < 0.01)
+    return `~$${cost.toFixed(4)}`
   return `~$${cost.toFixed(3)}`
 }
 
@@ -176,21 +258,37 @@ export function getModelName(id: OptimizeModel): string {
   return MODEL_CONFIG[id]?.name ?? id
 }
 
-/** Get available models based on installed CLIs (parallel check) */
+/** Get available models based on installed agents (parallel CLI check) */
 export async function getAvailableModels(): Promise<ModelInfo[]> {
-  const uniqueCmds = [...new Set(Object.values(MODEL_CONFIG).map(c => c.cli))]
-  const results = await Promise.all(
-    uniqueCmds.map(cmd => execAsync(`which ${cmd}`).then(() => cmd).catch(() => null)),
-  )
-  const available = new Set(results.filter(Boolean))
+  // Get installed agents that have CLIs
+  const installedAgents = detectInstalledAgents()
+  const agentsWithCli = installedAgents.filter(id => agents[id].cli)
 
+  // Check which CLIs are actually available (parallel)
+  const cliChecks = await Promise.all(
+    agentsWithCli.map(async (agentId) => {
+      const cli = agents[agentId].cli!
+      try {
+        await execAsync(`which ${cli}`)
+        return agentId
+      }
+      catch {
+        return null
+      }
+    }),
+  )
+  const availableAgentIds = new Set(cliChecks.filter(Boolean))
+
+  // Return models from available agents
   return (Object.entries(MODEL_CONFIG) as [OptimizeModel, ModelConfig][])
-    .filter(([_, config]) => available.has(config.cli))
+    .filter(([_, config]) => availableAgentIds.has(config.agentId))
     .map(([id, config]) => ({
       id,
       name: config.name,
       hint: config.hint,
       recommended: config.recommended,
+      agentId: config.agentId,
+      agentName: agents[config.agentId].displayName,
     }))
 }
 
@@ -206,13 +304,25 @@ export interface StreamProgress {
 }
 
 export interface OptimizeDocsOptions {
-  content: string
   packageName: string
+  /** Absolute path to skill directory with ./references/ */
+  skillDir: string
+  /** Path to package's search.db */
+  dbPath: string
   model?: OptimizeModel
-  referenceFiles?: string[]
+  /** Package version for version-specific guidance */
+  version?: string
+  /** Has issues indexed */
+  hasIssues?: boolean
+  /** Has release notes */
+  hasReleases?: boolean
+  /** Has CHANGELOG.md in package */
+  hasChangelog?: boolean
+  /** Resolved absolute paths to .md doc files */
+  docFiles?: string[]
   /** Called with each streaming chunk - includes reasoning for progress display */
   onProgress?: (progress: StreamProgress) => void
-  /** Timeout in ms (default: 120000) */
+  /** Timeout in ms (default: 180000 for agentic) */
   timeout?: number
   /** Include reasoning in result (for debugging) */
   verbose?: boolean
@@ -234,17 +344,79 @@ export interface OptimizeResult {
   cost?: number
 }
 
+/** Create tools for agentic exploration */
+function createAgentTools(skillDir: string, dbPath: string) {
+  return {
+    read: tool({
+      description: 'Read a file from the references directory',
+      inputSchema: z.object({
+        path: z.string().describe('File path relative to skill dir or absolute'),
+      }),
+      execute: async ({ path }) => {
+        const { readFileSync, existsSync } = await import('node:fs')
+        const { resolve } = await import('node:path')
+        const fullPath = path.startsWith('/') ? path : resolve(skillDir, path)
+        if (!existsSync(fullPath))
+          return `File not found: ${path}`
+        return readFileSync(fullPath, 'utf-8').slice(0, 50000) // Limit size
+      },
+    }),
+    ls: tool({
+      description: 'List files in a directory',
+      inputSchema: z.object({
+        path: z.string().describe('Directory path relative to skill dir or absolute'),
+      }),
+      execute: async ({ path }) => {
+        const { readdirSync, existsSync, statSync } = await import('node:fs')
+        const { resolve, join } = await import('node:path')
+        const fullPath = path.startsWith('/') ? path : resolve(skillDir, path)
+        if (!existsSync(fullPath))
+          return `Directory not found: ${path}`
+        const entries = readdirSync(fullPath)
+        return entries.map((e) => {
+          const stat = statSync(join(fullPath, e))
+          return stat.isDirectory() ? `${e}/` : e
+        }).join('\n')
+      },
+    }),
+    search: tool({
+      description: 'Search indexed docs for the package',
+      inputSchema: z.object({
+        query: z.string().describe('Search query'),
+      }),
+      execute: async ({ query }) => {
+        const { searchSnippets } = await import('../../retriv')
+        const results = await searchSnippets(query, { dbPath }, { limit: 10 })
+        return results.map(r => `[${r.score.toFixed(2)}] ${r.source}:\n${r.content.slice(0, 500)}`).join('\n\n')
+      },
+    }),
+    webSearch: tool({
+      description: 'Search the web for additional context',
+      inputSchema: z.object({
+        query: z.string().describe('Search query'),
+      }),
+      execute: async ({ query }) => {
+        // Use a simple fetch to DuckDuckGo HTML (no API key needed)
+        const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
+        const res = await fetch(url, { headers: { 'User-Agent': 'skilld/1.0' } })
+        const html = await res.text()
+        // Extract result snippets (rough parsing)
+        const snippets = html.match(/<a class="result__snippet"[^>]*>([^<]+)</g) || []
+        return snippets.slice(0, 5).map(s => s.replace(/<[^>]+>/g, '')).join('\n\n') || 'No results'
+      },
+    }),
+  }
+}
+
 /**
- * Optimize documentation using AI SDK with full streaming support
- * - Response caching (hash prompt → cache result)
- * - Streams reasoning chunks for progress visibility
- * - Separates reasoning from final text output
- * - Model-specific temperature and token limits
+ * Generate skill using agentic exploration
+ * - Agent explores references via tools (Read, Search, WebSearch)
+ * - Response caching by prompt hash
  * - Cost estimation based on token usage
  */
 export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
-  const { content, packageName, model = 'haiku', referenceFiles, onProgress, timeout = 120000, verbose, noCache } = opts
-  const prompt = buildPrompt({ packageName, packageDocs: content, referenceFiles })
+  const { packageName, skillDir, dbPath, model = 'sonnet', version, hasIssues, hasReleases, hasChangelog, docFiles, onProgress, timeout = 180000, verbose, noCache } = opts
+  const prompt = buildSkillPrompt({ packageName, skillDir, version, hasIssues, hasReleases, hasChangelog, docFiles })
   const config = MODEL_CONFIG[model]
 
   // Check cache first (unless noCache is set)
@@ -260,51 +432,71 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     }
   }
 
-  const result = await streamWithFullStream(config, prompt, { onProgress, timeout })
+  const tools = createAgentTools(skillDir, dbPath)
 
-  if (result.error && model !== 'haiku') {
-    // Fallback to haiku if other model fails
-    onProgress?.({ chunk: '[fallback to haiku]', type: 'text', text: '', reasoning: '' })
-    const fallbackConfig = MODEL_CONFIG.haiku
-    const fallback = await streamWithFullStream(fallbackConfig, prompt, { onProgress, timeout })
-    if (!fallback.error) {
-      const optimized = cleanOutput(fallback.text)
-      const cost = fallback.usage ? estimateCost('haiku', fallback.usage) : undefined
-      // Cache with original model key (so retry uses cache)
-      if (!noCache && optimized) {
-        cacheResponse(prompt, model, optimized)
-      }
-      return {
-        optimized,
-        wasOptimized: true,
-        reasoning: verbose ? fallback.reasoning : undefined,
-        finishReason: fallback.finishReason,
-        usage: fallback.usage,
-        cost,
-      }
+  // Emit prompt for debugging
+  const { writeFileSync } = await import('node:fs')
+  const { join } = await import('node:path')
+  writeFileSync(join(skillDir, 'PROMPT.md'), prompt)
+
+  // Create abort controller for timeout
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeout)
+
+  try {
+    onProgress?.({ chunk: '[exploring...]', type: 'reasoning', text: '', reasoning: '' })
+
+    const result = await generateText({
+      model: config.model,
+      prompt,
+      tools,
+      stopWhen: stepCountIs(20), // Allow up to 20 tool calls
+      abortSignal: controller.signal,
+      maxRetries: STREAM_CONFIG.maxRetries,
+      maxOutputTokens: config.maxOutputTokens,
+      temperature: config.temperature,
+      onStepFinish: ({ toolCalls }) => {
+        if (toolCalls?.length) {
+          const names = toolCalls.map(t => t.toolName).join(', ')
+          onProgress?.({ chunk: `[${names}]`, type: 'reasoning', text: '', reasoning: names })
+        }
+      },
+    })
+
+    clearTimeout(timeoutId)
+
+    const text = result.text
+    const optimized = cleanOutput(text)
+
+    const usage = result.usage
+      ? {
+          inputTokens: result.usage.inputTokens ?? 0,
+          outputTokens: result.usage.outputTokens ?? 0,
+          totalTokens: result.usage.totalTokens ?? 0,
+        }
+      : undefined
+    const cost = usage ? estimateCost(model, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }) : undefined
+
+    // Cache successful response
+    if (!noCache && optimized) {
+      cacheResponse(prompt, model, optimized)
     }
-    return { optimized: content, wasOptimized: false, error: result.error }
+
+    return {
+      optimized,
+      wasOptimized: !!optimized,
+      finishReason: result.finishReason,
+      usage,
+      cost,
+    }
   }
-
-  if (result.error) {
-    return { optimized: content, wasOptimized: false, error: result.error }
-  }
-
-  const optimized = cleanOutput(result.text)
-  const cost = result.usage ? estimateCost(model, result.usage) : undefined
-
-  // Cache successful response
-  if (!noCache && optimized) {
-    cacheResponse(prompt, model, optimized)
-  }
-
-  return {
-    optimized,
-    wasOptimized: true,
-    reasoning: verbose ? result.reasoning : undefined,
-    finishReason: result.finishReason,
-    usage: result.usage,
-    cost,
+  catch (err) {
+    clearTimeout(timeoutId)
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { optimized: '', wasOptimized: false, error: `Timeout after ${timeout / 1000}s` }
+    }
+    const msg = err instanceof Error ? err.message : String(err)
+    return { optimized: '', wasOptimized: false, error: msg }
   }
 }
 
@@ -424,23 +616,53 @@ async function streamWithFullStream(
 }
 
 /**
- * Clean LLM output - strip leaked thinking and formatting artifacts
+ * Clean LLM output - extract content between markers, strip artifacts
+ * Returns empty string if markers missing or outline-mode detected
  */
 function cleanOutput(text: string): string {
-  let cleaned = text
-
   // Strip markdown code block wrappers
-  cleaned = cleaned.replace(/^```markdown\n?/m, '').replace(/\n?```$/m, '')
+  let cleaned = text.replace(/^```markdown\n?/m, '').replace(/\n?```$/m, '')
 
   // Strip <think>...</think> tags (DeepSeek style)
   cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '')
 
-  // Find first markdown heading or code block - that's where real content starts
-  const contentStart = cleaned.search(/^#|^```|^>/m)
+  // Extract content between BEGIN/END markers
+  const beginMatch = cleaned.match(/<!--\s*BEGIN\s*-->/)
+  const endMatch = cleaned.match(/<!--\s*END\s*-->/)
+
+  if (beginMatch && endMatch) {
+    const startIdx = beginMatch.index! + beginMatch[0].length
+    const endIdx = cleaned.lastIndexOf(endMatch[0])
+    if (endIdx > startIdx) {
+      cleaned = cleaned.slice(startIdx, endIdx).trim()
+    }
+  }
+  else if (!beginMatch) {
+    // No BEGIN marker - strip any frontmatter LLM might have included (fallback)
+    cleaned = cleaned.replace(/^---[\s\S]*?---\n*/m, '')
+  }
+
+  // Detect outline-mode failures (LLM summarized instead of writing)
+  const outlinePatterns = [
+    /Would you like me to (?:write|create|generate)/i,
+    /The document is \*{0,2}\d+ lines\*{0,2}/i,
+    /\*\*\d+ (?:Pitfalls?|Best Practices?):\*\*[\t\v\f\r \xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]*\n\s*\d+\./i, // Numbered list without code
+    /^## Key Content\s*$/m,
+    /\*\*Additional sections:\*\*/i,
+    /focuses (?:on|exclusively on) (?:non-obvious|expert)/i,
+  ]
+
+  for (const pattern of outlinePatterns) {
+    if (pattern.test(cleaned)) {
+      return '' // Signal failure - will trigger "Empty response" error
+    }
+  }
+
+  // Strip leaked thinking at start
+  const contentStart = cleaned.search(/^\*\*PITFALL|^\*\*BEST PRACTICE|^```/m)
   if (contentStart > 0) {
     const prefix = cleaned.slice(0, contentStart)
-    // Check if text before heading looks like leaked thinking
-    if (/(?:Let me|I'll|I will|Now |First,|Looking at|Examining|Perfect!|Here's|I've)/i.test(prefix)) {
+    if (/Let me|I'll|I will|Now |First,|Looking at|Examining|Perfect!|Here's|I've/i.test(prefix)) {
       cleaned = cleaned.slice(contentStart)
     }
   }

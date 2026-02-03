@@ -2,6 +2,7 @@
  * GitHub/ungh README resolution + versioned docs
  */
 
+import { getDocOverride } from './overrides'
 import { fetchText, verifyUrl } from './utils'
 
 export interface GitDocsResult {
@@ -27,7 +28,8 @@ async function listFilesAtRef(owner: string, repo: string, ref: string): Promise
     { headers: { 'User-Agent': 'skilld/1.0' } },
   ).catch(() => null)
 
-  if (!res?.ok) return []
+  if (!res?.ok)
+    return []
 
   const data = await res.json().catch(() => null) as UnghFilesResponse | null
   return data?.files?.map(f => f.path) ?? []
@@ -39,28 +41,45 @@ async function listFilesAtRef(owner: string, repo: string, ref: string): Promise
 async function findGitTag(owner: string, repo: string, version: string): Promise<string | null> {
   for (const tag of [`v${version}`, version]) {
     const files = await listFilesAtRef(owner, repo, tag)
-    if (files.length > 0) return tag
+    if (files.length > 0)
+      return tag
   }
   return null
 }
 
 /**
- * List markdown files in docs/ folder at a specific git ref
+ * List markdown files in a folder at a specific git ref
  */
-async function listDocsAtRef(owner: string, repo: string, ref: string): Promise<string[]> {
+async function listDocsAtRef(owner: string, repo: string, ref: string, pathPrefix = 'docs/'): Promise<string[]> {
   const files = await listFilesAtRef(owner, repo, ref)
-  return files.filter(f => f.startsWith('docs/') && f.endsWith('.md'))
+  return files.filter(f => f.startsWith(pathPrefix) && f.endsWith('.md'))
 }
 
 /**
- * Fetch versioned docs from GitHub repo's docs/ folder
+ * Fetch versioned docs from GitHub repo's docs/ folder.
+ * Pass packageName to check doc overrides (e.g. vue -> vuejs/docs).
  */
-export async function fetchGitDocs(owner: string, repo: string, version: string): Promise<GitDocsResult | null> {
+export async function fetchGitDocs(owner: string, repo: string, version: string, packageName?: string): Promise<GitDocsResult | null> {
+  const override = packageName ? getDocOverride(packageName) : undefined
+  if (override) {
+    const ref = override.ref || 'main'
+    const files = await listDocsAtRef(override.owner, override.repo, ref, `${override.path}/`)
+    if (files.length === 0)
+      return null
+    return {
+      baseUrl: `https://raw.githubusercontent.com/${override.owner}/${override.repo}/${ref}`,
+      ref,
+      files,
+    }
+  }
+
   const ref = await findGitTag(owner, repo, version)
-  if (!ref) return null
+  if (!ref)
+    return null
 
   const files = await listDocsAtRef(owner, repo, ref)
-  if (files.length === 0) return null
+  if (files.length === 0)
+    return null
 
   return {
     baseUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${ref}`,
@@ -70,14 +89,20 @@ export async function fetchGitDocs(owner: string, repo: string, version: string)
 }
 
 /**
- * Fetch GitHub repo metadata to get website URL
+ * Fetch GitHub repo metadata to get website URL.
+ * Pass packageName to check doc overrides first (avoids API call).
  */
-export async function fetchGitHubRepoMeta(owner: string, repo: string): Promise<{ homepage?: string } | null> {
+export async function fetchGitHubRepoMeta(owner: string, repo: string, packageName?: string): Promise<{ homepage?: string } | null> {
+  const override = packageName ? getDocOverride(packageName) : undefined
+  if (override?.homepage)
+    return { homepage: override.homepage }
+
   const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
     headers: { 'User-Agent': 'skilld/1.0' },
   }).catch(() => null)
 
-  if (!res?.ok) return null
+  if (!res?.ok)
+    return null
   const data = await res.json().catch(() => null)
   return data?.homepage ? { homepage: data.homepage } : null
 }
@@ -127,9 +152,17 @@ export interface GitSourceResult {
 
 /** Source file extensions to include */
 const SOURCE_EXTENSIONS = new Set([
-  '.ts', '.tsx', '.mts', '.cts',
-  '.js', '.jsx', '.mjs', '.cjs',
-  '.vue', '.svelte', '.astro',
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.jsx',
+  '.mjs',
+  '.cjs',
+  '.vue',
+  '.svelte',
+  '.astro',
 ])
 
 /** Paths/patterns to exclude */
@@ -140,7 +173,7 @@ const EXCLUDE_PATTERNS = [
   /__tests__/,
   /__mocks__/,
   /\.config\./,
-  /fixtures?[/]/,
+  /fixtures?\//,
 ]
 
 /**
@@ -149,11 +182,14 @@ const EXCLUDE_PATTERNS = [
 async function listSourceAtRef(owner: string, repo: string, ref: string): Promise<string[]> {
   const files = await listFilesAtRef(owner, repo, ref)
   return files.filter((path) => {
-    if (!path.startsWith('src/')) return false
+    if (!path.startsWith('src/'))
+      return false
 
     const ext = path.slice(path.lastIndexOf('.'))
-    if (!SOURCE_EXTENSIONS.has(ext)) return false
-    if (EXCLUDE_PATTERNS.some(p => p.test(path))) return false
+    if (!SOURCE_EXTENSIONS.has(ext))
+      return false
+    if (EXCLUDE_PATTERNS.some(p => p.test(path)))
+      return false
 
     return true
   })
@@ -164,10 +200,12 @@ async function listSourceAtRef(owner: string, repo: string, ref: string): Promis
  */
 export async function fetchGitSource(owner: string, repo: string, version: string): Promise<GitSourceResult | null> {
   const ref = await findGitTag(owner, repo, version)
-  if (!ref) return null
+  if (!ref)
+    return null
 
   const files = await listSourceAtRef(owner, repo, ref)
-  if (files.length === 0) return null
+  if (files.length === 0)
+    return null
 
   return {
     baseUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${ref}`,
@@ -184,7 +222,8 @@ export async function fetchReadmeContent(url: string): Promise<string | null> {
   if (url.startsWith('file://')) {
     const { readFileSync, existsSync } = await import('node:fs')
     const filePath = url.slice(7)
-    if (!existsSync(filePath)) return null
+    if (!existsSync(filePath))
+      return null
     return readFileSync(filePath, 'utf-8')
   }
 
@@ -202,7 +241,8 @@ export async function fetchReadmeContent(url: string): Promise<string | null> {
       headers: { 'User-Agent': 'skilld/1.0' },
     }).catch(() => null)
 
-    if (!res?.ok) return null
+    if (!res?.ok)
+      return null
 
     const text = await res.text()
     try {

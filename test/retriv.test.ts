@@ -9,8 +9,8 @@ vi.mock('retriv/db/sqlite-vec', () => ({
   sqliteVec: vi.fn(),
 }))
 
-vi.mock('retriv/embeddings/transformers', () => ({
-  transformers: vi.fn(),
+vi.mock('retriv/embeddings/transformers-js', () => ({
+  transformersJs: vi.fn(),
 }))
 
 describe('retriv', () => {
@@ -50,19 +50,26 @@ describe('retriv', () => {
     it('searches and returns mapped results', async () => {
       const { search } = await import('../src/retriv')
       mockDb.search.mockResolvedValue([
-        { id: 'doc1', content: 'Result 1', score: 0.9, metadata: { package: 'vue' } },
-        { id: 'doc2', content: 'Result 2', score: 0.8, metadata: { package: 'nuxt' } },
+        { id: 'doc1', content: 'Result 1', score: 0.9, metadata: { package: 'vue' }, _meta: { highlights: ['result'] } },
+        { id: 'doc2', content: 'Result 2', score: 0.8, metadata: { package: 'nuxt' }, _meta: { highlights: [] } },
       ])
 
       const results = await search('query', { dbPath: '/tmp/test.db' })
 
-      expect(mockDb.search).toHaveBeenCalledWith('query', { limit: 10 })
+      expect(mockDb.search).toHaveBeenCalledWith('query', {
+        limit: 10,
+        filter: undefined,
+        returnContent: true,
+        returnMetadata: true,
+        returnMeta: true,
+      })
       expect(results).toHaveLength(2)
       expect(results[0]).toEqual({
         id: 'doc1',
         content: 'Result 1',
         score: 0.9,
         metadata: { package: 'vue' },
+        highlights: ['result'],
       })
     })
 
@@ -74,33 +81,22 @@ describe('retriv', () => {
         { id: 'doc3', content: 'C', score: 0.7, metadata: {} },
       ])
 
-      const results = await search('q', { dbPath: '/tmp/test.db' }, { limit: 2 })
+      await search('q', { dbPath: '/tmp/test.db' }, { limit: 2 })
 
-      expect(results).toHaveLength(2)
+      expect(mockDb.search).toHaveBeenCalledWith('q', expect.objectContaining({ limit: 2 }))
     })
 
-    it('filters by package', async () => {
+    it('passes filter to retriv', async () => {
       const { search } = await import('../src/retriv')
       mockDb.search.mockResolvedValue([
-        { id: 'd1', content: 'A', score: 0.9, metadata: { package: 'vue' } },
-        { id: 'd2', content: 'B', score: 0.8, metadata: { package: 'nuxt' } },
-        { id: 'd3', content: 'C', score: 0.7, metadata: { package: 'vue' } },
+        { id: 'd1', content: 'A', score: 0.9, metadata: { type: 'issue' } },
       ])
 
-      const results = await search('q', { dbPath: '/tmp/test.db' }, { package: 'vue' })
+      await search('q', { dbPath: '/tmp/test.db' }, { filter: { type: 'issue' } })
 
-      expect(results).toHaveLength(2)
-      expect(results.every(r => r.metadata.package === 'vue')).toBe(true)
-    })
-
-    it('fetches more results when filtering by package', async () => {
-      const { search } = await import('../src/retriv')
-      mockDb.search.mockResolvedValue([])
-
-      await search('q', { dbPath: '/tmp/test.db' }, { limit: 5, package: 'vue' })
-
-      // Should fetch 5 * 3 = 15 results to ensure enough after filtering
-      expect(mockDb.search).toHaveBeenCalledWith('q', { limit: 15 })
+      expect(mockDb.search).toHaveBeenCalledWith('q', expect.objectContaining({
+        filter: { type: 'issue' },
+      }))
     })
 
     it('handles missing metadata gracefully', async () => {
@@ -116,6 +112,7 @@ describe('retriv', () => {
         content: '',
         score: 0.9,
         metadata: {},
+        highlights: [],
       })
     })
   })
@@ -129,6 +126,7 @@ describe('retriv', () => {
           content: 'This is a test snippet. It has multiple sentences. And more content here.',
           score: 0.9,
           metadata: { package: 'vue', source: 'readme.md' },
+          _meta: { highlights: [] },
         },
       ])
 
@@ -138,38 +136,12 @@ describe('retriv', () => {
       expect(snippets[0].package).toBe('vue')
       expect(snippets[0].source).toBe('readme.md')
       expect(snippets[0].score).toBe(0.9)
-      expect(snippets[0].line).toBeGreaterThan(0)
-    })
-
-    it('truncates long content to 200 chars', async () => {
-      const { searchSnippets } = await import('../src/retriv')
-      const longContent = 'A'.repeat(300)
-      mockDb.search.mockResolvedValue([
-        { id: 'doc1', content: longContent, score: 0.9, metadata: {} },
-      ])
-
-      const snippets = await searchSnippets('q', { dbPath: '/tmp/test.db' })
-
-      expect(snippets[0].content.length).toBeLessThanOrEqual(200)
-    })
-
-    it('trims to last sentence if period after 100 chars', async () => {
-      const { searchSnippets } = await import('../src/retriv')
-      // Period at position ~120
-      const content = 'A'.repeat(110) + '. More content here that should be cut off.'
-      mockDb.search.mockResolvedValue([
-        { id: 'doc1', content, score: 0.9, metadata: {} },
-      ])
-
-      const snippets = await searchSnippets('q', { dbPath: '/tmp/test.db' })
-
-      expect(snippets[0].content.endsWith('.')).toBe(true)
     })
 
     it('uses id as source fallback', async () => {
       const { searchSnippets } = await import('../src/retriv')
       mockDb.search.mockResolvedValue([
-        { id: 'my-doc-id', content: 'Test', score: 0.9, metadata: {} },
+        { id: 'my-doc-id', content: 'Test', score: 0.9, metadata: {}, _meta: { highlights: [] } },
       ])
 
       const snippets = await searchSnippets('q', { dbPath: '/tmp/test.db' })
@@ -180,7 +152,7 @@ describe('retriv', () => {
     it('uses "unknown" as package fallback', async () => {
       const { searchSnippets } = await import('../src/retriv')
       mockDb.search.mockResolvedValue([
-        { id: 'doc1', content: 'Test', score: 0.9, metadata: {} },
+        { id: 'doc1', content: 'Test', score: 0.9, metadata: {}, _meta: { highlights: [] } },
       ])
 
       const snippets = await searchSnippets('q', { dbPath: '/tmp/test.db' })

@@ -2,11 +2,11 @@
  * Skill installation - write skills to agent directories
  */
 
+import type { AgentType } from './types'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { AgentType } from './types'
-import { agents } from './registry'
 import { detectInstalledAgents } from './detect'
+import { agents } from './registry'
 
 /**
  * Sanitize skill name for filesystem
@@ -48,7 +48,8 @@ export function installSkillForAgents(
     const agent = agents[agentType]
 
     // Skip if agent doesn't support global installation
-    if (isGlobal && !agent.globalSkillsDir) continue
+    if (isGlobal && !agent.globalSkillsDir)
+      continue
 
     // Determine target directory
     const baseDir = isGlobal ? agent.globalSkillsDir! : join(cwd, agent.skillsDir)

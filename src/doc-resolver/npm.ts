@@ -15,8 +15,23 @@ export async function fetchNpmPackage(packageName: string): Promise<NpmPackageIn
     headers: { 'User-Agent': 'skilld/1.0' },
   }).catch(() => null)
 
-  if (!res?.ok) return null
+  if (!res?.ok)
+    return null
   return res.json()
+}
+
+/**
+ * Fetch release date for a specific version from npm registry
+ */
+export async function fetchNpmReleaseDate(packageName: string, version: string): Promise<string | null> {
+  const res = await fetch(`https://registry.npmjs.org/${packageName}`, {
+    headers: { 'User-Agent': 'skilld/1.0' },
+  }).catch(() => null)
+
+  if (!res?.ok)
+    return null
+  const data = await res.json() as { time?: Record<string, string> }
+  return data.time?.[version] || null
 }
 
 export interface ResolveOptions {
@@ -56,9 +71,15 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
     message: `Found ${pkg.name}@${pkg.version}`,
   })
 
+  // Fetch release date for this version
+  const releasedAt = pkg.version
+    ? await fetchNpmReleaseDate(packageName, pkg.version)
+    : null
+
   const result: ResolvedPackage = {
     name: pkg.name,
     version: pkg.version,
+    releasedAt: releasedAt || undefined,
     description: pkg.description,
   }
 
@@ -76,7 +97,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
 
       // Try versioned git docs first (docs/**/*.md at git tag)
       if (targetVersion) {
-        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion)
+        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name)
         if (gitDocs) {
           result.gitDocsUrl = gitDocs.baseUrl
           result.gitRef = gitDocs.ref
@@ -99,7 +120,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
 
       // If no docsUrl from homepage, try GitHub repo metadata
       if (!result.docsUrl) {
-        const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo)
+        const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
         if (repoMeta?.homepage) {
           result.docsUrl = repoMeta.homepage
           attempts.push({
@@ -298,7 +319,8 @@ export function readLocalPackageInfo(localPath: string): LocalPackageInfo | null
   const { join } = require('node:path') as typeof import('node:path')
 
   const pkgPath = join(localPath, 'package.json')
-  if (!existsSync(pkgPath)) return null
+  if (!existsSync(pkgPath))
+    return null
 
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
 
@@ -324,7 +346,8 @@ export function readLocalPackageInfo(localPath: string): LocalPackageInfo | null
  */
 export async function resolveLocalPackageDocs(localPath: string): Promise<ResolvedPackage | null> {
   const info = readLocalPackageInfo(localPath)
-  if (!info) return null
+  if (!info)
+    return null
 
   const result: ResolvedPackage = {
     name: info.name,
@@ -338,7 +361,7 @@ export async function resolveLocalPackageDocs(localPath: string): Promise<Resolv
     const gh = parseGitHubUrl(info.repoUrl)
     if (gh) {
       // Try versioned git docs
-      const gitDocs = await fetchGitDocs(gh.owner, gh.repo, info.version)
+      const gitDocs = await fetchGitDocs(gh.owner, gh.repo, info.version, info.name)
       if (gitDocs) {
         result.gitDocsUrl = gitDocs.baseUrl
         result.gitRef = gitDocs.ref
@@ -378,7 +401,8 @@ export async function getInstalledSkillVersion(skillDir: string): Promise<string
   const { join } = await import('node:path')
 
   const skillPath = join(skillDir, 'SKILL.md')
-  if (!existsSync(skillPath)) return null
+  if (!existsSync(skillPath))
+    return null
 
   const content = readFileSync(skillPath, 'utf-8')
   const match = content.match(/^version:\s*"?([^"\n]+)"?/m)

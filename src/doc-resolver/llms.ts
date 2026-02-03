@@ -21,7 +21,8 @@ export async function fetchLlmsUrl(docsUrl: string): Promise<string | null> {
  */
 export async function fetchLlmsTxt(url: string): Promise<LlmsContent | null> {
   const content = await fetchText(url)
-  if (!content || content.length < 50) return null
+  if (!content || content.length < 50)
+    return null
 
   return {
     raw: content,
@@ -78,9 +79,25 @@ export async function downloadLlmsDocs(
 
 /**
  * Normalize llms.txt links to relative paths for local access
+ * Handles: absolute URLs, root-relative paths, and relative paths
  */
-export function normalizeLlmsLinks(content: string): string {
-  return content.replace(/\]\(\/([^)]+\.md)\)/g, '](./docs/$1)')
+export function normalizeLlmsLinks(content: string, baseUrl?: string): string {
+  let normalized = content
+
+  // Handle absolute URLs: https://example.com/docs/foo.md → ./docs/foo.md
+  if (baseUrl) {
+    const base = baseUrl.replace(/\/$/, '')
+    const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    normalized = normalized.replace(
+      new RegExp(`\\]\\(${escaped}(/[^)]+\\.md)\\)`, 'g'),
+      '](./docs$1)',
+    )
+  }
+
+  // Handle root-relative paths: /foo.md → ./docs/foo.md
+  normalized = normalized.replace(/\]\(\/([^)]+\.md)\)/g, '](./docs/$1)')
+
+  return normalized
 }
 
 /**
@@ -93,7 +110,8 @@ export function extractSections(content: string, patterns: string[]): string | n
 
   for (const part of parts) {
     const urlMatch = part.match(/^url:\s*(.+)$/m)
-    if (!urlMatch) continue
+    if (!urlMatch)
+      continue
 
     const url = urlMatch[1]!
     if (patterns.some(p => url.includes(p))) {
@@ -104,6 +122,7 @@ export function extractSections(content: string, patterns: string[]): string | n
     }
   }
 
-  if (sections.length === 0) return null
+  if (sections.length === 0)
+    return null
   return sections.join('\n\n---\n\n')
 }
