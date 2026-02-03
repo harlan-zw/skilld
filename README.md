@@ -4,11 +4,9 @@
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
 [![license](https://img.shields.io/github/license/harlan-zw/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE.md)
 
-> Skilld gives your AI agent expert skill knowledge about any of your dependencies gathered from versioned docs, source code and github issues.
+> Skilld gives your AI agent skill knowledge on your NPM dependencies gathered from versioned docs, source code and github issues.
 
 ## Why?
-
-Current approaches like [vercel-labs/skills](https://github.com/vercel-labs/skills) are fundamentally broken for distributing npm package agent skill documentation. They create friction for both end users (manual discovery, manual cloning, no version sync) and maintainers (separate repo to maintain, docs drift from source).
 
 Agents already know how most packages work from training data. Skills should focus on what they *don't* know and push them to follow best practices. Without this:
 
@@ -16,37 +14,13 @@ Agents already know how most packages work from training data. Skills should foc
 - **Missed best practices** - Optimal patterns go unused because the AI defaults to "good enough"
 - **Version drift** - Training data lags behind latest APIs and deprecations
 
-**Alternative approaches have friction:**
-
-| Approach | Problem                            |
-|----------|------------------------------------|
-| Bundled skills in packages | Requires package authors to opt-in |
-| Git-cloned skill repos | Version mismatch with installed packages |
-| Manual CLAUDE.md maintenance | Doesn't scale, quickly outdated    |
-
-**skilld solves this differently:** generate skills from the package's *actual* documentation using your existing agent. No author opt-in. No version drift.
+skilld generates skills from the package's *actual* documentation using your existing agent. Works with any public npm package, no author opt-in needed.
 
 ```
 npm install vueuse → skilld vueuse → AI knows current vueuse API
 ```
 
-**How it compares:**
-
-| | [vercel-labs/skills](https://github.com/vercel-labs/skills) | skilld |
-|---|---|---|
-| Discovery | Manual | Auto from package.json |
-| Coverage | Opt-in repos only | Any npm package |
-| Version sync | Manual | Regenerate on upgrade |
-| Author effort | Maintain separate repo | Zero (or ship skills/) |
-
-**Compatibility:** skilld respects the [skills-npm](https://github.com/antfu/skills-npm) convention. If a package ships a `skills/` directory, we use it directly—no generation needed, no tokens spent. Generation is the fallback for packages that haven't adopted the standard yet.
-
-**Trade-offs when generating:**
-
-- **Public packages only** - Private npm registries and authenticated docs not yet supported
-- **Version drift** - Generated skills don't auto-update; re-run after major/minor bumps (migration doc generation planned)
-- **Token cost** - Generation uses LLM calls; mitigated when packages ship their own skills
-- **LLM variance** - Output quality depends on model behavior; author-provided skills avoid this entirely
+Compatible with [skills-npm](https://github.com/antfu/skills-npm)—if a package ships a `skills/` directory, skilld uses it directly. Generation is the fallback.
 
 <p align="center">
 <table>
@@ -65,20 +39,6 @@ npm install vueuse → skilld vueuse → AI knows current vueuse API
 - 🔗 **Context-aware** - Generation adapts to your preferences and accepts custom prompts
 - ✏️ **You own it** - Skills live in your project, easy to customize; sync new package versions with zero config
 - 🚀 **Zero friction** - Works with any public npm package, no author opt-in; respects `llms.txt` and shipped `skills/` when available
-
-## How It Works
-
-```
-Package name → Resolve docs → Fetch → Generate → Install
-```
-
-1. **Resolve** - Looks up npm registry for homepage, repository URL
-2. **Fetch** - Tries llms.txt → docs site → GitHub README (via ungh)
-3. **Generate** - Your agent creates SKILLS.md from fetched docs
-4. **Cache** - References stored in `~/.skilld/` (shared across projects)
-5. **Install** - Writes SKILL.md to `./<agent>/skills/<package>/` (e.g. `.claude/skills/vueuse/`)
-
-Supported agents: Claude Code, Cursor, Windsurf, Cline, Codex, GitHub Copilot, Gemini CLI, Goose, Amp, OpenCode, Roo Code
 
 ## Installation
 
@@ -161,6 +121,20 @@ console.log(result)
 //   chunkCount: 847
 // }
 ```
+
+## How It Works
+
+```
+Package name → Resolve docs → Fetch → Generate → Install
+```
+
+1. **Resolve** - Looks up npm registry for homepage, repository URL
+2. **Fetch** - Tries llms.txt → docs site → GitHub README (via ungh)
+3. **Generate** - Your agent creates SKILLS.md from fetched docs
+4. **Cache** - References stored in `~/.skilld/` (shared across projects)
+5. **Install** - Writes SKILL.md to `./<agent>/skills/<package>/` (e.g. `.claude/skills/vueuse/`)
+
+Supported agents: Claude Code, Cursor, Windsurf, Cline, Codex, GitHub Copilot, Gemini CLI, Goose, Amp, OpenCode, Roo Code
 
 ## Output Structure
 
