@@ -1,14 +1,16 @@
 {
   "compilerOptions": {
     "target": "ESNext",
+    "moduleDetection": "force",
     "rootDir": "src",
-    "module": "ESNext",
+    "module": "Preserve",
     "moduleResolution": "bundler",
     "types": ["node"],
     "strict": true,
+    "noUnusedLocals": true,
     "declaration": true,
     "declarationMap": true,
-    "outDir": "dist",
+    "noEmit": true,
     "esModuleInterop": true,
     "skipLibCheck": true
   },

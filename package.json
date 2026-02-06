@@ -47,34 +47,34 @@
     "build": "obuild",
     "dev:prepare": "obuild --stub",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
+    "test:run": "vitest run",
+    "release": "bumpp && pnpm publish",
     "prepack": "pnpm run build",
-    "prepare": "skilld --prepare || true"
+    "prepare": "skilld --prepare -b || true"
   },
   "dependencies": {
-    "@clack/prompts": "^1.0.0",
-    "@huggingface/transformers": "^3.8.1",
-    "@mdream/crawl": "^0.15.3",
-    "citty": "^0.2.0",
-    "code-chunk": "^0.1.13",
-    "consola": "^3.4.2",
-    "globby": "^16.1.0",
-    "log-update": "^7.1.0",
-    "mdream": "^0.15.3",
-    "mlly": "^1.8.0",
-    "oxc-parser": "^0.112.0",
-    "p-limit": "^7.3.0",
-    "retriv": "^0.8.3",
-    "sqlite-vec": "^0.1.6",
-    "typescript": "^5.9.3"
+    "@clack/prompts": "catalog:deps",
+    "@huggingface/transformers": "catalog:deps",
+    "citty": "catalog:deps",
+    "consola": "catalog:deps",
+    "globby": "catalog:deps",
+    "log-update": "catalog:deps",
+    "mlly": "catalog:deps",
+    "oxc-parser": "catalog:deps",
+    "p-limit": "catalog:deps",
+    "retriv": "catalog:deps",
+    "sqlite-vec": "catalog:deps",
+    "typescript": "catalog:deps"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "^7.2.0",
-    "@types/node": "^25.2.1",
-    "@vitest/coverage-v8": "^4.0.18",
-    "evalite": "^0.19.0",
-    "obuild": "^0.4.26",
-    "vitest": "^4.0.18"
+    "@antfu/eslint-config": "catalog:dev-lint",
+    "@types/node": "catalog:dev-build",
+    "@vitest/coverage-v8": "catalog:dev-test",
+    "evalite": "catalog:dev-test",
+    "obuild": "catalog:dev-build",
+    "vitest": "catalog:dev-test"
   }
 }

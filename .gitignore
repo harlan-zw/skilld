@@ -8,6 +8,12 @@ dist
 .nuxt
 .output
 coverage
+
+# Local
+.env
+.env.*
+!.env.example
+
 .retriv
 .skilld-temp
 # Skilld references symlinks (recreated by `skilld install`)
