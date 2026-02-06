@@ -1,9 +1,13 @@
 catalogMode: prefer
-shellEmulator: true
-trustPolicy: no-downgrade
 
+shellEmulator: true
+
+trustPolicy: no-downgrade
 packages:
   - playground
+
+catalog:
+  bumpp: ^10.4.1
 
 catalogs:
   deps:
@@ -19,18 +23,15 @@ catalogs:
     retriv: ^0.8.3
     sqlite-vec: ^0.1.6
     typescript: ^5.9.3
-
   dev-build:
     '@types/node': ^25.2.1
-
     obuild: ^0.4.27
   dev-lint:
     '@antfu/eslint-config': ^7.2.0
-
   dev-test:
     '@vitest/coverage-v8': ^4.0.18
     evalite: ^0.19.0
-
     vitest: ^4.0.18
+
 onlyBuiltDependencies:
   - esbuild

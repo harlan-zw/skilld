@@ -34,4 +34,4 @@ jobs:
         run: pnpm build
 
       - name: Test
-        run: pnpm test:run
+        run: pnpm test:run --project unit

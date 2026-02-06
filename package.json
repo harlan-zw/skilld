@@ -73,6 +73,7 @@
     "@antfu/eslint-config": "catalog:dev-lint",
     "@types/node": "catalog:dev-build",
     "@vitest/coverage-v8": "catalog:dev-test",
+    "bumpp": "catalog:",
     "evalite": "catalog:dev-test",
     "obuild": "catalog:dev-build",
     "vitest": "catalog:dev-test"
