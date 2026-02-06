@@ -26,7 +26,6 @@ catalogs:
     obuild: ^0.4.27
   dev-lint:
     '@antfu/eslint-config': ^7.2.0
-    eslint: ^9.39.2
 
   dev-test:
     '@vitest/coverage-v8': ^4.0.18

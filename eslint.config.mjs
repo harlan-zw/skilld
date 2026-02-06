@@ -6,6 +6,7 @@ export default antfu({
     'no-use-before-define': 'off',
     'node/prefer-global/process': 'off',
     'node/prefer-global/buffer': 'off',
+    'ts/explicit-function-return-type': 'off',
   },
   ignores: [
     'CLAUDE.md',
