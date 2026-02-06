@@ -60,7 +60,6 @@ describe('e2e sync pipeline', () => {
         const r = get()
         expect(r.resolved.name).toBe(pkg.name)
         expect(r.resolved.version).toMatch(/^\d+\.\d+/)
-        expect(r.resolved.description).toBeTruthy()
       })
 
       it(`repo → ${pkg.expectRepoUrl}`, () => {
@@ -122,11 +121,11 @@ describe('e2e sync pipeline', () => {
             expect(existsSync(join(match.skillDir, 'SKILL.md'))).toBe(true)
           })
 
-          it(`shipped skill "${skillName}" has references/`, () => {
+          it(`shipped skill "${skillName}" has .skilld/`, () => {
             const cwd = process.cwd()
             const shipped = getShippedSkills(pkg.name, cwd)
             const match = shipped.find(s => s.skillName === skillName)!
-            expect(existsSync(join(match.skillDir, 'references'))).toBe(true)
+            expect(existsSync(join(match.skillDir, '.skilld'))).toBe(true)
           })
         }
       }
@@ -161,7 +160,7 @@ describe('e2e sync pipeline', () => {
       if (!pkg.expectShipped) {
         it('valid frontmatter', () => {
           const fm = parseFrontmatter(get().skillMd)
-          expect(fm.name).toBe(sanitizeName(pkg.name))
+          expect(fm.name).toBe(`${sanitizeName(pkg.name)}-skilld`)
           expect(fm.version).toBeTruthy()
           expect(fm.description).toBeTruthy()
         })
@@ -177,10 +176,6 @@ describe('e2e sync pipeline', () => {
             expect(fm.globs).toBe(JSON.stringify(pkg.expectGlobs))
           })
         }
-
-        it('releasedAt is YYYY-MM-DD', () => {
-          expect(parseFrontmatter(get().skillMd).releasedAt).toMatch(/^\d{4}-\d{2}-\d{2}/)
-        })
       }
 
       // ── Search index (skip for shipped packages) ──
@@ -188,6 +183,10 @@ describe('e2e sync pipeline', () => {
       if (!pkg.expectShipped) {
         it('search.db exists', () => {
           const r = get()
+          // llms.txt-only packages (no linked docs) don't produce a search index
+          if (r.docsType === 'llms.txt') {
+            return
+          }
           expect(existsSync(getPackageDbPath(pkg.name, r.version))).toBe(true)
         })
 

@@ -4,7 +4,7 @@
  * Extracted so both sync.test.ts and crosscheck.ts can use it.
  */
 
-import type { ResolveAttempt, ResolvedPackage } from '../../src/doc-resolver'
+import type { ResolveAttempt, ResolvedPackage } from '../../src/sources'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { FILE_PATTERN_MAP, sanitizeName } from '../../src/agent'
@@ -13,9 +13,9 @@ import {
   getCacheDir,
   getPackageDbPath,
   isCached,
-  readCachedDocs,
   writeToCache,
 } from '../../src/cache'
+import { createIndex } from '../../src/retriv'
 import {
   downloadLlmsDocs,
   fetchGitDocs,
@@ -25,8 +25,7 @@ import {
   parseGitHubUrl,
 
   resolvePackageDocsWithAttempts,
-} from '../../src/doc-resolver'
-import { createIndex } from '../../src/retriv'
+} from '../../src/sources'
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -52,7 +51,7 @@ export function listDocFiles(dir: string): string[] {
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name
       if (entry.isDirectory())
         walk(join(d, entry.name), rel)
-      else if (entry.name.endsWith('.md') || entry.name.endsWith('.txt'))
+      else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx') || entry.name.endsWith('.txt'))
         files.push(rel)
     }
   }
@@ -97,18 +96,26 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
   let cachedDocsCount: number
   let cachedFiles: string[]
 
-  if (isCached(name, version)) {
-    const cacheDir = getCacheDir(name, version)
-    cachedFiles = listDocFiles(cacheDir)
+  const cacheDir = getCacheDir(name, version)
+  const cachedDocFiles = isCached(name, version) ? listDocFiles(cacheDir) : []
+  // Consider cached if we have docs (not just changelogs)
+  const hasCachedDocs = cachedDocFiles.some(f =>
+    f.startsWith('docs/') || f.startsWith('src/') || f === 'llms.txt'
+    || (f.includes('/docs/') && !f.includes('README')),
+  )
+
+  if (hasCachedDocs) {
+    cachedFiles = cachedDocFiles
     cachedDocsCount = cachedFiles.length
 
-    const cached = readCachedDocs(name, version)
-    if (existsSync(join(cacheDir, 'docs', 'index.md'))
-      || cached.some(d => d.path.startsWith('docs/') && !d.path.includes('README'))) {
-      docsType = 'docs'
-    }
-    else if (existsSync(join(cacheDir, 'llms.txt'))) {
+    if (existsSync(join(cacheDir, 'llms.txt'))) {
       docsType = 'llms.txt'
+    }
+    if (cachedDocFiles.some(f =>
+      (f.startsWith('docs/') || f.startsWith('src/') || f.includes('/docs/'))
+      && !f.includes('README'),
+    )) {
+      docsType = 'docs'
     }
   }
   else {
@@ -119,7 +126,7 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
     if (resolved.gitDocsUrl && resolved.repoUrl) {
       const gh = parseGitHubUrl(resolved.repoUrl)
       if (gh) {
-        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version)
+        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version, name)
         if (gitDocs?.files.length) {
           const BATCH = 20
           for (let i = 0; i < gitDocs.files.length; i += BATCH) {
@@ -198,15 +205,13 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
 
   const fmLines = [
     '---',
-    `name: ${sanitizeName(name)}`,
+    `name: ${sanitizeName(name)}-skilld`,
     `description: ${description}`,
   ]
   if (patterns?.length)
     fmLines.push(`globs: ${JSON.stringify(patterns)}`)
   if (version)
     fmLines.push(`version: "${version}"`)
-  if (resolved.releasedAt)
-    fmLines.push(`releasedAt: "${resolved.releasedAt.split('T')[0]}"`)
   fmLines.push('---', '')
 
   return { resolved, attempts, version, docsType, cachedDocsCount, cachedFiles, skillMd: fmLines.join('\n') }

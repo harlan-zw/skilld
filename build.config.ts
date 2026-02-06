@@ -11,7 +11,7 @@ export default defineBuildConfig({
         './src/cache/index.ts',
         './src/retriv/index.ts',
         './src/agent/index.ts',
-        './src/doc-resolver/index.ts',
+        './src/sources/index.ts',
       ],
     },
   ],

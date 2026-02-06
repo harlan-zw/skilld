@@ -1,6 +1,7 @@
 import type { SearchFilter } from '../retriv'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import * as p from '@clack/prompts'
 import { REFERENCES_DIR } from '../cache'
 import { formatSnippet } from '../core'
 import { searchSnippets } from '../retriv'
@@ -29,12 +30,10 @@ export async function searchCommand(rawQuery: string, packageFilter?: string): P
   const dbs = findPackageDbs(packageFilter)
 
   if (dbs.length === 0) {
-    if (packageFilter) {
-      console.log(`No docs indexed for "${packageFilter}". Run \`skilld ${packageFilter}\` first.`)
-    }
-    else {
-      console.log('No docs indexed yet. Run `skilld <package>` first.')
-    }
+    if (packageFilter)
+      p.log.warn(`No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`)
+    else
+      p.log.warn('No docs indexed yet. Run `skilld add <package>` first.')
     return
   }
 
@@ -67,13 +66,10 @@ export async function searchCommand(rawQuery: string, packageFilter?: string): P
   const elapsed = ((performance.now() - start) / 1000).toFixed(2)
 
   if (merged.length === 0) {
-    console.log(`No results for "${query}"`)
+    p.log.warn(`No results for "${query}"`)
     return
   }
 
-  console.log()
-  for (const r of merged) {
-    formatSnippet(r)
-  }
-  console.log(`${merged.length} results (${elapsed}s)`)
+  const output = merged.map(r => formatSnippet(r)).join('\n\n')
+  p.log.message(`${output}\n\n${merged.length} results (${elapsed}s)`)
 }

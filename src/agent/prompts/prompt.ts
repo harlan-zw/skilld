@@ -4,24 +4,30 @@
 
 import { dirname } from 'node:path'
 
+export type SkillSection = 'best-practices' | 'api' | 'custom'
+
 export interface BuildSkillPromptOptions {
   packageName: string
-  /** Absolute path to skill directory with ./references/ */
+  /** Absolute path to skill directory with ./.skilld/ */
   skillDir: string
   /** Package version (e.g., "3.5.13") */
   version?: string
-  /** Has issues indexed */
-  hasIssues?: boolean
+  /** Has GitHub data (issues + discussions) indexed */
+  hasGithub?: boolean
   /** Has release notes */
   hasReleases?: boolean
-  /** Has CHANGELOG.md in package */
-  hasChangelog?: boolean
+  /** CHANGELOG filename if found in package (e.g. CHANGELOG.md, changelog.md) */
+  hasChangelog?: string | false
   /** Resolved absolute paths to .md doc files */
   docFiles?: string[]
   /** Doc source type */
   docsType?: 'llms.txt' | 'readme' | 'docs'
   /** Package ships its own docs */
   hasShippedDocs?: boolean
+  /** Which sections to generate (defaults to all) */
+  sections?: SkillSection[]
+  /** Custom instructions from the user (when 'custom' section selected) */
+  customPrompt?: string
 }
 
 /**
@@ -40,39 +46,39 @@ function formatDocTree(files: string[]): string {
     .join('\n')
 }
 
-function generateImportantBlock({ packageName, hasIssues, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir }: {
+function generateImportantBlock({ packageName, hasGithub, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir }: {
   packageName: string
-  hasIssues?: boolean
+  hasGithub?: boolean
   hasReleases?: boolean
-  hasChangelog?: boolean
+  hasChangelog?: string | false
   docsType: string
   hasShippedDocs: boolean
   skillDir: string
 }): string {
-  const searchDesc = hasIssues ? 'Docs + issues' : 'Docs'
+  const searchDesc = hasGithub ? 'Docs + GitHub' : 'Docs'
   const searchCmd = `\`Bash 'npx skilld ${packageName} -q "<query>"'\``
 
   const docsPath = hasShippedDocs
-    ? `\`${skillDir}/references/pkg/docs/\` or \`${skillDir}/references/pkg/README.md\``
+    ? `\`${skillDir}/.skilld/pkg/docs/\` or \`${skillDir}/.skilld/pkg/README.md\``
     : docsType === 'llms.txt'
-      ? `\`${skillDir}/references/docs/llms.txt\``
+      ? `\`${skillDir}/.skilld/docs/llms.txt\``
       : docsType === 'readme'
-        ? `\`${skillDir}/references/pkg/README.md\``
-        : `\`${skillDir}/references/docs/\``
+        ? `\`${skillDir}/.skilld/pkg/README.md\``
+        : `\`${skillDir}/.skilld/docs/\``
 
   const rows = [
     [searchDesc, searchCmd],
     ['Docs', docsPath],
-    ['Package', `\`${skillDir}/references/pkg/\``],
+    ['Package', `\`${skillDir}/.skilld/pkg/\``],
   ]
-  if (hasIssues) {
-    rows.push(['Issues', `\`${skillDir}/references/issues/\``])
+  if (hasGithub) {
+    rows.push(['GitHub', `\`${skillDir}/.skilld/github/\``])
   }
   if (hasChangelog) {
-    rows.push(['Changelog', `\`${skillDir}/references/pkg/CHANGELOG.md\``])
+    rows.push(['Changelog', `\`${skillDir}/.skilld/pkg/${hasChangelog}\``])
   }
   if (hasReleases) {
-    rows.push(['Releases', `\`${skillDir}/references/releases/\``])
+    rows.push(['Releases', `\`${skillDir}/.skilld/releases/\``])
   }
 
   const table = [
@@ -88,7 +94,11 @@ function generateImportantBlock({ packageName, hasIssues, hasReleases, hasChange
  * Build the skill generation prompt - agent uses tools to explore
  */
 export function buildSkillPrompt(opts: BuildSkillPromptOptions): string {
-  const { packageName, skillDir, version, hasIssues, hasReleases, hasChangelog, docFiles, docsType = 'docs', hasShippedDocs = false } = opts
+  const { packageName, skillDir, version, hasGithub, hasReleases, hasChangelog, docFiles, docsType = 'docs', hasShippedDocs = false, sections, customPrompt } = opts
+
+  const hasBestPractices = !sections || sections.includes('best-practices')
+  const hasApi = !sections || sections.includes('api')
+  const hasCustom = sections?.includes('custom') && customPrompt
 
   const versionContext = version ? ` v${version}` : ''
 
@@ -96,7 +106,64 @@ export function buildSkillPrompt(opts: BuildSkillPromptOptions): string {
     ? `**Documentation** (use Read tool to explore):\n${formatDocTree(docFiles)}`
     : ''
 
-  const importantBlock = generateImportantBlock({ packageName, hasIssues, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir })
+  const importantBlock = generateImportantBlock({ packageName, hasGithub, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir })
+
+  // Build task description based on selected sections
+  const taskParts: string[] = []
+  if (hasBestPractices) {
+    taskParts.push(`Find novel best practices from the references. Every item must link to its source.
+
+Look for: tip, warning, best practice, avoid, pitfall, note, important.`)
+  }
+  if (hasApi) {
+    taskParts.push(`**Generate an API reference section.** List the package's exported functions/composables grouped by documentation page or category. Each function gets a one-liner description. Link group headings to the source doc URL when available.`)
+  }
+  if (hasCustom) {
+    taskParts.push(`**Custom instructions from the user:**\n${customPrompt}`)
+  }
+
+  // Build format section based on selected sections
+  const formatParts: string[] = []
+  if (hasBestPractices) {
+    formatParts.push(`\`\`\`
+[✅ descriptive title](./.skilld/path/to/source.md)
+\`\`\`ts
+code example (1-3 lines)
+\`\`\`
+
+[❌ pitfall title](./.skilld/path/to/source.md#section)
+\`\`\`ts
+wrong // correct way
+\`\`\`
+\`\`\``)
+  }
+  if (hasApi) {
+    formatParts.push(`API reference format${hasBestPractices ? ' (place at end, after best practices)' : ''}:
+\`\`\`
+## API
+
+### [Category Name](./.skilld/docs/category.md)
+- functionName — one-line description
+- anotherFn — one-line description
+\`\`\`
+
+Link group headings to the local \`./.skilld/\` source file.
+
+For single-page-docs packages, use a flat list without grouping. Skip the API section entirely for packages with fewer than 3 exports.`)
+  }
+
+  // Build rules based on selected sections
+  const rules: string[] = []
+  if (hasBestPractices)
+    rules.push('- **5-10 best practice items**, MAX 150 lines for best practices')
+  if (hasApi)
+    rules.push('- **API section:** list all public exports, grouped by doc page, MAX 80 lines')
+  rules.push(
+    '- Link to exact source file where you found info',
+    '- TypeScript only, Vue uses `<script setup lang="ts">`',
+    '- Imperative voice ("Use X" not "You should use X")',
+    '- **NEVER fetch external URLs.** All information is in the local `./.skilld/` directory. Use Read/Glob only.',
+  )
 
   return `Generate SKILL.md body for "${packageName}"${versionContext}.
 
@@ -114,34 +181,19 @@ The context window is a shared resource. Skills share it with system prompt, con
 
 ## Task
 
-Find novel best practices from the references. Every item must link to its source.
-
-Look for: tip, warning, best practice, avoid, pitfall, note, important.
+${taskParts.join('\n\n')}
 
 ## Format
 
-\`\`\`
-[✅ descriptive title](./references/path/to/source.md)
-\`\`\`ts
-code example (1-3 lines)
-\`\`\`
-
-[❌ pitfall title](./references/path/to/source.md#section)
-\`\`\`ts
-wrong // correct way
-\`\`\`
-\`\`\`
+${formatParts.join('\n\n')}
 
 ## Rules
 
-- **5-10 items**, MAX 150 lines total body
-- Link to exact source file where you found info
-- TypeScript only, Vue uses \`<script setup lang="ts">\`
-- Imperative voice ("Use X" not "You should use X")
+${rules.join('\n')}
 
 ## Output
 
-Start with \`<!-- BEGIN -->\`, end with \`<!-- END -->\`.
-Output ONLY the body content between markers.
+Write the body content to \`${skillDir}/_SKILL.md\` using the Write tool.
+Do NOT output the content to stdout. Write it to the file only.
 `
 }

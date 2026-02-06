@@ -1,0 +1,623 @@
+/**
+ * NPM registry lookup
+ */
+
+import type { LocalDependency, NpmPackageInfo, ResolveAttempt, ResolvedPackage, ResolveResult } from './types'
+import { execSync } from 'node:child_process'
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { Writable } from 'node:stream'
+import { pathToFileURL } from 'node:url'
+import { getCacheDir } from '../cache/version'
+import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo } from './github'
+import { fetchLlmsUrl } from './llms'
+import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubUrl } from './utils'
+
+/**
+ * Fetch package info from npm registry
+ */
+export async function fetchNpmPackage(packageName: string): Promise<NpmPackageInfo | null> {
+  // Try unpkg first (faster, CDN)
+  let res = await fetch(`https://unpkg.com/${packageName}/package.json`, {
+    headers: { 'User-Agent': 'skilld/1.0' },
+  }).catch(() => null)
+
+  // Fallback to npm registry
+  if (!res?.ok) {
+    res = await fetch(`https://registry.npmjs.org/${packageName}/latest`, {
+      headers: { 'User-Agent': 'skilld/1.0' },
+    }).catch(() => null)
+  }
+
+  if (!res?.ok)
+    return null
+  return res.json()
+}
+
+export interface DistTagInfo {
+  version: string
+  releasedAt?: string
+}
+
+export interface NpmRegistryMeta {
+  releasedAt?: string
+  distTags?: Record<string, DistTagInfo>
+}
+
+/**
+ * Fetch release date and dist-tags from npm registry
+ */
+export async function fetchNpmRegistryMeta(packageName: string, version: string): Promise<NpmRegistryMeta> {
+  const res = await fetch(`https://registry.npmjs.org/${packageName}`, {
+    headers: { 'User-Agent': 'skilld/1.0' },
+  }).catch(() => null)
+
+  if (!res?.ok)
+    return {}
+
+  const data = await res.json() as {
+    'time'?: Record<string, string>
+    'dist-tags'?: Record<string, string>
+  }
+
+  // Enrich dist-tags with release dates
+  const distTags: Record<string, DistTagInfo> | undefined = data['dist-tags']
+    ? Object.fromEntries(
+        Object.entries(data['dist-tags']).map(([tag, ver]) => [
+          tag,
+          { version: ver, releasedAt: data.time?.[ver] },
+        ]),
+      )
+    : undefined
+
+  return {
+    releasedAt: data.time?.[version] || undefined,
+    distTags,
+  }
+}
+
+/**
+ * Fetch release date for a specific version from npm registry
+ * @deprecated Use fetchNpmRegistryMeta instead
+ */
+export async function fetchNpmReleaseDate(packageName: string, version: string): Promise<string | null> {
+  const meta = await fetchNpmRegistryMeta(packageName, version)
+  return meta.releasedAt || null
+}
+
+export type ResolveStep = 'npm' | 'github-docs' | 'github-meta' | 'github-search' | 'readme' | 'llms.txt' | 'local'
+
+export interface ResolveOptions {
+  /** User's installed version - used to fetch versioned git docs */
+  version?: string
+  /** Current working directory - for local readme fallback */
+  cwd?: string
+  /** Progress callback - called before each resolution step */
+  onProgress?: (step: ResolveStep) => void
+}
+
+/**
+ * Resolve documentation URL for a package (legacy - returns null on failure)
+ */
+export async function resolvePackageDocs(packageName: string, options: ResolveOptions = {}): Promise<ResolvedPackage | null> {
+  const result = await resolvePackageDocsWithAttempts(packageName, options)
+  return result.package
+}
+
+/**
+ * Resolve documentation URL for a package with attempt tracking
+ */
+export async function resolvePackageDocsWithAttempts(packageName: string, options: ResolveOptions = {}): Promise<ResolveResult> {
+  const attempts: ResolveAttempt[] = []
+  const { onProgress } = options
+
+  onProgress?.('npm')
+  const pkg = await fetchNpmPackage(packageName)
+  if (!pkg) {
+    attempts.push({
+      source: 'npm',
+      url: `https://registry.npmjs.org/${packageName}/latest`,
+      status: 'not-found',
+      message: 'Package not found on npm registry',
+    })
+    return { package: null, attempts }
+  }
+
+  attempts.push({
+    source: 'npm',
+    url: `https://registry.npmjs.org/${packageName}/latest`,
+    status: 'success',
+    message: `Found ${pkg.name}@${pkg.version}`,
+  })
+
+  // Fetch release date and dist-tags for this version
+  const registryMeta = pkg.version
+    ? await fetchNpmRegistryMeta(packageName, pkg.version)
+    : {}
+
+  const result: ResolvedPackage = {
+    name: pkg.name,
+    version: pkg.version,
+    releasedAt: registryMeta.releasedAt,
+    description: pkg.description,
+    dependencies: pkg.dependencies,
+    distTags: registryMeta.distTags,
+  }
+
+  // Extract repo URL (handle both object and shorthand string formats)
+  let subdir: string | undefined
+  if (typeof pkg.repository === 'object' && pkg.repository?.url) {
+    result.repoUrl = normalizeRepoUrl(pkg.repository.url)
+    subdir = pkg.repository.directory
+  }
+  else if (typeof pkg.repository === 'string') {
+    // Shorthand: "owner/repo" or "github:owner/repo"
+    const repo = pkg.repository.replace(/^github:/, '')
+    if (repo.includes('/') && !repo.includes(':'))
+      result.repoUrl = `https://github.com/${repo}`
+  }
+
+  // GitHub repo handling - try versioned git docs first
+  if (result.repoUrl?.includes('github.com')) {
+    const gh = parseGitHubUrl(result.repoUrl)
+    if (gh) {
+      const targetVersion = options.version || pkg.version
+
+      // Try versioned git docs first (docs/**/*.md at git tag)
+      if (targetVersion) {
+        onProgress?.('github-docs')
+        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name)
+        if (gitDocs) {
+          result.gitDocsUrl = gitDocs.baseUrl
+          result.gitRef = gitDocs.ref
+          attempts.push({
+            source: 'github-docs',
+            url: gitDocs.baseUrl,
+            status: 'success',
+            message: `Found ${gitDocs.files.length} docs at ${gitDocs.ref}`,
+          })
+        }
+        else {
+          attempts.push({
+            source: 'github-docs',
+            url: `${result.repoUrl}/tree/v${targetVersion}/docs`,
+            status: 'not-found',
+            message: 'No docs/ folder found at version tag',
+          })
+        }
+      }
+
+      // If no docsUrl from homepage, try GitHub repo metadata
+      if (!result.docsUrl) {
+        onProgress?.('github-meta')
+        const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
+        if (repoMeta?.homepage) {
+          result.docsUrl = repoMeta.homepage
+          attempts.push({
+            source: 'github-meta',
+            url: result.repoUrl,
+            status: 'success',
+            message: `Found homepage: ${repoMeta.homepage}`,
+          })
+        }
+        else {
+          attempts.push({
+            source: 'github-meta',
+            url: result.repoUrl,
+            status: 'not-found',
+            message: 'No homepage in repo metadata',
+          })
+        }
+      }
+
+      // README fallback via ungh
+      onProgress?.('readme')
+      const readmeUrl = await fetchReadme(gh.owner, gh.repo, subdir)
+      if (readmeUrl) {
+        result.readmeUrl = readmeUrl
+        attempts.push({
+          source: 'readme',
+          url: readmeUrl,
+          status: 'success',
+        })
+      }
+      else {
+        attempts.push({
+          source: 'readme',
+          url: `${result.repoUrl}/README.md`,
+          status: 'not-found',
+          message: 'No README found',
+        })
+      }
+    }
+  }
+  else if (!result.repoUrl) {
+    // No repo URL in package.json — try to find it via GitHub search
+    onProgress?.('github-search')
+    const searchedUrl = await searchGitHubRepo(pkg.name)
+    if (searchedUrl) {
+      result.repoUrl = searchedUrl
+      attempts.push({
+        source: 'github-search',
+        url: searchedUrl,
+        status: 'success',
+        message: `Found via GitHub search: ${searchedUrl}`,
+      })
+
+      // Now run the same GitHub resolution as above
+      const gh = parseGitHubUrl(searchedUrl)
+      if (gh) {
+        const targetVersion = options.version || pkg.version
+        if (targetVersion) {
+          onProgress?.('github-docs')
+          const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name)
+          if (gitDocs) {
+            result.gitDocsUrl = gitDocs.baseUrl
+            result.gitRef = gitDocs.ref
+            attempts.push({
+              source: 'github-docs',
+              url: gitDocs.baseUrl,
+              status: 'success',
+              message: `Found ${gitDocs.files.length} docs at ${gitDocs.ref}`,
+            })
+          }
+        }
+
+        if (!result.docsUrl) {
+          onProgress?.('github-meta')
+          const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
+          if (repoMeta?.homepage)
+            result.docsUrl = repoMeta.homepage
+        }
+
+        onProgress?.('readme')
+        const readmeUrl = await fetchReadme(gh.owner, gh.repo)
+        if (readmeUrl)
+          result.readmeUrl = readmeUrl
+      }
+    }
+    else {
+      attempts.push({
+        source: 'github-search',
+        status: 'not-found',
+        message: 'No repository URL in package.json and GitHub search found no match',
+      })
+    }
+  }
+
+  // Try homepage for docs (skip if it's just a GitHub repo URL)
+  if (pkg.homepage && !isGitHubRepoUrl(pkg.homepage)) {
+    result.docsUrl = pkg.homepage
+  }
+
+  // Check for llms.txt on docsUrl
+  if (result.docsUrl) {
+    onProgress?.('llms.txt')
+    const llmsUrl = await fetchLlmsUrl(result.docsUrl)
+    if (llmsUrl) {
+      result.llmsUrl = llmsUrl
+      attempts.push({
+        source: 'llms.txt',
+        url: llmsUrl,
+        status: 'success',
+      })
+    }
+    else {
+      attempts.push({
+        source: 'llms.txt',
+        url: `${result.docsUrl}/llms.txt`,
+        status: 'not-found',
+        message: 'No llms.txt at docs URL',
+      })
+    }
+  }
+
+  // Fallback: check local node_modules readme when all else fails
+  if (!result.docsUrl && !result.llmsUrl && !result.readmeUrl && !result.gitDocsUrl && options.cwd) {
+    onProgress?.('local')
+    const pkgDir = join(options.cwd, 'node_modules', packageName)
+    // Check common readme variations
+    for (const filename of ['README.md', 'readme.md']) {
+      const readmePath = join(pkgDir, filename)
+      if (existsSync(readmePath)) {
+        result.readmeUrl = pathToFileURL(readmePath).href
+        attempts.push({
+          source: 'readme',
+          url: readmePath,
+          status: 'success',
+          message: 'Found local readme in node_modules',
+        })
+        break
+      }
+    }
+  }
+
+  // Must have at least one source
+  if (!result.docsUrl && !result.llmsUrl && !result.readmeUrl && !result.gitDocsUrl) {
+    return { package: null, attempts }
+  }
+
+  return { package: result, attempts }
+}
+
+/**
+ * Parse version specifier, handling protocols like link:, workspace:, npm:, file:
+ */
+export function parseVersionSpecifier(
+  name: string,
+  version: string,
+  cwd: string,
+): LocalDependency | null {
+  // link: - resolve local package.json
+  if (version.startsWith('link:')) {
+    const linkPath = resolve(cwd, version.slice(5))
+    const linkedPkgPath = join(linkPath, 'package.json')
+    if (existsSync(linkedPkgPath)) {
+      const linkedPkg = JSON.parse(readFileSync(linkedPkgPath, 'utf-8'))
+      return {
+        name: linkedPkg.name || name,
+        version: linkedPkg.version || '0.0.0',
+      }
+    }
+    return null // linked package doesn't exist
+  }
+
+  // workspace: - strip protocol, keep name
+  if (version.startsWith('workspace:')) {
+    return {
+      name,
+      version: version.slice(10).replace(/^[\^~*]/, '') || '*',
+    }
+  }
+
+  // npm: - extract aliased package name and version
+  if (version.startsWith('npm:')) {
+    const specifier = version.slice(4)
+    // Handle @scope/pkg@version vs pkg@version
+    const atIndex = specifier.startsWith('@')
+      ? specifier.indexOf('@', 1)
+      : specifier.indexOf('@')
+    if (atIndex > 0) {
+      return {
+        name: specifier.slice(0, atIndex),
+        version: specifier.slice(atIndex + 1),
+      }
+    }
+    // npm:package without version
+    return { name: specifier, version: '*' }
+  }
+
+  // file: and git: - skip (local/custom sources)
+  if (version.startsWith('file:') || version.startsWith('git:') || version.startsWith('git+')) {
+    return null
+  }
+
+  // Standard semver
+  return {
+    name,
+    version: version.replace(/^[\^~>=<]/, ''),
+  }
+}
+
+/**
+ * Read package.json dependencies with versions
+ */
+export async function readLocalDependencies(cwd: string): Promise<LocalDependency[]> {
+  const pkgPath = join(cwd, 'package.json')
+  if (!existsSync(pkgPath)) {
+    throw new Error('No package.json found in current directory')
+  }
+
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+  const deps: Record<string, string> = {
+    ...pkg.dependencies,
+    ...pkg.devDependencies,
+  }
+
+  const results: LocalDependency[] = []
+
+  for (const [name, version] of Object.entries(deps)) {
+    // Skip types and dev tools
+    if (name.startsWith('@types/') || ['typescript', 'eslint', 'prettier', 'vitest', 'jest'].includes(name)) {
+      continue
+    }
+
+    const parsed = parseVersionSpecifier(name, version, cwd)
+    if (parsed) {
+      results.push(parsed)
+    }
+  }
+
+  return results
+}
+
+export interface LocalPackageInfo {
+  name: string
+  version: string
+  description?: string
+  repoUrl?: string
+  localPath: string
+}
+
+/**
+ * Read package info from a local path (for link: deps)
+ */
+export function readLocalPackageInfo(localPath: string): LocalPackageInfo | null {
+  const pkgPath = join(localPath, 'package.json')
+  if (!existsSync(pkgPath))
+    return null
+
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+
+  let repoUrl: string | undefined
+  if (pkg.repository?.url) {
+    repoUrl = normalizeRepoUrl(pkg.repository.url)
+  }
+  else if (typeof pkg.repository === 'string') {
+    repoUrl = normalizeRepoUrl(pkg.repository)
+  }
+
+  return {
+    name: pkg.name,
+    version: pkg.version || '0.0.0',
+    description: pkg.description,
+    repoUrl,
+    localPath,
+  }
+}
+
+/**
+ * Resolve docs for a local package (link: dependency)
+ */
+export async function resolveLocalPackageDocs(localPath: string): Promise<ResolvedPackage | null> {
+  const info = readLocalPackageInfo(localPath)
+  if (!info)
+    return null
+
+  const result: ResolvedPackage = {
+    name: info.name,
+    version: info.version,
+    description: info.description,
+    repoUrl: info.repoUrl,
+  }
+
+  // Try GitHub if repo URL available
+  if (info.repoUrl?.includes('github.com')) {
+    const gh = parseGitHubUrl(info.repoUrl)
+    if (gh) {
+      // Try versioned git docs
+      const gitDocs = await fetchGitDocs(gh.owner, gh.repo, info.version, info.name)
+      if (gitDocs) {
+        result.gitDocsUrl = gitDocs.baseUrl
+        result.gitRef = gitDocs.ref
+      }
+
+      // README fallback via ungh
+      const readmeUrl = await fetchReadme(gh.owner, gh.repo)
+      if (readmeUrl) {
+        result.readmeUrl = readmeUrl
+      }
+    }
+  }
+
+  // Fallback: read local README.md
+  if (!result.readmeUrl && !result.gitDocsUrl) {
+    const localReadme = join(localPath, 'README.md')
+    if (existsSync(localReadme)) {
+      result.readmeUrl = pathToFileURL(localReadme).href
+    }
+  }
+
+  if (!result.readmeUrl && !result.gitDocsUrl) {
+    return null
+  }
+
+  return result
+}
+
+/**
+ * Download and extract npm package tarball to cache directory.
+ * Used when the package isn't available in node_modules.
+ *
+ * Extracts to: ~/.skilld/references/<pkg>@<version>/pkg/
+ * Returns the extracted directory path, or null on failure.
+ */
+export async function fetchPkgDist(name: string, version: string): Promise<string | null> {
+  const cacheDir = getCacheDir(name, version)
+  const pkgDir = join(cacheDir, 'pkg')
+
+  // Already extracted
+  if (existsSync(join(pkgDir, 'package.json')))
+    return pkgDir
+
+  // Fetch version metadata to get tarball URL
+  const res = await fetch(`https://registry.npmjs.org/${name}/${version}`, {
+    headers: { 'User-Agent': 'skilld/1.0' },
+  }).catch(() => null)
+
+  if (!res?.ok)
+    return null
+
+  const data = await res.json() as { dist?: { tarball?: string } }
+  const tarballUrl = data.dist?.tarball
+  if (!tarballUrl)
+    return null
+
+  // Download tarball to temp file
+  const tarballRes = await fetch(tarballUrl, {
+    headers: { 'User-Agent': 'skilld/1.0' },
+  }).catch(() => null)
+
+  if (!tarballRes?.ok || !tarballRes.body)
+    return null
+
+  mkdirSync(pkgDir, { recursive: true })
+
+  const tmpTarball = join(cacheDir, '_pkg.tgz')
+  const fileStream = createWriteStream(tmpTarball)
+
+  // Stream response body to file
+  const reader = tarballRes.body.getReader()
+  await new Promise<void>((res, reject) => {
+    const writable = new Writable({
+      write(chunk, _encoding, callback) {
+        fileStream.write(chunk, callback)
+      },
+    })
+    writable.on('finish', () => {
+      fileStream.end()
+      res()
+    })
+    writable.on('error', reject)
+
+    function pump() {
+      reader.read().then(({ done, value }) => {
+        if (done) {
+          writable.end()
+          return
+        }
+        writable.write(value, () => pump())
+      }).catch(reject)
+    }
+    pump()
+  })
+
+  // Extract tarball — npm tarballs have a "package/" prefix
+  try {
+    execSync(`tar xzf "${tmpTarball}" --strip-components=1 -C "${pkgDir}"`, { stdio: 'ignore' })
+  }
+  catch {
+    rmSync(pkgDir, { recursive: true, force: true })
+    rmSync(tmpTarball, { force: true })
+    return null
+  }
+
+  unlinkSync(tmpTarball)
+  return pkgDir
+}
+
+/**
+ * Fetch just the latest version string from npm (lightweight)
+ */
+export async function fetchLatestVersion(packageName: string): Promise<string | null> {
+  const res = await fetch(`https://unpkg.com/${packageName}/package.json`, {
+    headers: { 'User-Agent': 'skilld/1.0' },
+  }).catch(() => null)
+  if (!res?.ok)
+    return null
+  const data = await res.json() as { version?: string }
+  return data.version || null
+}
+
+/**
+ * Get installed skill version from SKILL.md
+ */
+export function getInstalledSkillVersion(skillDir: string): string | null {
+  const skillPath = join(skillDir, 'SKILL.md')
+  if (!existsSync(skillPath))
+    return null
+
+  const content = readFileSync(skillPath, 'utf-8')
+  const match = content.match(/^version:\s*"?([^"\n]+)"?/m)
+  return match?.[1] || null
+}

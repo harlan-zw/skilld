@@ -6,7 +6,7 @@ import type { CachedDoc, CachedPackage } from './types'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
 import { REFERENCES_DIR } from './config'
-import { getCacheDir, getCacheKey } from './version'
+import { getCacheDir } from './version'
 
 /**
  * Check if package is cached at given version
@@ -50,7 +50,6 @@ export function writeToCache(
  * e.g. @clack/prompts@1.0 vs @clack/prompts@1.0.0
  */
 function cleanStaleCacheDirs(name: string, version: string): void {
-  const currentKey = getCacheKey(name, version)
   const prefix = `${name}@`
 
   // For scoped packages, check inside the scope dir
@@ -81,18 +80,18 @@ function cleanStaleCacheDirs(name: string, version: string): void {
 }
 
 /**
- * Create references directory with symlinked docs (only if external fetch needed)
+ * Create .skilld directory with symlinked docs (only if external fetch needed)
  *
  * Structure:
- *   .claude/skills/<skill>/references/
+ *   .claude/skills/<skill>/.skilld/
  *     pkg -> node_modules/<pkg> (always, has package.json, README.md, dist/)
  *     docs -> ~/.skilld/references/<pkg>@<version>/docs (only if fetched externally)
  *
- * The symlinks are gitignored. After clone, `skilld install` recreates from lockfile.
+ * The .skilld/ dirs are gitignored. After clone, `skilld install` recreates from lockfile.
  */
 export function linkReferences(skillDir: string, name: string, version: string): void {
   const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, 'references')
+  const referencesDir = join(skillDir, '.skilld')
   const docsLinkPath = join(referencesDir, 'docs')
   const cachedDocsPath = join(cacheDir, 'docs')
 
@@ -109,49 +108,98 @@ export function linkReferences(skillDir: string, name: string, version: string):
 }
 
 /**
- * Create symlink from references dir to cached issues
+ * Create symlink from .skilld dir to cached github data (issues + discussions)
  *
  * Structure:
- *   .claude/skills/<skill>/references/issues -> ~/.skilld/references/<pkg>@<version>/issues
+ *   .claude/skills/<skill>/.skilld/github -> ~/.skilld/references/<pkg>@<version>/github
  */
-export function linkIssues(skillDir: string, name: string, version: string): void {
+export function linkGithub(skillDir: string, name: string, version: string): void {
   const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, 'references')
-  const issuesLinkPath = join(referencesDir, 'issues')
-  const cachedIssuesPath = join(cacheDir, 'issues')
+  const referencesDir = join(skillDir, '.skilld')
+  const githubLinkPath = join(referencesDir, 'github')
+  const cachedGithubPath = join(cacheDir, 'github')
 
   mkdirSync(referencesDir, { recursive: true })
 
-  if (existsSync(issuesLinkPath)) {
-    unlinkSync(issuesLinkPath)
+  if (existsSync(githubLinkPath)) {
+    unlinkSync(githubLinkPath)
   }
-  if (existsSync(cachedIssuesPath)) {
-    symlinkSync(cachedIssuesPath, issuesLinkPath, 'junction')
+  if (existsSync(cachedGithubPath)) {
+    symlinkSync(cachedGithubPath, githubLinkPath, 'junction')
   }
 }
 
 /**
- * Create symlink from references dir to entire node_modules package
+ * Resolve the package directory: node_modules first, then cached dist fallback.
+ * Returns the path if found, null otherwise.
+ */
+export function resolvePkgDir(name: string, cwd: string, version?: string): string | null {
+  const nodeModulesPath = join(cwd, 'node_modules', name)
+  if (existsSync(nodeModulesPath))
+    return nodeModulesPath
+
+  // Fallback: check cached npm dist
+  if (version) {
+    const cachedPkgDir = join(getCacheDir(name, version), 'pkg')
+    if (existsSync(join(cachedPkgDir, 'package.json')))
+      return cachedPkgDir
+  }
+
+  return null
+}
+
+/**
+ * Create symlink from .skilld dir to package directory
  *
  * Structure:
- *   .claude/skills/<skill>/references/pkg -> node_modules/<pkg>
+ *   .claude/skills/<skill>/.skilld/pkg -> node_modules/<pkg> OR ~/.skilld/references/<pkg>@<version>/pkg
  *
  * This gives access to package.json, README.md, dist/, and any shipped docs/
  */
-export function linkPkg(skillDir: string, name: string, cwd: string): void {
-  const nodeModulesPath = join(cwd, 'node_modules', name)
-
-  if (!existsSync(nodeModulesPath))
+export function linkPkg(skillDir: string, name: string, cwd: string, version?: string): void {
+  const pkgPath = resolvePkgDir(name, cwd, version)
+  if (!pkgPath)
     return
 
-  const referencesDir = join(skillDir, 'references')
+  const referencesDir = join(skillDir, '.skilld')
   mkdirSync(referencesDir, { recursive: true })
 
   const pkgLinkPath = join(referencesDir, 'pkg')
   if (existsSync(pkgLinkPath)) {
     unlinkSync(pkgLinkPath)
   }
-  symlinkSync(nodeModulesPath, pkgLinkPath, 'junction')
+  symlinkSync(pkgPath, pkgLinkPath, 'junction')
+}
+
+/**
+ * Get key files from a package directory for display
+ * Returns entry points + docs files
+ */
+export function getPkgKeyFiles(name: string, cwd: string, version?: string): string[] {
+  const pkgPath = resolvePkgDir(name, cwd, version)
+  if (!pkgPath)
+    return []
+
+  const files: string[] = []
+  const pkgJsonPath = join(pkgPath, 'package.json')
+
+  if (existsSync(pkgJsonPath)) {
+    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+
+    // Entry points
+    if (pkg.main)
+      files.push(basename(pkg.main))
+    if (pkg.module && pkg.module !== pkg.main)
+      files.push(basename(pkg.module))
+  }
+
+  // Check for common doc files
+  for (const f of ['README.md', 'CHANGELOG.md', 'changelog.md']) {
+    if (existsSync(join(pkgPath, f)))
+      files.push(f)
+  }
+
+  return [...new Set(files)]
 }
 
 /**
@@ -163,27 +211,31 @@ export interface ShippedSkill {
 }
 
 /**
- * Check if package ships a skills/ directory with SKILL.md subdirs
+ * Check if package ships a skills/ directory with _SKILL.md subdirs
  */
-export function getShippedSkills(name: string, cwd: string): ShippedSkill[] {
-  const skillsPath = join(cwd, 'node_modules', name, 'skills')
+export function getShippedSkills(name: string, cwd: string, version?: string): ShippedSkill[] {
+  const pkgPath = resolvePkgDir(name, cwd, version)
+  if (!pkgPath)
+    return []
+
+  const skillsPath = join(pkgPath, 'skills')
   if (!existsSync(skillsPath))
     return []
 
   return readdirSync(skillsPath, { withFileTypes: true })
-    .filter(d => d.isDirectory() && existsSync(join(skillsPath, d.name, 'SKILL.md')))
+    .filter(d => d.isDirectory() && existsSync(join(skillsPath, d.name, '_SKILL.md')))
     .map(d => ({ skillName: d.name, skillDir: join(skillsPath, d.name) }))
 }
 
 /**
- * Create symlink from references dir to cached releases
+ * Create symlink from .skilld dir to cached releases
  *
  * Structure:
- *   .claude/skills/<skill>/references/releases -> ~/.skilld/references/<pkg>@<version>/releases
+ *   .claude/skills/<skill>/.skilld/releases -> ~/.skilld/references/<pkg>@<version>/releases
  */
 export function linkReleases(skillDir: string, name: string, version: string): void {
   const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, 'references')
+  const referencesDir = join(skillDir, '.skilld')
   const releasesLinkPath = join(referencesDir, 'releases')
   const cachedReleasesPath = join(cacheDir, 'releases')
 
@@ -211,14 +263,14 @@ export function linkShippedSkill(baseDir: string, skillName: string, targetDir: 
   symlinkSync(targetDir, linkPath)
 }
 
-export function hasShippedDocs(name: string, cwd: string): boolean {
-  const nodeModulesPath = join(cwd, 'node_modules', name)
-  if (!existsSync(nodeModulesPath))
+export function hasShippedDocs(name: string, cwd: string, version?: string): boolean {
+  const pkgPath = resolvePkgDir(name, cwd, version)
+  if (!pkgPath)
     return false
 
   const docsCandidates = ['docs', 'documentation', 'doc']
   for (const candidate of docsCandidates) {
-    const docsPath = join(nodeModulesPath, candidate)
+    const docsPath = join(pkgPath, candidate)
     if (existsSync(docsPath))
       return true
   }
@@ -258,7 +310,7 @@ export function readCachedDocs(name: string, version: string): CachedDoc[] {
       if (entry.isDirectory()) {
         walk(entryPath, relativePath)
       }
-      else if (entry.name.endsWith('.md')) {
+      else if (entry.name.endsWith('.md') || entry.name.endsWith('.mdx')) {
         docs.push({
           path: relativePath,
           content: readFileSync(entryPath, 'utf-8'),
@@ -279,7 +331,6 @@ export function clearCache(name: string, version: string): boolean {
   if (!existsSync(cacheDir))
     return false
 
-  const { rmSync } = require('node:fs')
   rmSync(cacheDir, { recursive: true })
   return true
 }
@@ -296,11 +347,11 @@ export function clearAllCache(): number {
 }
 
 /**
- * List files in references directory (pkg + docs) as relative paths for prompt context
- * Returns paths like ./references/pkg/README.md, ./references/docs/api.md
+ * List files in .skilld directory (pkg + docs) as relative paths for prompt context
+ * Returns paths like ./.skilld/pkg/README.md, ./.skilld/docs/api.md
  */
 export function listReferenceFiles(skillDir: string, maxDepth = 3): string[] {
-  const referencesDir = join(skillDir, 'references')
+  const referencesDir = join(skillDir, '.skilld')
   if (!existsSync(referencesDir))
     return []
 

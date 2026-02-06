@@ -2,8 +2,8 @@ import type { AgentType } from '../agent'
 import type { SkillInfo } from './lockfile'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { agents, detectInstalledAgents } from '../agent'
-import { readLocalDependencies } from '../doc-resolver'
+import { agents } from '../agent'
+import { readLocalDependencies } from '../sources'
 import { parseSkillFrontmatter, readLock } from './lockfile'
 
 export interface SkillEntry {
@@ -24,6 +24,8 @@ export interface ProjectState {
   missing: string[]
   outdated: SkillEntry[]
   synced: SkillEntry[]
+  /** Skills in lockfile but not matched to any local dep */
+  unmatched: SkillEntry[]
 }
 
 export interface IterateSkillsOptions {
@@ -34,7 +36,7 @@ export interface IterateSkillsOptions {
 
 export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<SkillEntry> {
   const { scope = 'all', cwd = process.cwd() } = opts
-  const agentTypes = opts.agents ?? detectInstalledAgents()
+  const agentTypes = opts.agents ?? (Object.keys(agents) as AgentType[])
 
   for (const agentType of agentTypes) {
     const agent = agents[agentType]
@@ -52,7 +54,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
             yield { name, dir, agent: agentType, info: lock.skills[name], scope: 'local' }
           }
           else {
-            const info = parseSkillFrontmatter(join(dir, 'SKILL.md'))
+            const info = parseSkillFrontmatter(join(dir, '_SKILL.md'))
             if (info?.generator === 'skilld') {
               yield { name, dir, agent: agentType, info, scope: 'local' }
             }
@@ -74,7 +76,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
             yield { name, dir, agent: agentType, info: lock.skills[name], scope: 'global' }
           }
           else {
-            const info = parseSkillFrontmatter(join(dir, 'SKILL.md'))
+            const info = parseSkillFrontmatter(join(dir, '_SKILL.md'))
             if (info?.generator === 'skilld') {
               yield { name, dir, agent: agentType, info, scope: 'global' }
             }
@@ -115,6 +117,7 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
   const missing: string[] = []
   const outdated: SkillEntry[] = []
   const synced: SkillEntry[] = []
+  const matchedSkillNames = new Set<string>()
 
   for (const [pkgName, version] of deps) {
     // Normalize package name (e.g., @scope/pkg -> scope-pkg)
@@ -124,15 +127,21 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
     if (!skill) {
       missing.push(pkgName)
     }
-    else if (isOutdated(skill, version)) {
-      outdated.push({ ...skill, packageName: pkgName, latestVersion: version })
-    }
     else {
-      synced.push({ ...skill, packageName: pkgName, latestVersion: version })
+      matchedSkillNames.add(skill.name)
+      if (isOutdated(skill, version)) {
+        outdated.push({ ...skill, packageName: pkgName, latestVersion: version })
+      }
+      else {
+        synced.push({ ...skill, packageName: pkgName, latestVersion: version })
+      }
     }
   }
 
-  return { skills, deps, missing, outdated, synced }
+  // Skills in lockfile but not matched to any local dep
+  const unmatched = skills.filter(s => !matchedSkillNames.has(s.name))
+
+  return { skills, deps, missing, outdated, synced, unmatched }
 }
 
 export function getSkillsDir(agent: AgentType, scope: 'local' | 'global', cwd: string = process.cwd()): string {

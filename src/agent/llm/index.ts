@@ -1,270 +1,115 @@
 /**
- * LLM-based documentation optimization using AI SDK
- * Uses fullStream for reasoning visibility + text extraction
+ * Minimal LLM provider - spawns CLI directly, no AI SDK
+ * Supports claude and gemini CLIs with stream-json output
+ *
+ * Claude: token-level streaming via --include-partial-messages
+ * Gemini: turn-level streaming via -o stream-json
  */
 
-import { exec } from 'node:child_process'
+import type { SkillSection } from '../prompts'
+import type { AgentType } from '../types'
+import { exec, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { promisify } from 'node:util'
-import { generateText, smoothStream, stepCountIs, streamText, tool } from 'ai'
-import { claudeCode } from 'ai-sdk-provider-claude-code'
-import { codexCli } from 'ai-sdk-provider-codex-cli'
-import { createGeminiProvider } from 'ai-sdk-provider-gemini-cli'
-import { z } from 'zod'
 import { detectInstalledAgents } from '../detect'
 import { buildSkillPrompt } from '../prompts'
 import { agents } from '../registry'
 
-/** Response cache directory */
-const CACHE_DIR = join(homedir(), '.skilld', 'llm-cache')
-
-const execAsync = promisify(exec)
-
 export { buildSkillPrompt } from '../prompts'
+export type { SkillSection } from '../prompts'
 
 export type OptimizeModel
-  // Claude Code
   = | 'opus'
     | 'sonnet'
     | 'haiku'
-  // Gemini CLI
     | 'gemini-3-pro'
     | 'gemini-3-flash'
     | 'gemini-2.5-pro'
     | 'gemini-2.5-flash'
     | 'gemini-2.5-flash-lite'
-  // Codex
     | 'codex'
-
-/** Model-specific configuration */
-interface ModelConfig {
-  /** The AI SDK model instance */
-  model: ReturnType<typeof claudeCode>
-  /** Display name */
-  name: string
-  /** Short hint for UI */
-  hint: string
-  /** Recommended model */
-  recommended?: boolean
-  /** CLI command to check availability */
-  cli: string
-  /** Agent that provides this model */
-  agentId: 'claude-code' | 'gemini-cli' | 'codex'
-  /** Temperature (lower = more consistent) */
-  temperature: number
-  /** Max output tokens */
-  maxOutputTokens: number
-  /** Pricing per 1M tokens (input, output) in USD */
-  pricing: { input: number, output: number }
-}
-
-/** Model configurations with pricing and settings */
-const MODEL_CONFIG: Record<OptimizeModel, ModelConfig> = {
-  // Claude Code models
-  'opus': {
-    model: claudeCode('opus'),
-    name: 'Opus 4.5',
-    hint: 'Most capable',
-    cli: 'claude',
-    agentId: 'claude-code',
-    temperature: 0.3,
-    maxOutputTokens: 8000,
-    pricing: { input: 15.0, output: 75.0 },
-  },
-  'sonnet': {
-    model: claudeCode('sonnet'),
-    name: 'Sonnet 4.5',
-    hint: 'Balanced',
-    recommended: true,
-    cli: 'claude',
-    agentId: 'claude-code',
-    temperature: 0.3,
-    maxOutputTokens: 8000,
-    pricing: { input: 3.0, output: 15.0 },
-  },
-  'haiku': {
-    model: claudeCode('haiku'),
-    name: 'Haiku 4.5',
-    hint: 'Fastest',
-    cli: 'claude',
-    agentId: 'claude-code',
-    temperature: 0.4,
-    maxOutputTokens: 8000,
-    pricing: { input: 0.25, output: 1.25 },
-  },
-  // Gemini CLI models
-  'gemini-3-pro': {
-    model: createGeminiProvider()('gemini-3-pro-preview'),
-    name: 'Gemini 3 Pro',
-    hint: 'Most capable',
-    cli: 'gemini',
-    agentId: 'gemini-cli',
-    temperature: 0.3,
-    maxOutputTokens: 8000,
-    pricing: { input: 1.25, output: 5.0 },
-  },
-  'gemini-3-flash': {
-    model: createGeminiProvider()('gemini-3-flash-preview'),
-    name: 'Gemini 3 Flash',
-    hint: 'Fast',
-    cli: 'gemini',
-    agentId: 'gemini-cli',
-    temperature: 0.3,
-    maxOutputTokens: 8000,
-    pricing: { input: 0.075, output: 0.30 },
-  },
-  'gemini-2.5-pro': {
-    model: createGeminiProvider()('gemini-2.5-pro'),
-    name: 'Gemini 2.5 Pro',
-    hint: 'Thinking model',
-    cli: 'gemini',
-    agentId: 'gemini-cli',
-    temperature: 0.3,
-    maxOutputTokens: 8000,
-    pricing: { input: 1.25, output: 10.0 },
-  },
-  'gemini-2.5-flash': {
-    model: createGeminiProvider()('gemini-2.5-flash'),
-    name: 'Gemini 2.5 Flash',
-    hint: 'Fast thinking',
-    cli: 'gemini',
-    agentId: 'gemini-cli',
-    temperature: 0.3,
-    maxOutputTokens: 8000,
-    pricing: { input: 0.15, output: 0.60 },
-  },
-  'gemini-2.5-flash-lite': {
-    model: createGeminiProvider()('gemini-2.5-flash-lite'),
-    name: 'Gemini 2.5 Flash Lite',
-    hint: 'Cheapest',
-    cli: 'gemini',
-    agentId: 'gemini-cli',
-    temperature: 0.3,
-    maxOutputTokens: 8000,
-    pricing: { input: 0.075, output: 0.30 },
-  },
-  // Codex CLI
-  'codex': {
-    model: codexCli('o4-mini'),
-    name: 'Codex o4-mini',
-    hint: 'OpenAI reasoning',
-    cli: 'codex',
-    agentId: 'codex',
-    temperature: 0.2,
-    maxOutputTokens: 8000,
-    pricing: { input: 1.10, output: 4.40 },
-  },
-}
-
-/** Shared stream config */
-const STREAM_CONFIG = {
-  maxRetries: 2,
-  smoothStream: { delayInMs: 10, chunking: 'word' as const },
-}
-
-// ============================================================================
-// Response Caching
-// ============================================================================
-
-interface CachedResponse {
-  text: string
-  model: OptimizeModel
-  timestamp: number
-}
-
-/** Hash prompt for cache key */
-function hashPrompt(prompt: string, model: OptimizeModel): string {
-  return createHash('sha256').update(`${model}:${prompt}`).digest('hex').slice(0, 16)
-}
-
-/** Get cached response if exists and not expired */
-function getCachedResponse(prompt: string, model: OptimizeModel, maxAge = 7 * 24 * 60 * 60 * 1000): CachedResponse | null {
-  const hash = hashPrompt(prompt, model)
-  const cachePath = join(CACHE_DIR, `${hash}.json`)
-
-  if (!existsSync(cachePath))
-    return null
-
-  try {
-    const cached = JSON.parse(readFileSync(cachePath, 'utf-8')) as CachedResponse
-    // Check if cache is expired (default 7 days)
-    if (Date.now() - cached.timestamp > maxAge)
-      return null
-    return cached
-  }
-  catch {
-    return null
-  }
-}
-
-/** Cache a response */
-function cacheResponse(prompt: string, model: OptimizeModel, text: string): void {
-  mkdirSync(CACHE_DIR, { recursive: true })
-  const hash = hashPrompt(prompt, model)
-  const cachePath = join(CACHE_DIR, `${hash}.json`)
-
-  const cached: CachedResponse = {
-    text,
-    model,
-    timestamp: Date.now(),
-  }
-
-  writeFileSync(cachePath, JSON.stringify(cached))
-}
-
-/** Clear the LLM response cache */
-export function clearLlmCache(): void {
-  const { rmSync } = require('node:fs')
-  if (existsSync(CACHE_DIR)) {
-    rmSync(CACHE_DIR, { recursive: true })
-  }
-}
 
 export interface ModelInfo {
   id: OptimizeModel
   name: string
   hint: string
   recommended?: boolean
-  /** Agent that provides this model */
   agentId: string
-  /** Agent display name */
   agentName: string
 }
 
-/** Calculate estimated cost from token usage */
-export function estimateCost(
-  model: OptimizeModel,
-  usage: { inputTokens: number, outputTokens: number },
-): number {
-  const config = MODEL_CONFIG[model]
-  const inputCost = (usage.inputTokens / 1_000_000) * config.pricing.input
-  const outputCost = (usage.outputTokens / 1_000_000) * config.pricing.output
-  return inputCost + outputCost
+export interface StreamProgress {
+  chunk: string
+  type: 'reasoning' | 'text'
+  text: string
+  reasoning: string
 }
 
-/** Format cost for display */
-export function formatCost(cost: number): string {
-  if (cost < 0.001)
-    return '<$0.001'
-  if (cost < 0.01)
-    return `~$${cost.toFixed(4)}`
-  return `~$${cost.toFixed(3)}`
+export interface OptimizeDocsOptions {
+  packageName: string
+  skillDir: string
+  model?: OptimizeModel
+  version?: string
+  hasGithub?: boolean
+  hasReleases?: boolean
+  hasChangelog?: string | false
+  docFiles?: string[]
+  onProgress?: (progress: StreamProgress) => void
+  timeout?: number
+  verbose?: boolean
+  noCache?: boolean
+  /** Which sections to generate */
+  sections?: SkillSection[]
+  /** Custom instructions from the user */
+  customPrompt?: string
+}
+
+export interface OptimizeResult {
+  optimized: string
+  wasOptimized: boolean
+  error?: string
+  reasoning?: string
+  finishReason?: string
+  usage?: { inputTokens: number, outputTokens: number, totalTokens: number }
+  cost?: number
+}
+
+const CACHE_DIR = join(homedir(), '.skilld', 'llm-cache')
+
+interface CliModelConfig {
+  cli: 'claude' | 'gemini'
+  model: string
+  name: string
+  hint: string
+  recommended?: boolean
+  agentId: AgentType
+}
+
+/** CLI config per model */
+const CLI_MODELS: Partial<Record<OptimizeModel, CliModelConfig>> = {
+  'opus': { cli: 'claude', model: 'opus', name: 'Opus 4.5', hint: 'Most capable', agentId: 'claude-code' },
+  'sonnet': { cli: 'claude', model: 'sonnet', name: 'Sonnet 4.5', hint: 'Balanced', recommended: true, agentId: 'claude-code' },
+  'haiku': { cli: 'claude', model: 'haiku', name: 'Haiku 4.5', hint: 'Fastest', agentId: 'claude-code' },
+  'gemini-2.5-pro': { cli: 'gemini', model: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', hint: 'Most capable', agentId: 'gemini-cli' },
+  'gemini-2.5-flash': { cli: 'gemini', model: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', hint: 'Balanced', agentId: 'gemini-cli' },
+  'gemini-2.5-flash-lite': { cli: 'gemini', model: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', hint: 'Fastest', agentId: 'gemini-cli' },
+  'gemini-3-pro': { cli: 'gemini', model: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', hint: 'Most capable', agentId: 'gemini-cli' },
+  'gemini-3-flash': { cli: 'gemini', model: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', hint: 'Balanced', agentId: 'gemini-cli' },
 }
 
 export function getModelName(id: OptimizeModel): string {
-  return MODEL_CONFIG[id]?.name ?? id
+  return CLI_MODELS[id]?.name ?? id
 }
 
-/** Get available models based on installed agents (parallel CLI check) */
 export async function getAvailableModels(): Promise<ModelInfo[]> {
-  // Get installed agents that have CLIs
+  const { promisify } = await import('node:util')
+  const execAsync = promisify(exec)
+
   const installedAgents = detectInstalledAgents()
   const agentsWithCli = installedAgents.filter(id => agents[id].cli)
 
-  // Check which CLIs are actually available (parallel)
   const cliChecks = await Promise.all(
     agentsWithCli.map(async (agentId) => {
       const cli = agents[agentId].cli!
@@ -272,15 +117,12 @@ export async function getAvailableModels(): Promise<ModelInfo[]> {
         await execAsync(`which ${cli}`)
         return agentId
       }
-      catch {
-        return null
-      }
+      catch { return null }
     }),
   )
-  const availableAgentIds = new Set(cliChecks.filter(Boolean))
+  const availableAgentIds = new Set(cliChecks.filter((id): id is AgentType => id != null))
 
-  // Return models from available agents
-  return (Object.entries(MODEL_CONFIG) as [OptimizeModel, ModelConfig][])
+  return (Object.entries(CLI_MODELS) as [OptimizeModel, CliModelConfig][])
     .filter(([_, config]) => availableAgentIds.has(config.agentId))
     .map(([id, config]) => ({
       id,
@@ -288,384 +130,330 @@ export async function getAvailableModels(): Promise<ModelInfo[]> {
       hint: config.hint,
       recommended: config.recommended,
       agentId: config.agentId,
-      agentName: agents[config.agentId].displayName,
+      agentName: agents[config.agentId]?.displayName ?? config.agentId,
     }))
 }
 
-export interface StreamProgress {
-  /** Current chunk (reasoning or text) */
-  chunk: string
-  /** Type: 'reasoning' for thinking, 'text' for output */
-  type: 'reasoning' | 'text'
-  /** Accumulated text so far (text-only, not reasoning) */
-  text: string
-  /** Accumulated reasoning so far */
-  reasoning: string
+/** Resolve symlinks in .skilld/ to get real paths for --add-dir */
+function resolveReferenceDirs(skillDir: string): string[] {
+  const refsDir = join(skillDir, '.skilld')
+  if (!existsSync(refsDir))
+    return []
+  return readdirSync(refsDir)
+    .map(entry => join(refsDir, entry))
+    .filter(p => lstatSync(p).isSymbolicLink())
+    .map(p => realpathSync(p))
 }
 
-export interface OptimizeDocsOptions {
-  packageName: string
-  /** Absolute path to skill directory with ./references/ */
-  skillDir: string
-  /** Path to package's search.db */
-  dbPath: string
-  model?: OptimizeModel
-  /** Package version for version-specific guidance */
-  version?: string
-  /** Has issues indexed */
-  hasIssues?: boolean
-  /** Has release notes */
-  hasReleases?: boolean
-  /** Has CHANGELOG.md in package */
-  hasChangelog?: boolean
-  /** Resolved absolute paths to .md doc files */
-  docFiles?: string[]
-  /** Called with each streaming chunk - includes reasoning for progress display */
-  onProgress?: (progress: StreamProgress) => void
-  /** Timeout in ms (default: 180000 for agentic) */
-  timeout?: number
-  /** Include reasoning in result (for debugging) */
-  verbose?: boolean
-  /** Skip cache and force fresh generation */
-  noCache?: boolean
-}
+function buildCliArgs(cli: 'claude' | 'gemini', model: string, skillDir: string): string[] {
+  const symlinkDirs = resolveReferenceDirs(skillDir)
 
-export interface OptimizeResult {
-  optimized: string
-  wasOptimized: boolean
-  error?: string
-  /** Raw reasoning/thinking content (only if verbose: true) */
-  reasoning?: string
-  /** Why generation stopped */
-  finishReason?: string
-  /** Token usage for debugging/billing */
-  usage?: { inputTokens: number, outputTokens: number, totalTokens: number }
-  /** Estimated cost in USD */
-  cost?: number
-}
-
-/** Create tools for agentic exploration */
-function createAgentTools(skillDir: string, dbPath: string) {
-  return {
-    read: tool({
-      description: 'Read a file from the references directory',
-      inputSchema: z.object({
-        path: z.string().describe('File path relative to skill dir or absolute'),
-      }),
-      execute: async ({ path }) => {
-        const { readFileSync, existsSync } = await import('node:fs')
-        const { resolve } = await import('node:path')
-        const fullPath = path.startsWith('/') ? path : resolve(skillDir, path)
-        if (!existsSync(fullPath))
-          return `File not found: ${path}`
-        return readFileSync(fullPath, 'utf-8').slice(0, 50000) // Limit size
-      },
-    }),
-    ls: tool({
-      description: 'List files in a directory',
-      inputSchema: z.object({
-        path: z.string().describe('Directory path relative to skill dir or absolute'),
-      }),
-      execute: async ({ path }) => {
-        const { readdirSync, existsSync, statSync } = await import('node:fs')
-        const { resolve, join } = await import('node:path')
-        const fullPath = path.startsWith('/') ? path : resolve(skillDir, path)
-        if (!existsSync(fullPath))
-          return `Directory not found: ${path}`
-        const entries = readdirSync(fullPath)
-        return entries.map((e) => {
-          const stat = statSync(join(fullPath, e))
-          return stat.isDirectory() ? `${e}/` : e
-        }).join('\n')
-      },
-    }),
-    search: tool({
-      description: 'Search indexed docs for the package',
-      inputSchema: z.object({
-        query: z.string().describe('Search query'),
-      }),
-      execute: async ({ query }) => {
-        const { searchSnippets } = await import('../../retriv')
-        const results = await searchSnippets(query, { dbPath }, { limit: 10 })
-        return results.map(r => `[${r.score.toFixed(2)}] ${r.source}:\n${r.content.slice(0, 500)}`).join('\n\n')
-      },
-    }),
-    webSearch: tool({
-      description: 'Search the web for additional context',
-      inputSchema: z.object({
-        query: z.string().describe('Search query'),
-      }),
-      execute: async ({ query }) => {
-        // Use a simple fetch to DuckDuckGo HTML (no API key needed)
-        const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
-        const res = await fetch(url, { headers: { 'User-Agent': 'skilld/1.0' } })
-        const html = await res.text()
-        // Extract result snippets (rough parsing)
-        const snippets = html.match(/<a class="result__snippet"[^>]*>([^<]+)</g) || []
-        return snippets.slice(0, 5).map(s => s.replace(/<[^>]+>/g, '')).join('\n\n') || 'No results'
-      },
-    }),
+  if (cli === 'claude') {
+    return [
+      '-p',
+      '--model',
+      model,
+      '--output-format',
+      'stream-json',
+      '--verbose',
+      '--include-partial-messages', // token-level streaming
+      '--allowedTools',
+      'Read Glob Grep Write',
+      '--add-dir',
+      skillDir,
+      ...symlinkDirs.flatMap(d => ['--add-dir', d]),
+      '--dangerously-skip-permissions',
+      '--no-session-persistence',
+    ]
   }
+  return [
+    '-o',
+    'stream-json',
+    '-m',
+    model,
+    '-y', // auto-approve tools
+    '--include-directories',
+    skillDir,
+    ...symlinkDirs.flatMap(d => ['--include-directories', d]),
+  ]
+}
+
+// ── Cache ────────────────────────────────────────────────────────────
+
+function hashPrompt(prompt: string, model: OptimizeModel): string {
+  return createHash('sha256').update(`exec:${model}:${prompt}`).digest('hex').slice(0, 16)
+}
+
+function getCached(prompt: string, model: OptimizeModel, maxAge = 7 * 24 * 60 * 60 * 1000): string | null {
+  const path = join(CACHE_DIR, `${hashPrompt(prompt, model)}.json`)
+  if (!existsSync(path))
+    return null
+  try {
+    const { text, timestamp } = JSON.parse(readFileSync(path, 'utf-8'))
+    return Date.now() - timestamp > maxAge ? null : text
+  }
+  catch { return null }
+}
+
+function setCache(prompt: string, model: OptimizeModel, text: string): void {
+  mkdirSync(CACHE_DIR, { recursive: true })
+  writeFileSync(
+    join(CACHE_DIR, `${hashPrompt(prompt, model)}.json`),
+    JSON.stringify({ text, model, timestamp: Date.now() }),
+  )
+}
+
+// ── Stream event parsing ─────────────────────────────────────────────
+
+interface ParsedEvent {
+  /** Token-level text delta */
+  textDelta?: string
+  /** Complete text from a full message (non-partial) */
+  fullText?: string
+  /** Tool name being invoked */
+  toolName?: string
+  /** Tool input hint (file path, query, etc) */
+  toolHint?: string
+  /** Stream finished */
+  done?: boolean
+  /** Token usage */
+  usage?: { input: number, output: number }
+  /** Cost in USD */
+  cost?: number
+  /** Number of agentic turns */
+  turns?: number
 }
 
 /**
- * Generate skill using agentic exploration
- * - Agent explores references via tools (Read, Search, WebSearch)
- * - Response caching by prompt hash
- * - Cost estimation based on token usage
+ * Parse claude stream-json events
+ *
+ * Event types:
+ * - stream_event/content_block_delta/text_delta → token streaming
+ * - stream_event/content_block_start/tool_use → tool invocation starting
+ * - assistant message with tool_use content → tool name + input
+ * - assistant message with text content → full text (non-streaming fallback)
+ * - result → usage, cost, turns
  */
-export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
-  const { packageName, skillDir, dbPath, model = 'sonnet', version, hasIssues, hasReleases, hasChangelog, docFiles, onProgress, timeout = 180000, verbose, noCache } = opts
-  const prompt = buildSkillPrompt({ packageName, skillDir, version, hasIssues, hasReleases, hasChangelog, docFiles })
-  const config = MODEL_CONFIG[model]
+function parseClaudeLine(line: string): ParsedEvent {
+  try {
+    const obj = JSON.parse(line)
 
-  // Check cache first (unless noCache is set)
-  if (!noCache) {
-    const cached = getCachedResponse(prompt, model)
-    if (cached) {
-      onProgress?.({ chunk: '[cached]', type: 'text', text: cached.text, reasoning: '' })
+    // Token-level streaming (--include-partial-messages)
+    if (obj.type === 'stream_event') {
+      const evt = obj.event
+      if (!evt)
+        return {}
+
+      // Text delta — the main streaming path
+      if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
+        return { textDelta: evt.delta.text }
+      }
+
+      // Tool use starting — get tool name early
+      if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
+        return { toolName: evt.content_block.name }
+      }
+
+      return {}
+    }
+
+    // Full assistant message (complete turn, after streaming)
+    if (obj.type === 'assistant' && obj.message?.content) {
+      const content = obj.message.content as any[]
+
+      // Extract tool uses with inputs for progress hints
+      const tools = content.filter((c: any) => c.type === 'tool_use')
+      if (tools.length) {
+        const names = tools.map((t: any) => t.name)
+        // Extract useful hint from tool input (file path, query, etc)
+        const hint = tools.map((t: any) => {
+          const input = t.input || {}
+          return input.file_path || input.path || input.pattern || input.query || input.command || ''
+        }).filter(Boolean).join(', ')
+        return { toolName: names.join(', '), toolHint: hint || undefined }
+      }
+
+      // Text content (fallback for non-partial mode)
+      const text = content
+        .filter((c: any) => c.type === 'text')
+        .map((c: any) => c.text)
+        .join('')
+      if (text)
+        return { fullText: text }
+    }
+
+    // Final result
+    if (obj.type === 'result') {
+      const u = obj.usage
       return {
-        optimized: cached.text,
-        wasOptimized: true,
-        finishReason: 'cached',
+        done: true,
+        usage: u ? { input: u.input_tokens ?? u.inputTokens ?? 0, output: u.output_tokens ?? u.outputTokens ?? 0 } : undefined,
+        cost: obj.total_cost_usd,
+        turns: obj.num_turns,
       }
     }
   }
+  catch {}
+  return {}
+}
 
-  const tools = createAgentTools(skillDir, dbPath)
+/**
+ * Parse gemini stream-json events
+ * Gemini streams at turn level (full message per event)
+ */
+function parseGeminiLine(line: string): ParsedEvent {
+  try {
+    const obj = JSON.parse(line)
 
-  // Emit prompt for debugging
-  const { writeFileSync } = await import('node:fs')
-  const { join } = await import('node:path')
+    // Text message (delta or full)
+    if (obj.type === 'message' && obj.role === 'assistant' && obj.content) {
+      return obj.delta ? { textDelta: obj.content } : { fullText: obj.content }
+    }
+
+    // Tool invocation
+    if (obj.type === 'tool_use' || obj.type === 'tool_call') {
+      return { toolName: obj.name || obj.tool || 'tool' }
+    }
+
+    // Final result
+    if (obj.type === 'result') {
+      const s = obj.stats
+      return {
+        done: true,
+        usage: s ? { input: s.input_tokens ?? s.input ?? 0, output: s.output_tokens ?? s.output ?? 0 } : undefined,
+        turns: s?.tool_calls,
+      }
+    }
+  }
+  catch {}
+  return {}
+}
+
+// ── Main ─────────────────────────────────────────────────────────────
+
+export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
+  const { packageName, skillDir, model = 'sonnet', version, hasGithub, docFiles, onProgress, timeout = 180000, noCache, sections, customPrompt } = opts
+  const prompt = buildSkillPrompt({ packageName, skillDir, version, hasGithub, docFiles, sections, customPrompt })
+
+  // Cache check
+  if (!noCache) {
+    const cached = getCached(prompt, model)
+    if (cached) {
+      onProgress?.({ chunk: '[cached]', type: 'text', text: cached, reasoning: '' })
+      return { optimized: cached, wasOptimized: true, finishReason: 'cached' }
+    }
+  }
+
+  const cliConfig = CLI_MODELS[model]
+  if (!cliConfig) {
+    return { optimized: '', wasOptimized: false, error: `No CLI mapping for model: ${model}` }
+  }
+
+  const { cli, model: cliModel } = cliConfig
+  const args = buildCliArgs(cli, cliModel, skillDir)
+  const parseLine = cli === 'claude' ? parseClaudeLine : parseGeminiLine
+
+  // Write prompt for debugging
   writeFileSync(join(skillDir, 'PROMPT.md'), prompt)
 
-  // Create abort controller for timeout
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeout)
+  const outputPath = join(skillDir, '__SKILL.md')
 
-  try {
-    onProgress?.({ chunk: '[exploring...]', type: 'reasoning', text: '', reasoning: '' })
-
-    const result = await generateText({
-      model: config.model,
-      prompt,
-      tools,
-      stopWhen: stepCountIs(20), // Allow up to 20 tool calls
-      abortSignal: controller.signal,
-      maxRetries: STREAM_CONFIG.maxRetries,
-      maxOutputTokens: config.maxOutputTokens,
-      temperature: config.temperature,
-      onStepFinish: ({ toolCalls }) => {
-        if (toolCalls?.length) {
-          const names = toolCalls.map(t => t.toolName).join(', ')
-          onProgress?.({ chunk: `[${names}]`, type: 'reasoning', text: '', reasoning: names })
-        }
-      },
+  return new Promise<OptimizeResult>((resolve) => {
+    const proc = spawn(cli, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      timeout,
+      env: { ...process.env, NO_COLOR: '1' },
     })
 
-    clearTimeout(timeoutId)
+    let buffer = ''
+    let usage: { input: number, output: number } | undefined
+    let cost: number | undefined
 
-    const text = result.text
-    const optimized = cleanOutput(text)
+    onProgress?.({ chunk: '[starting...]', type: 'reasoning', text: '', reasoning: '' })
 
-    const usage = result.usage
-      ? {
-          inputTokens: result.usage.inputTokens ?? 0,
-          outputTokens: result.usage.outputTokens ?? 0,
-          totalTokens: result.usage.totalTokens ?? 0,
+    proc.stdin.write(prompt)
+    proc.stdin.end()
+
+    proc.stdout.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString()
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      for (const line of lines) {
+        if (!line.trim())
+          continue
+        const evt = parseLine(line)
+
+        if (evt.toolName) {
+          const hint = evt.toolHint
+            ? `[${evt.toolName}: ${shortenPath(evt.toolHint)}]`
+            : `[${evt.toolName}]`
+          onProgress?.({ chunk: hint, type: 'reasoning', text: '', reasoning: hint })
         }
-      : undefined
-    const cost = usage ? estimateCost(model, { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }) : undefined
 
-    // Cache successful response
-    if (!noCache && optimized) {
-      cacheResponse(prompt, model, optimized)
-    }
-
-    return {
-      optimized,
-      wasOptimized: !!optimized,
-      finishReason: result.finishReason,
-      usage,
-      cost,
-    }
-  }
-  catch (err) {
-    clearTimeout(timeoutId)
-    if (err instanceof Error && err.name === 'AbortError') {
-      return { optimized: '', wasOptimized: false, error: `Timeout after ${timeout / 1000}s` }
-    }
-    const msg = err instanceof Error ? err.message : String(err)
-    return { optimized: '', wasOptimized: false, error: msg }
-  }
-}
-
-interface StreamOptions {
-  onProgress?: (progress: StreamProgress) => void
-  timeout?: number
-}
-
-interface StreamResult {
-  text: string
-  reasoning: string
-  error?: string
-  /** Why generation stopped (stop, length, tool-calls, etc) */
-  finishReason?: string
-  /** Token usage stats */
-  usage?: { inputTokens: number, outputTokens: number, totalTokens: number }
-}
-
-/**
- * Stream with fullStream for reasoning + text visibility
- * Uses model-specific temperature and token limits
- */
-async function streamWithFullStream(
-  config: ModelConfig,
-  prompt: string,
-  opts: StreamOptions,
-): Promise<StreamResult> {
-  const { onProgress, timeout = 120000 } = opts
-
-  // Create abort controller for timeout
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeout)
-
-  let text = ''
-  let reasoning = ''
-  let streamError: string | undefined
-
-  try {
-    const stream = streamText({
-      model: config.model,
-      prompt,
-      abortSignal: controller.signal,
-      // AI SDK best practices
-      maxRetries: STREAM_CONFIG.maxRetries,
-      // Model-specific settings
-      maxOutputTokens: config.maxOutputTokens,
-      temperature: config.temperature,
-      // Smooth streaming for better progress display
-      experimental_transform: smoothStream(STREAM_CONFIG.smoothStream),
-      onError: ({ error }) => {
-        streamError = error instanceof Error ? error.message : String(error)
-      },
+        if (evt.usage)
+          usage = evt.usage
+        if (evt.cost != null)
+          cost = evt.cost
+      }
     })
 
-    // Use fullStream to capture both reasoning and text
-    for await (const part of stream.fullStream) {
-      if (part.type === 'reasoning-delta') {
-        // Reasoning/thinking content
-        const chunk = (part as any).delta ?? (part as any).reasoningDelta ?? ''
-        reasoning += chunk
-        onProgress?.({ chunk, type: 'reasoning', text, reasoning })
+    let stderr = ''
+    proc.stderr.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString()
+    })
+
+    proc.on('close', (code) => {
+      // Drain remaining buffer for metadata
+      if (buffer.trim()) {
+        const evt = parseLine(buffer)
+        if (evt.usage)
+          usage = evt.usage
+        if (evt.cost != null)
+          cost = evt.cost
       }
-      else if (part.type === 'text-delta') {
-        // Actual output text - AI SDK 5 uses 'text' not 'textDelta'
-        const chunk = (part as any).text ?? (part as any).textDelta ?? ''
-        text += chunk
-        onProgress?.({ chunk, type: 'text', text, reasoning })
+
+      // Read agent output from __SKILL.md
+      const optimized = existsSync(outputPath)
+        ? readFileSync(outputPath, 'utf-8').trim()
+        : ''
+
+      if (!optimized && code !== 0) {
+        resolve({ optimized: '', wasOptimized: false, error: stderr.trim() || `CLI exited with code ${code}` })
+        return
       }
-      else if (part.type === 'error') {
-        streamError = (part as any).error?.message ?? 'Stream error'
+
+      if (!noCache && optimized) {
+        setCache(prompt, model, optimized)
       }
-    }
 
-    clearTimeout(timeoutId)
+      const usageResult = usage
+        ? { inputTokens: usage.input, outputTokens: usage.output, totalTokens: usage.input + usage.output }
+        : undefined
 
-    // Get finish metadata (these await the stream completion)
-    let finishReason: string | undefined
-    let usage: { inputTokens: number, outputTokens: number, totalTokens: number } | undefined
-    try {
-      finishReason = await stream.finishReason
-      const rawUsage = await stream.usage
-      if (rawUsage?.inputTokens != null && rawUsage?.outputTokens != null) {
-        usage = {
-          inputTokens: rawUsage.inputTokens,
-          outputTokens: rawUsage.outputTokens,
-          totalTokens: rawUsage.totalTokens ?? (rawUsage.inputTokens + rawUsage.outputTokens),
-        }
-      }
-    }
-    catch {
-      // Ignore - metadata not available
-    }
+      resolve({
+        optimized,
+        wasOptimized: !!optimized,
+        finishReason: code === 0 ? 'stop' : 'error',
+        usage: usageResult,
+        cost,
+      })
+    })
 
-    if (streamError) {
-      return { text: '', reasoning: '', error: streamError }
-    }
-
-    // Check if we hit token limit
-    if (finishReason === 'length' && !text.trim()) {
-      return { text: '', reasoning, error: 'Output truncated (hit token limit)' }
-    }
-
-    if (!text.trim()) {
-      return { text: '', reasoning, error: 'Empty response from model' }
-    }
-
-    return { text, reasoning, finishReason, usage }
-  }
-  catch (err) {
-    clearTimeout(timeoutId)
-    if (err instanceof Error && err.name === 'AbortError') {
-      return { text: '', reasoning, error: `Timeout after ${timeout / 1000}s` }
-    }
-    const msg = err instanceof Error ? err.message : String(err)
-    return { text: '', reasoning, error: msg }
-  }
+    proc.on('error', (err) => {
+      resolve({ optimized: '', wasOptimized: false, error: err.message })
+    })
+  })
 }
 
-/**
- * Clean LLM output - extract content between markers, strip artifacts
- * Returns empty string if markers missing or outline-mode detected
- */
-function cleanOutput(text: string): string {
-  // Strip markdown code block wrappers
-  let cleaned = text.replace(/^```markdown\n?/m, '').replace(/\n?```$/m, '')
+// ── Helpers ──────────────────────────────────────────────────────────
 
-  // Strip <think>...</think> tags (DeepSeek style)
-  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '')
-
-  // Extract content between BEGIN/END markers
-  const beginMatch = cleaned.match(/<!--\s*BEGIN\s*-->/)
-  const endMatch = cleaned.match(/<!--\s*END\s*-->/)
-
-  if (beginMatch && endMatch) {
-    const startIdx = beginMatch.index! + beginMatch[0].length
-    const endIdx = cleaned.lastIndexOf(endMatch[0])
-    if (endIdx > startIdx) {
-      cleaned = cleaned.slice(startIdx, endIdx).trim()
-    }
-  }
-  else if (!beginMatch) {
-    // No BEGIN marker - strip any frontmatter LLM might have included (fallback)
-    cleaned = cleaned.replace(/^---[\s\S]*?---\n*/m, '')
-  }
-
-  // Detect outline-mode failures (LLM summarized instead of writing)
-  const outlinePatterns = [
-    /Would you like me to (?:write|create|generate)/i,
-    /The document is \*{0,2}\d+ lines\*{0,2}/i,
-    /\*\*\d+ (?:Pitfalls?|Best Practices?):\*\*[\t\v\f\r \xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]*\n\s*\d+\./i, // Numbered list without code
-    /^## Key Content\s*$/m,
-    /\*\*Additional sections:\*\*/i,
-    /focuses (?:on|exclusively on) (?:non-obvious|expert)/i,
-  ]
-
-  for (const pattern of outlinePatterns) {
-    if (pattern.test(cleaned)) {
-      return '' // Signal failure - will trigger "Empty response" error
-    }
-  }
-
-  // Strip leaked thinking at start
-  const contentStart = cleaned.search(/^\*\*PITFALL|^\*\*BEST PRACTICE|^```/m)
-  if (contentStart > 0) {
-    const prefix = cleaned.slice(0, contentStart)
-    if (/Let me|I'll|I will|Now |First,|Looking at|Examining|Perfect!|Here's|I've/i.test(prefix)) {
-      cleaned = cleaned.slice(contentStart)
-    }
-  }
-
-  return cleaned.trim()
+/** Shorten absolute paths for display: /home/.../.skilld/docs/guide.md → docs/guide.md */
+function shortenPath(p: string): string {
+  const refIdx = p.indexOf('.skilld/')
+  if (refIdx !== -1)
+    return p.slice(refIdx + '.skilld/'.length)
+  // Keep just filename for other paths
+  const parts = p.split('/')
+  return parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : p
 }

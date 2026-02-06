@@ -15,7 +15,7 @@ export interface RemoveOptions {
 export async function removeCommand(state: ProjectState, opts: RemoveOptions): Promise<void> {
   // Get skills from the appropriate scope
   const scope = opts.global ? 'global' : 'local'
-  const allSkills = [...iterateSkills({ scope, agents: [opts.agent] })]
+  const allSkills = [...iterateSkills({ scope })]
 
   // Get skills to choose from
   const skills = opts.packages

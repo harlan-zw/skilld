@@ -1,5 +1,6 @@
-import type { AgentType, OptimizeModel } from '../agent'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import type { AgentType, OptimizeModel, SkillSection } from '../agent'
+import type { ResolveStep } from '../sources'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
 import logUpdate from 'log-update'
@@ -15,42 +16,59 @@ import {
 } from '../agent'
 import {
   CACHE_DIR,
+  clearCache,
   ensureCacheDir,
   getCacheDir,
   getPackageDbPath,
+  getPkgKeyFiles,
   getShippedSkills,
   getVersionKey,
   hasShippedDocs,
   isCached,
-  linkIssues,
+  linkGithub,
   linkPkg,
   linkReferences,
   linkReleases,
   linkShippedSkill,
   listReferenceFiles,
+  readCachedDocs,
+  resolvePkgDir,
   writeToCache,
 } from '../cache'
-import { registerProject } from '../core/config'
+import { defaultFeatures, readConfig, registerProject } from '../core/config'
 import { writeLock } from '../core/lockfile'
+import { createIndex } from '../retriv'
 import {
   downloadLlmsDocs,
   fetchGitDocs,
   fetchLlmsTxt,
   fetchNpmPackage,
+  fetchPkgDist,
   fetchReadmeContent,
   fetchReleaseNotes,
   normalizeLlmsLinks,
   parseGitHubUrl,
   parseMarkdownLinks,
   readLocalDependencies,
+  resolveEntryFiles,
   resolveLocalPackageDocs,
   resolvePackageDocs,
-} from '../doc-resolver'
-import { createIndex } from '../retriv'
+  resolvePackageDocsWithAttempts,
+} from '../sources'
 
-import { selectModel } from './sync'
+import { ensureGitignore, selectModel, selectSkillSections } from './sync'
 
 type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'exploring' | 'thinking' | 'generating' | 'done' | 'error'
+
+const RESOLVE_STEP_LABELS: Record<ResolveStep, string> = {
+  'npm': 'npm registry',
+  'github-docs': 'GitHub docs',
+  'github-meta': 'GitHub meta',
+  'github-search': 'GitHub search',
+  'readme': 'README',
+  'llms.txt': 'llms.txt',
+  'local': 'node_modules',
+}
 
 interface PackageState {
   name: string
@@ -90,11 +108,13 @@ export interface ParallelSyncConfig {
   agent: AgentType
   model?: OptimizeModel
   yes?: boolean
+  force?: boolean
   concurrency?: number
 }
 
 export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<void> {
   const { packages, concurrency = 5 } = config
+  const agent = agents[config.agent]
   const states = new Map<string, PackageState>()
   const cwd = process.cwd()
 
@@ -134,13 +154,6 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     render()
   }
 
-  function updatePreview(pkg: string, content: string, isReasoning = false) {
-    const state = states.get(pkg)!
-    const words = content.split(/\s+/).filter(Boolean).length
-    state.streamPreview = isReasoning ? `${words}w thought` : `${words}w`
-    render()
-  }
-
   ensureCacheDir()
   render()
 
@@ -164,7 +177,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
       successfulPkgs.push(packages[i]!)
     }
     else if (r.status === 'rejected') {
-      const reason = r.reason instanceof Error ? r.reason.message : String(r.reason)
+      const err = r.reason
+      const reason = err instanceof Error ? `${err.message}\n${err.stack}` : String(err)
       errors.push({ pkg: packages[i]!, reason })
     }
   }
@@ -177,14 +191,14 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     }
   }
 
-  // Phase 2: Ask about LLM enhancement (skip if -y without model)
-  if (successfulPkgs.length > 0 && !(config.yes && !config.model)) {
-    const wantOptimize = config.model || await p.confirm({
-      message: 'Generate best practices with LLM?',
-      initialValue: true,
-    })
+  // Phase 2: Ask about LLM enhancement (skip if -y without model, or skipLlm config)
+  const globalConfig = readConfig()
+  if (successfulPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !config.model)) {
+    const { sections, customPrompt, cancelled } = config.model
+      ? { sections: ['best-practices', 'api'] as SkillSection[], customPrompt: undefined, cancelled: false }
+      : await selectSkillSections()
 
-    if (wantOptimize && !p.isCancel(wantOptimize)) {
+    if (!cancelled && sections.length > 0) {
       const model = config.model ?? await selectModel(false)
 
       if (model) {
@@ -196,7 +210,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
         const llmResults = await Promise.allSettled(
           successfulPkgs.map(pkg =>
-            limit(() => enhanceWithLLM(pkg, { ...config, model }, cwd, update, updatePreview)),
+            limit(() => enhanceWithLLM(pkg, { ...config, model }, cwd, update, sections, customPrompt)),
           ),
         )
 
@@ -208,11 +222,12 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     }
   }
 
+  await ensureGitignore(agent.skillsDir, cwd, config.global)
+
   p.outro(`Synced ${successfulPkgs.length}/${packages.length} packages`)
 }
 
 type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: string) => void
-type UpdatePreviewFn = (pkg: string, content: string, isReasoning?: boolean) => void
 
 /** Phase 1: Generate base skill (no LLM). Returns 'shipped' if shipped skill was linked. */
 async function syncBaseSkill(
@@ -221,12 +236,15 @@ async function syncBaseSkill(
   cwd: string,
   update: UpdateFn,
 ): Promise<'shipped' | 'synced'> {
-  update(packageName, 'resolving', 'Looking up...')
-
   const localDeps = await readLocalDependencies(cwd).catch(() => [])
   const localVersion = localDeps.find(d => d.name === packageName)?.version
 
-  let resolved = await resolvePackageDocs(packageName, { version: localVersion })
+  const { package: resolvedPkg, attempts } = await resolvePackageDocsWithAttempts(packageName, {
+    version: localVersion,
+    cwd,
+    onProgress: step => update(packageName, 'resolving', RESOLVE_STEP_LABELS[step]),
+  })
+  let resolved = resolvedPkg
 
   if (!resolved) {
     const pkgPath = join(cwd, 'package.json')
@@ -245,15 +263,31 @@ async function syncBaseSkill(
   }
 
   if (!resolved) {
-    update(packageName, 'error', 'Not found')
+    const npmAttempt = attempts.find(a => a.source === 'npm')
+    let reason: string
+    if (npmAttempt?.status === 'not-found') {
+      reason = npmAttempt.message || 'Not on npm'
+    }
+    else {
+      const failed = attempts.filter(a => a.status !== 'success')
+      const messages = failed.map(a => a.message || a.source).join('; ')
+      reason = messages || 'No docs found'
+    }
+    update(packageName, 'error', reason)
     throw new Error(`Could not find docs for: ${packageName}`)
   }
 
   const version = localVersion || resolved.version || 'latest'
   const versionKey = getVersionKey(version)
 
+  // Download npm dist if not in node_modules
+  if (!existsSync(join(cwd, 'node_modules', packageName))) {
+    update(packageName, 'downloading', 'Downloading dist...', versionKey)
+    await fetchPkgDist(packageName, version)
+  }
+
   // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
-  const shippedSkills = getShippedSkills(packageName, cwd)
+  const shippedSkills = getShippedSkills(packageName, cwd, version)
   if (shippedSkills.length > 0) {
     const agent = agents[config.agent]
     const baseDir = config.global
@@ -277,12 +311,20 @@ async function syncBaseSkill(
     return 'shipped'
   }
 
+  // Force: nuke cached references + search index so all existsSync guards re-fetch
+  if (config.force) {
+    clearCache(packageName, version)
+    const forcedDbPath = getPackageDbPath(packageName, version)
+    if (existsSync(forcedDbPath))
+      rmSync(forcedDbPath, { recursive: true, force: true })
+  }
+
   const useCache = isCached(packageName, version)
   if (useCache) {
     update(packageName, 'downloading', 'Using cache', versionKey)
   }
   else {
-    update(packageName, 'downloading', 'Fetching docs...', versionKey)
+    update(packageName, 'downloading', config.force ? 'Re-fetching docs...' : 'Fetching docs...', versionKey)
   }
 
   const agent = agents[config.agent]
@@ -304,12 +346,14 @@ async function syncBaseSkill(
     if (resolved.gitDocsUrl && resolved.repoUrl) {
       const gh = parseGitHubUrl(resolved.repoUrl)
       if (gh) {
+        update(packageName, 'downloading', 'Git docs...', versionKey)
         const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version, packageName)
         if (gitDocs && gitDocs.files.length > 0) {
-          update(packageName, 'downloading', `${gitDocs.files.length} docs @ ${gitDocs.ref}`, versionKey)
+          update(packageName, 'downloading', `0/${gitDocs.files.length} docs @ ${gitDocs.ref}`, versionKey)
 
           const BATCH_SIZE = 20
           const results: Array<{ file: string, content: string } | null> = []
+          let downloaded = 0
 
           for (let i = 0; i < gitDocs.files.length; i += BATCH_SIZE) {
             const batch = gitDocs.files.slice(i, i + BATCH_SIZE)
@@ -320,6 +364,8 @@ async function syncBaseSkill(
                 if (!res?.ok)
                   return null
                 const content = await res.text()
+                downloaded++
+                update(packageName, 'downloading', `${downloaded}/${gitDocs.files.length} docs @ ${gitDocs.ref}`, versionKey)
                 return { file, content }
               }),
             )
@@ -328,17 +374,18 @@ async function syncBaseSkill(
 
           for (const r of results) {
             if (r) {
-              cachedDocs.push({ path: r.file, content: r.content })
+              const cachePath = gitDocs.docsPrefix ? r.file.replace(gitDocs.docsPrefix, '') : r.file
+              cachedDocs.push({ path: cachePath, content: r.content })
               docsToIndex.push({
-                id: r.file,
+                id: cachePath,
                 content: r.content,
-                metadata: { package: packageName, source: r.file, type: 'doc' },
+                metadata: { package: packageName, source: cachePath, type: 'doc' },
               })
             }
           }
 
-          const downloaded = results.filter(Boolean).length
-          if (downloaded > 0) {
+          const downloadedCount = results.filter(Boolean).length
+          if (downloadedCount > 0) {
             docSource = `${resolved.repoUrl}/tree/${gitDocs.ref}/docs`
             docsType = 'docs'
           }
@@ -347,7 +394,7 @@ async function syncBaseSkill(
     }
 
     if (resolved.llmsUrl && cachedDocs.length === 0) {
-      update(packageName, 'downloading', 'llms.txt...', versionKey)
+      update(packageName, 'downloading', 'Fetching llms.txt...', versionKey)
       const llmsContent = await fetchLlmsTxt(resolved.llmsUrl)
       if (llmsContent) {
         docSource = resolved.llmsUrl!
@@ -355,13 +402,13 @@ async function syncBaseSkill(
         cachedDocs.push({ path: 'llms.txt', content: normalizeLlmsLinks(llmsContent.raw) })
 
         if (llmsContent.links.length > 0) {
-          update(packageName, 'downloading', `${llmsContent.links.length} linked docs...`, versionKey)
+          update(packageName, 'downloading', `0/${llmsContent.links.length} linked docs...`, versionKey)
           const baseUrl = resolved.docsUrl || new URL(resolved.llmsUrl).origin
           const docs = await downloadLlmsDocs(llmsContent, baseUrl)
 
           for (const doc of docs) {
             const localPath = doc.url.startsWith('/') ? doc.url.slice(1) : doc.url
-            const cachePath = `docs/${localPath}`
+            const cachePath = join('docs', ...localPath.split('/'))
             cachedDocs.push({ path: cachePath, content: doc.content })
 
             docsToIndex.push({
@@ -376,7 +423,7 @@ async function syncBaseSkill(
 
     // Fallback to README
     if (resolved.readmeUrl && cachedDocs.length === 0) {
-      update(packageName, 'downloading', 'README...', versionKey)
+      update(packageName, 'downloading', 'Fetching README...', versionKey)
       const content = await fetchReadmeContent(resolved.readmeUrl)
       if (content) {
         cachedDocs.push({ path: 'docs/README.md', content })
@@ -391,16 +438,6 @@ async function syncBaseSkill(
     // Write to global cache
     if (cachedDocs.length > 0) {
       writeToCache(packageName, version, cachedDocs)
-
-      if (docsToIndex.length > 0) {
-        const dbPath = getPackageDbPath(packageName, version)
-        await createIndex(docsToIndex, {
-          dbPath,
-          onProgress: (current, total) => {
-            update(packageName, 'embedding', `Indexing ${Math.round((current / total) * 100)}%`, versionKey)
-          },
-        })
-      }
     }
   }
   else {
@@ -412,65 +449,90 @@ async function syncBaseSkill(
     else if (existsSync(join(cacheDir, 'llms.txt'))) {
       docsType = 'llms.txt'
     }
-  }
 
-  // Fetch release notes
-  const releasesPath = join(getCacheDir(packageName, version), 'releases')
-  if (resolved.repoUrl && !existsSync(releasesPath)) {
-    const gh = parseGitHubUrl(resolved.repoUrl)
-    if (gh) {
-      update(packageName, 'downloading', 'Release notes...', versionKey)
-      const releaseDocs = await fetchReleaseNotes(gh.owner, gh.repo, version, resolved.gitRef)
-      if (releaseDocs.length > 0) {
-        writeToCache(packageName, version, releaseDocs)
-        const dbPath = getPackageDbPath(packageName, version)
-        const releaseDocsIndex = releaseDocs.map(doc => ({
+    // Load cached docs for indexing if db doesn't exist yet
+    const dbPath = getPackageDbPath(packageName, version)
+    if (!existsSync(dbPath)) {
+      const cached = readCachedDocs(packageName, version)
+      for (const doc of cached) {
+        docsToIndex.push({
           id: doc.path,
           content: doc.content,
-          metadata: { package: packageName, source: doc.path, type: 'release' },
-        }))
-        await createIndex(releaseDocsIndex, { dbPath })
+          metadata: { package: packageName, source: doc.path, type: 'doc' },
+        })
       }
     }
   }
 
-  // Create symlinks: pkg always, docs only if fetched externally and not just README
+  const features = readConfig().features ?? defaultFeatures
+
+  // Fetch release notes
+  const releasesPath = join(getCacheDir(packageName, version), 'releases')
+  if (features.releases && resolved.repoUrl && !existsSync(releasesPath)) {
+    const gh = parseGitHubUrl(resolved.repoUrl)
+    if (gh) {
+      update(packageName, 'downloading', 'Fetching releases...', versionKey)
+      const releaseDocs = await fetchReleaseNotes(gh.owner, gh.repo, version, resolved.gitRef, packageName)
+      if (releaseDocs.length > 0) {
+        writeToCache(packageName, version, releaseDocs)
+        for (const doc of releaseDocs) {
+          docsToIndex.push({
+            id: doc.path,
+            content: doc.content,
+            metadata: { package: packageName, source: doc.path, type: 'release' },
+          })
+        }
+      }
+    }
+  }
+
+  // Create symlinks
+  update(packageName, 'downloading', 'Linking references...', versionKey)
   try {
-    linkPkg(skillDir, packageName, cwd)
-    if (!hasShippedDocs(packageName, cwd) && docsType !== 'readme') {
+    linkPkg(skillDir, packageName, cwd, version)
+    if (!hasShippedDocs(packageName, cwd, version) && docsType !== 'readme') {
       linkReferences(skillDir, packageName, version)
     }
-    linkIssues(skillDir, packageName, version)
+    linkGithub(skillDir, packageName, version)
     linkReleases(skillDir, packageName, version)
   }
   catch {}
 
-  // Index from cache if needed
-  const dbPath = getPackageDbPath(packageName, version)
-  if (!existsSync(dbPath)) {
-    const { readCachedDocs } = await import('../cache/storage')
-    const cachedDocs = readCachedDocs(packageName, version)
-
-    if (cachedDocs.length > 0) {
-      const docsToIndex = cachedDocs.map(doc => ({
-        id: doc.path,
-        content: doc.content,
-        metadata: { package: packageName, source: doc.path, type: 'doc' },
-      }))
-      await createIndex(docsToIndex, {
-        dbPath,
-        onProgress: (current, total) => {
-          update(packageName, 'embedding', `Indexing ${current}/${total}`, versionKey)
-        },
+  // Collect entry files for indexing
+  update(packageName, 'embedding', 'Scanning exports...', versionKey)
+  const pkgDir = resolvePkgDir(packageName, cwd, version)
+  const entryFiles = features.search && pkgDir ? await resolveEntryFiles(pkgDir) : []
+  if (entryFiles.length > 0) {
+    for (const e of entryFiles) {
+      docsToIndex.push({
+        id: e.path,
+        content: e.content,
+        metadata: { package: packageName, source: `pkg/${e.path}`, type: e.type },
       })
     }
   }
 
+  // Single batch index — one model init, one write
+  const dbPath = getPackageDbPath(packageName, version)
+  if (docsToIndex.length > 0) {
+    update(packageName, 'embedding', `Indexing ${docsToIndex.length} documents...`, versionKey)
+    await createIndex(docsToIndex, {
+      dbPath,
+      onProgress: (current, total, doc) => {
+        const type = doc?.type === 'source' || doc?.type === 'types' ? 'code' : 'doc'
+        const file = doc?.id ? doc.id.split('/').pop() : ''
+        const pct = Math.round((current / total) * 100)
+        update(packageName, 'embedding', `Indexing ${type} ${file}... ${current}/${total} ${pct}%`, versionKey)
+      },
+    })
+  }
+
   const hasReleases = existsSync(releasesPath)
-  const hasChangelog = existsSync(join(cwd, 'node_modules', packageName, 'CHANGELOG.md'))
+  const hasChangelog = pkgDir ? (['CHANGELOG.md', 'changelog.md'].find(f => existsSync(join(pkgDir, f))) || false) : false
 
   const relatedSkills = await findRelatedSkills(packageName, baseDir)
-  const shippedDocs = hasShippedDocs(packageName, cwd)
+  const shippedDocs = hasShippedDocs(packageName, cwd, version)
+  const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
 
   // Write base SKILL.md
   const skillMd = generateSkillMd({
@@ -478,12 +540,15 @@ async function syncBaseSkill(
     version,
     releasedAt: resolved.releasedAt,
     description: resolved.description,
+    dependencies: resolved.dependencies,
+    distTags: resolved.distTags,
     relatedSkills,
-    hasIssues: false,
+    hasGithub: false,
     hasReleases,
     hasChangelog,
     docsType,
     hasShippedDocs: shippedDocs,
+    pkgFiles,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
@@ -499,7 +564,7 @@ async function syncBaseSkill(
     registerProject(cwd)
   }
 
-  update(packageName, 'done', 'Base skill', versionKey)
+  update(packageName, 'done', 'Skill ready', versionKey)
   return 'synced'
 }
 
@@ -509,7 +574,8 @@ async function enhanceWithLLM(
   config: ParallelSyncConfig & { model: OptimizeModel },
   cwd: string,
   update: UpdateFn,
-  updatePreview: UpdatePreviewFn,
+  sections?: SkillSection[],
+  customPrompt?: string,
 ): Promise<void> {
   const localDeps = await readLocalDependencies(cwd).catch(() => [])
   const localVersion = localDeps.find(d => d.name === packageName)?.version
@@ -527,7 +593,6 @@ async function enhanceWithLLM(
 
   const skillDir = join(baseDir, sanitizeName(packageName))
   const cacheDir = getCacheDir(packageName, version)
-  const dbPath = getPackageDbPath(packageName, version)
 
   // Load docs content
   let docsContent: string | null = null
@@ -606,23 +671,25 @@ async function enhanceWithLLM(
     }
   }
 
-  const issuesPath = join(cacheDir, 'issues')
-  const hasIssues = existsSync(issuesPath)
+  const githubPath = join(cacheDir, 'github')
+  const hasGithub = existsSync(githubPath)
   const hasReleases = existsSync(join(cacheDir, 'releases'))
-  const hasChangelog = existsSync(join(cwd, 'node_modules', packageName, 'CHANGELOG.md'))
+  const hasChangelog = ['CHANGELOG.md', 'changelog.md'].find(f => existsSync(join(cwd, 'node_modules', packageName, f))) || false
 
   const docFiles = listReferenceFiles(skillDir)
   update(packageName, 'generating', config.model, versionKey)
   const { optimized, wasOptimized, error } = await optimizeDocs({
     packageName,
     skillDir,
-    dbPath,
     model: config.model,
     version,
-    hasIssues,
+    hasGithub,
     hasReleases,
     hasChangelog,
     docFiles,
+    noCache: config.force,
+    sections,
+    customPrompt,
     onProgress: (progress) => {
       const isReasoning = progress.type === 'reasoning'
       const status = isReasoning ? 'exploring' : 'generating'
@@ -638,19 +705,23 @@ async function enhanceWithLLM(
 
   if (wasOptimized) {
     const relatedSkills = await findRelatedSkills(packageName, baseDir)
-    const shippedDocs = hasShippedDocs(packageName, cwd)
+    const shippedDocs = hasShippedDocs(packageName, cwd, version)
+    const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
     const body = cleanSkillMd(optimized)
     const skillMd = generateSkillMd({
       name: packageName,
       version,
       releasedAt: resolved.releasedAt,
+      dependencies: resolved.dependencies,
+      distTags: resolved.distTags,
       body,
       relatedSkills,
-      hasIssues,
+      hasGithub,
       hasReleases,
       hasChangelog,
       docsType,
       hasShippedDocs: shippedDocs,
+      pkgFiles,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }

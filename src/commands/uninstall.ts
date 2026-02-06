@@ -221,9 +221,11 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
     p.log.success(`Removed ${prefix}: ${formatGroup(items)}`)
   }
 
-  // Unregister projects from config
-  for (const proj of projectsToUnregister) {
-    unregisterProject(proj)
+  // Unregister projects from config (skip if cache dir was removed — config is gone)
+  if (scope !== 'all') {
+    for (const proj of projectsToUnregister) {
+      unregisterProject(proj)
+    }
   }
 
   p.outro('skilld uninstalled')

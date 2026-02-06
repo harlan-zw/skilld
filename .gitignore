@@ -12,3 +12,6 @@ coverage
 .skilld-temp
 # Skilld references symlinks (recreated by `skilld install`)
 .claude/skills/*/references
+
+# Skilld references (recreated by `skilld install`)
+.skilld

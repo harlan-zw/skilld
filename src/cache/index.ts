@@ -12,10 +12,11 @@ export {
   clearAllCache,
   clearCache,
   ensureCacheDir,
+  getPkgKeyFiles,
   getShippedSkills,
   hasShippedDocs,
   isCached,
-  linkIssues,
+  linkGithub,
   linkPkg,
   linkReferences,
   linkReleases,
@@ -23,6 +24,7 @@ export {
   listCached,
   listReferenceFiles,
   readCachedDocs,
+  resolvePkgDir,
   writeToCache,
 } from './storage'
 

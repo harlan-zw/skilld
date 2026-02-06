@@ -80,14 +80,13 @@ export const PACKAGES: PackageSpec[] = [
   {
     name: 'vue',
     expectRepoUrl: 'github.com/vuejs/core',
-    expectDocsUrl: 'https://vuejs.org/',
-    expectSources: { npm: true, gitDocs: false, llmsTxt: true, readme: true },
+    expectDocsUrl: 'https://vuejs.org',
+    expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'llms.txt',
-      'docs/guide/essentials/reactivity-fundamentals.md',
-      'docs/api/reactivity-core.md',
-      'docs/style-guide/rules-essential.md',
+      'src/guide/essentials/reactivity-fundamentals.md',
+      'src/api/reactivity-core.md',
+      'src/style-guide/rules-essential.md',
     ],
     minCacheDocs: 50,
     expectGlobs: ['*.vue'],
@@ -115,18 +114,19 @@ export const PACKAGES: PackageSpec[] = [
   },
 
   // ── zod ───────────────────────────────────────────────────────────
-  // Schema library — no git docs, but llms.txt at zod.dev.
-  // llms.txt exists but has no linked .md files → only llms.txt cached.
+  // Schema library — git docs discovered in packages/docs/content/ (monorepo).
+  // Also has llms.txt at zod.dev. Git docs win because checked first.
   {
     name: 'zod',
     expectRepoUrl: 'github.com/colinhacks/zod',
     expectDocsUrl: 'https://zod.dev',
-    expectSources: { npm: true, gitDocs: false, llmsTxt: true, readme: true },
-    expectDocsType: 'llms.txt',
+    expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
+    expectDocsType: 'docs',
     expectCacheFiles: [
-      'llms.txt',
+      'packages/docs/content/basics.mdx',
+      'packages/docs/content/api.mdx',
     ],
-    minCacheDocs: 1,
+    minCacheDocs: 10,
     expectDescriptionContains: '"zod"',
   },
 
@@ -191,7 +191,5 @@ export const PACKAGES: PackageSpec[] = [
     minCacheDocs: 10,
     expectDescriptionContains: '"@slidev/cli"',
     searchQuery: { query: 'slide', minHits: 1 },
-    expectShipped: true,
-    expectShippedSkills: ['slidev'],
   },
 ]

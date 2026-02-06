@@ -2,9 +2,9 @@
 
 [![npm version](https://img.shields.io/npm/v/skilld?color=yellow)](https://npmjs.com/package/skilld)
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
-[![license](https://img.shields.io/github/license/harlan-zw/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE.md)
+[![license](https://img.shields.io/github/license/harlan-zw/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE)
 
-> Skilld gives your AI agent skill knowledge on your NPM dependencies gathered from versioned docs, source code and github issues.
+> Skilld gives your AI agent skills for your npm dependencies, generated from versioned docs, dist files and GitHub data.
 
 ## Why?
 
@@ -34,7 +34,7 @@ Compatible with [skills-npm](https://github.com/antfu/skills-npm)—if a package
 
 ## Features
 
-- 🤖 **Agent-powered** - Uses your existing LLM to generate SKILLS.md for your key dependencies; works with any coding agent
+- 🤖 **Agent-powered** - Uses your existing LLM to generate SKILL.md for your key dependencies; works with any coding agent
 - 🎯 **Best practices first** - Token-optimized output focused on non-obvious patterns and conventions, not generic knowledge
 - 🔗 **Context-aware** - Generation adapts to your preferences and accepts custom prompts
 - ✏️ **You own it** - Skills live in your project, easy to customize; sync new package versions with zero config
@@ -53,7 +53,7 @@ Add to `package.json` to keep skills fresh on install:
 ```json
 {
   "scripts": {
-    "prepare": "skilld"
+    "prepare": "skilld --prepare -b"
   }
 }
 ```
@@ -63,64 +63,54 @@ skilld fast-paths unchanged versions—only regenerates when minor/major version
 ## CLI Usage
 
 ```bash
-# Auto-discover from package.json dependencies
+# Interactive mode — auto-discover from package.json
 skilld
 
-# Generate skill from specific package name
+# Sync specific package(s)
 skilld vueuse
-skilld @nuxt/kit
+skilld vue,nuxt,pinia
 
-# Generate skill from URL
-skilld https://nuxt.com/docs
+# Search docs across installed skills
+skilld nuxt -q "useFetch options"
 
-# Custom output directory
-skilld -o ./my-skills
+# Target a specific agent
+skilld vueuse --agent cursor
 
-# Concurrent processing (default: 3)
-skilld -c 5
+# Install globally to ~/.claude/skills
+skilld vueuse --global
 
-# Skip llms.txt and always crawl
-skilld --crawl
+# Skip prompts
+skilld vueuse --yes
 
-# Limit pages fetched per package
-skilld -m 50
+# Check skill status
+skilld status
+
+# Manage settings
+skilld config
 ```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `skilld` | Interactive wizard (first run) or status menu (existing skills) |
+| `skilld <pkg>` | Sync specific package(s), comma-separated |
+| `skilld status` | Show skill status across agents |
+| `skilld config` | Configure agent, model, preferences |
+| `skilld install` | Restore references from lockfile |
+| `skilld remove` | Remove installed skills |
+| `skilld uninstall` | Remove all skilld data |
 
 ### CLI Options
 
 | Option | Alias | Default | Description |
 |--------|-------|---------|-------------|
-| `--output` | `-o` | `.skilld` | Output directory |
-| `--maxPages` | `-m` | `100` | Max pages to fetch |
-| `--chunkSize` | | `1000` | Chunk size in characters |
-| `--model` | | `Xenova/bge-small-en-v1.5` | Embedding model |
-| `--crawl` | | `false` | Skip llms.txt, always crawl |
-| `--concurrency` | `-c` | `3` | Concurrent package processing |
-
-## Programmatic Usage
-
-```ts
-import { generateSkill } from 'skilld'
-
-const result = await generateSkill({
-  url: 'https://nuxt.com/docs',
-  outputDir: '.skilld',
-  maxPages: 100,
-  chunkSize: 1000,
-  chunkOverlap: 200,
-}, ({ url, count, phase }) => {
-  console.log(`[${phase}] ${count}: ${url}`)
-})
-
-console.log(result)
-// {
-//   siteName: 'nuxt.com',
-//   skillPath: '.skilld/nuxt.com/SKILL.md',
-//   referencesDir: '.skilld/nuxt.com/references',
-//   dbPath: '.skilld/nuxt.com/search.db',
-//   chunkCount: 847
-// }
-```
+| `--query` | `-q` | | Search docs: `skilld nuxt -q "useFetch"` |
+| `--global` | `-g` | `false` | Install globally to `~/<agent>/skills` |
+| `--agent` | `-a` | auto-detect | Target specific agent (claude-code, cursor, etc.) |
+| `--yes` | `-y` | `false` | Skip prompts, use defaults |
+| `--prepare` | | `false` | Non-interactive sync for prepare hook (outdated only) |
+| `--background` | `-b` | `false` | Run `--prepare` in a detached background process |
 
 ## How It Works
 
@@ -129,8 +119,8 @@ Package name → Resolve docs → Fetch → Generate → Install
 ```
 
 1. **Resolve** - Looks up npm registry for homepage, repository URL
-2. **Fetch** - Tries llms.txt → docs site → GitHub README (via ungh)
-3. **Generate** - Your agent creates SKILLS.md from fetched docs
+2. **Fetch** - Tries versioned git docs → GitHub README → llms.txt (via ungh)
+3. **Generate** - Your agent creates SKILL.md from fetched docs
 4. **Cache** - References stored in `~/.skilld/` (shared across projects)
 5. **Install** - Writes SKILL.md to `./<agent>/skills/<package>/` (e.g. `.claude/skills/vueuse/`)
 
@@ -162,38 +152,22 @@ description: Collection of Vue Composition Utilities
 
 ## Package.json Auto-Discovery
 
-Run `skilld` without arguments to generate skills for all dependencies:
+Run `skilld` without arguments to interactively generate skills for your dependencies:
 
 ```bash
 cd my-project
 pnpx skilld
 ```
 
-This will:
-1. Read `package.json` dependencies and devDependencies
-2. Resolve documentation URL for each package (llms.txt → homepage → GitHub README)
-3. Generate searchable skills in `.skilld/`
+On first run, skilld launches a wizard to configure your agent and model, then lets you choose packages from:
+- **Source imports** — scans your code for actually used packages
+- **package.json** — all dependencies and devDependencies
+- **Manual entry** — comma-separated package names
 
 Skips `@types/*` and common dev tools (typescript, eslint, vitest, etc).
 
-## NPM Package Skills
-
-Generate skills for specific packages by name or URL:
-
-```bash
-# By package name (auto-resolves docs)
-skilld vueuse
-skilld @vueuse/core
-skilld defu
-
-# By URL
-skilld https://vueuse.org
-skilld https://nuxt.com  # Uses /llms.txt automatically
-```
-
 ## Roadmap
 
-- [ ] **Global search DB** - Single `~/.skilld/search.db` with hybrid BM25 + semantic search via [retriv](https://github.com/harlan-zw/retriv); query with `skilld -q "useFoo()"` scoped to your installed versions
 - [ ] **Team sync** - SKILL.md files commit with version frontmatter; `skilld sync` hydrates references from global cache
 - [ ] **Community skills repo** - Pull pre-generated skills from `skilld-community/skills` before generating; `skilld --share` to submit PRs
 - [ ] **Migration docs** - Generate upgrade guides when re-running after major version bumps
@@ -225,4 +199,4 @@ Package authors can ship skills alongside their code. skilld detects and links t
 
 ## License
 
-Licensed under the [MIT license](https://github.com/harlan-zw/skilld/blob/main/LICENSE.md).
+Licensed under the [MIT license](https://github.com/harlan-zw/skilld/blob/main/LICENSE).

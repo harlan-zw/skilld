@@ -23,26 +23,6 @@ export {
 } from './cache/index'
 export type { CacheConfig, CachedDoc, CachedPackage } from './cache/index'
 
-// Doc resolver
-export {
-  downloadLlmsDocs,
-  fetchLlmsTxt,
-  fetchNpmPackage,
-  fetchReadmeContent,
-  normalizeLlmsLinks,
-  parseMarkdownLinks,
-  readLocalDependencies,
-  resolvePackageDocs,
-} from './doc-resolver'
-export type {
-  FetchedDoc,
-  LlmsContent,
-  LlmsLink,
-  LocalDependency,
-  NpmPackageInfo,
-  ResolvedPackage,
-} from './doc-resolver'
-
 // Search
 export {
   createIndex,
@@ -57,3 +37,23 @@ export type {
   SearchResult,
   SearchSnippet,
 } from './retriv'
+
+// Doc resolver
+export {
+  downloadLlmsDocs,
+  fetchLlmsTxt,
+  fetchNpmPackage,
+  fetchReadmeContent,
+  normalizeLlmsLinks,
+  parseMarkdownLinks,
+  readLocalDependencies,
+  resolvePackageDocs,
+} from './sources'
+export type {
+  FetchedDoc,
+  LlmsContent,
+  LlmsLink,
+  LocalDependency,
+  NpmPackageInfo,
+  ResolvedPackage,
+} from './sources'

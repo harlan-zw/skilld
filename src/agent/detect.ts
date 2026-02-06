@@ -18,10 +18,10 @@ export function detectInstalledAgents(): AgentType[] {
 }
 
 /**
- * Detect which agent is currently running this command
- * Returns the active agent based on environment variables and context
+ * Detect the target agent (where skills are installed) from env vars and cwd.
+ * This is NOT the generator LLM — it determines the skills directory.
  */
-export function detectCurrentAgent(): AgentType | null {
+export function detectTargetAgent(): AgentType | null {
   // Check environment variables set by agents
   if (process.env.CLAUDE_CODE || process.env.CLAUDE_CONFIG_DIR) {
     return 'claude-code'
@@ -57,19 +57,45 @@ export function detectCurrentAgent(): AgentType | null {
     return 'roo'
   }
 
-  // Check for project-level agent config directories
+  // Check for project-level agent config directories and files
+  // Priority order matters — first match wins
   const cwd = process.cwd()
-  if (existsSync(join(cwd, '.claude'))) {
+
+  // Claude Code
+  if (existsSync(join(cwd, '.claude')) || existsSync(join(cwd, 'CLAUDE.md'))) {
     return 'claude-code'
   }
-  if (existsSync(join(cwd, '.cursor'))) {
+  // Cursor
+  if (existsSync(join(cwd, '.cursor')) || existsSync(join(cwd, '.cursorrules'))) {
     return 'cursor'
   }
-  if (existsSync(join(cwd, '.windsurf'))) {
+  // Windsurf
+  if (existsSync(join(cwd, '.windsurf')) || existsSync(join(cwd, '.windsurfrules'))) {
     return 'windsurf'
   }
+  // Cline
   if (existsSync(join(cwd, '.cline'))) {
     return 'cline'
+  }
+  // Codex
+  if (existsSync(join(cwd, '.codex'))) {
+    return 'codex'
+  }
+  // GitHub Copilot
+  if (existsSync(join(cwd, '.github', 'copilot-instructions.md'))) {
+    return 'github-copilot'
+  }
+  // Gemini CLI
+  if (existsSync(join(cwd, '.gemini')) || existsSync(join(cwd, 'AGENTS.md'))) {
+    return 'gemini-cli'
+  }
+  // Goose
+  if (existsSync(join(cwd, '.goose'))) {
+    return 'goose'
+  }
+  // Roo Code
+  if (existsSync(join(cwd, '.roo'))) {
+    return 'roo'
   }
 
   return null

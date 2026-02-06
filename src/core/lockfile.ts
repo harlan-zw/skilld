@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 export interface SkillInfo {
@@ -101,7 +101,6 @@ export function removeLockEntry(skillsDir: string, skillName: string): void {
 
   if (Object.keys(lock.skills).length === 0) {
     // Remove empty lock file
-    const { unlinkSync } = require('node:fs')
     unlinkSync(lockPath)
     return
   }

@@ -57,7 +57,7 @@ export function installSkillForAgents(
 
     // Create directory and write files
     mkdirSync(skillDir, { recursive: true })
-    writeFileSync(join(skillDir, 'SKILL.md'), skillContent)
+    writeFileSync(join(skillDir, '_SKILL.md'), skillContent)
 
     // Write additional files
     if (options.files) {

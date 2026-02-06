@@ -1,3 +1,10 @@
+export interface ChunkEntity {
+  name: string
+  type: string
+  signature?: string
+  isPartial?: boolean
+}
+
 export interface Document {
   id: string
   content: string
@@ -13,8 +20,8 @@ export interface IndexConfig {
   dbPath: string
   model?: string
   chunking?: ChunkingOptions
-  /** Progress callback (current, total) */
-  onProgress?: (current: number, total: number) => void
+  /** Progress callback (current, total, currentDoc) */
+  onProgress?: (current: number, total: number, doc?: { id: string, type?: string }) => void
 }
 
 export interface SearchResult {
@@ -23,6 +30,10 @@ export interface SearchResult {
   score: number
   metadata: Record<string, any>
   highlights: string[]
+  /** Line range from chunk [start, end] */
+  lineRange?: [number, number]
+  entities?: ChunkEntity[]
+  scope?: ChunkEntity[]
 }
 
 export type FilterOperator
@@ -61,4 +72,8 @@ export interface SearchSnippet {
   score: number
   /** Matched query terms, ordered by BM25 score */
   highlights: string[]
+  /** Entities defined in this chunk */
+  entities?: ChunkEntity[]
+  /** Containing scope chain */
+  scope?: ChunkEntity[]
 }

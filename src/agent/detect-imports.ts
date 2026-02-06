@@ -6,10 +6,12 @@
 import { readFile } from 'node:fs/promises'
 import { globby } from 'globby'
 import { findDynamicImports, findStaticImports } from 'mlly'
+import { detectPresetPackages } from './detect-presets'
 
 export interface PackageUsage {
   name: string
   count: number
+  source?: 'import' | 'preset'
 }
 
 export interface DetectResult {
@@ -67,9 +69,17 @@ export async function detectImportedPackages(cwd: string = process.cwd()): Promi
     }))
 
     // Sort by usage count (descending), then alphabetically
-    const packages = [...counts.entries()]
-      .map(([name, count]) => ({ name, count }))
+    const packages: PackageUsage[] = [...counts.entries()]
+      .map(([name, count]) => ({ name, count, source: 'import' as const }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+
+    // Merge preset-detected packages (imports take priority)
+    const presets = await detectPresetPackages(cwd)
+    const importNames = new Set(packages.map(p => p.name))
+    for (const preset of presets) {
+      if (!importNames.has(preset.name))
+        packages.push(preset)
+    }
 
     return { packages }
   }

@@ -1,0 +1,43 @@
+skills:
+  retriv:
+    packageName: retriv
+    version: 0.8.3
+    source: 'ungh://harlan-zw/retriv'
+    syncedAt: 2026-02-06
+    generator: skilld
+  clack-prompts:
+    packageName: '@clack/prompts'
+    version: 1.0.0
+    source: 'ungh://bombshell-dev/clack/packages/prompts'
+    syncedAt: 2026-02-06
+    generator: skilld
+  oxc-parser:
+    packageName: oxc-parser
+    version: 0.112.0
+    source: 'ungh://oxc-project/oxc/napi/parser'
+    syncedAt: 2026-02-06
+    generator: skilld
+  mlly:
+    packageName: mlly
+    version: 1.8.0
+    source: 'ungh://unjs/mlly'
+    syncedAt: 2026-02-06
+    generator: skilld
+  p-limit:
+    packageName: p-limit
+    version: 7.3.0
+    source: 'https://raw.githubusercontent.com/sindresorhus/p-limit/main/readme.md'
+    syncedAt: 2026-02-06
+    generator: skilld
+  antfu-eslint-config:
+    packageName: '@antfu/eslint-config'
+    version: 7.2.0
+    source: 'ungh://antfu/eslint-config'
+    syncedAt: 2026-02-06
+    generator: skilld
+  obuild:
+    packageName: obuild
+    version: 0.4.26
+    source: 'ungh://unjs/obuild'
+    syncedAt: 2026-02-06
+    generator: skilld

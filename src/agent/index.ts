@@ -3,12 +3,12 @@
  */
 
 // Detection
-export { detectCurrentAgent, detectInstalledAgents, getAgentVersion } from './detect'
+export { detectInstalledAgents, detectTargetAgent, getAgentVersion } from './detect'
 // Import detection
 export { detectImportedPackages } from './detect-imports'
 // Installation
 export { installSkillForAgents, sanitizeName } from './install'
-export type { ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './llm'
+export type { ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, SkillSection, StreamProgress } from './llm'
 
 // LLM optimization
 export {
