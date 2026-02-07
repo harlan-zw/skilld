@@ -103,6 +103,14 @@ export function getModelName(id: OptimizeModel): string {
   return CLI_MODELS[id]?.name ?? id
 }
 
+export function getModelLabel(id: OptimizeModel): string {
+  const config = CLI_MODELS[id]
+  if (!config)
+    return id
+  const agentName = agents[config.agentId]?.displayName ?? config.cli
+  return `${agentName} · ${config.name}`
+}
+
 export async function getAvailableModels(): Promise<ModelInfo[]> {
   const { promisify } = await import('node:util')
   const execAsync = promisify(exec)
@@ -356,7 +364,7 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
   // Write prompt for debugging
   writeFileSync(join(skillDir, 'PROMPT.md'), prompt)
 
-  const outputPath = join(skillDir, '__SKILL.md')
+  const outputPath = join(skillDir, '_SKILL.md')
 
   return new Promise<OptimizeResult>((resolve) => {
     const proc = spawn(cli, args, {
@@ -413,7 +421,7 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
           cost = evt.cost
       }
 
-      // Read agent output from __SKILL.md
+      // Read agent output from _SKILL.md
       const optimized = existsSync(outputPath)
         ? readFileSync(outputPath, 'utf-8').trim()
         : ''

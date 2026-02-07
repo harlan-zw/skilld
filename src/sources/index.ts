@@ -52,6 +52,7 @@ export {
   parseVersionSpecifier,
   readLocalDependencies,
   readLocalPackageInfo,
+  resolveInstalledVersion,
   resolveLocalPackageDocs,
   resolvePackageDocs,
   resolvePackageDocsWithAttempts,

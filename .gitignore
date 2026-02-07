@@ -21,3 +21,6 @@ coverage
 
 # Skilld references (recreated by `skilld install`)
 .skilld
+
+# E2E test artifacts
+.artifacts

@@ -1,12 +1,12 @@
 ---
 name: clack-prompts-skilld
 description: Load skill when using anything from the package "@clack/prompts".
-version: "1.0.0"
+version: "catalog:deps"
 ---
 
 # @clack/prompts
 
-**Version:** 1.0.0 (1 weeks ago)
+**Version:** catalog:deps (1 weeks ago)
 **Deps:** picocolors@^1.0.0, sisteransi@^1.0.5, @clack/core@1.0.0
 **Tags:** latest: 1.0.0 (1 weeks ago), alpha: 1.0.0-alpha.10 (1 weeks ago)
 

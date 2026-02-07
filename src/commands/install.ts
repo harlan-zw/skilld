@@ -1,28 +1,35 @@
 /**
- * Install command - restore .skilld/ from lockfile without regenerating SKILL.md
+ * Install command - restore .skilld/ and SKILL.md from lockfile
  *
  * After cloning a repo, the .skilld/ symlinks are missing (gitignored).
+ * If SKILL.md was deleted, a base version is regenerated from local metadata.
  * This command recreates them from the lockfile:
  *   .claude/skills/<skill>/.skilld/pkg -> node_modules/<pkg> (always)
  *   .claude/skills/<skill>/.skilld/docs -> ~/.skilld/references/<pkg>@<version>/docs (if external)
+ *   .claude/skills/<skill>/SKILL.md -> regenerated from package.json + cache state
  */
 
-import type { AgentType } from '../agent'
+import type { AgentType, SkillSection } from '../agent'
 import type { SkillInfo } from '../core/lockfile'
-import { existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, unlinkSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
-import { agents } from '../agent'
+import { agents, getModelLabel, optimizeDocs } from '../agent'
+import { generateSkillMd } from '../agent/prompts/skill'
 import {
+  hasShippedDocs as checkShippedDocs,
   ensureCacheDir,
   getCacheDir,
   getPackageDbPath,
+  getPkgKeyFiles,
   getShippedSkills,
   isCached,
   linkShippedSkill,
+  listReferenceFiles,
   resolvePkgDir,
   writeToCache,
 } from '../cache'
+import { readConfig } from '../core/config'
 import { readLock } from '../core/lockfile'
 import { createIndex } from '../retriv'
 import {
@@ -35,6 +42,7 @@ import {
   resolveEntryFiles,
   resolvePackageDocs,
 } from '../sources'
+import { cleanSkillMd, selectModel, selectSkillSections } from './sync'
 
 export interface InstallOptions {
   global: boolean
@@ -89,12 +97,15 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   }
 
   if (toRestore.length === 0) {
-    p.log.success('All references already linked')
+    p.log.success('All up to date')
     return
   }
 
   p.log.info(`Restoring ${toRestore.length} references`)
   ensureCacheDir()
+
+  const allSkillNames = skills.map(([, info]) => info.packageName || '').filter(Boolean)
+  const regenerated: Array<{ name: string, pkgName: string, version: string, skillDir: string }> = []
 
   for (const { name, info } of toRestore) {
     const version = info.version!
@@ -147,6 +158,8 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         unlinkSync(releasesLink)
       if (existsSync(cachedReleases))
         symlinkSync(cachedReleases, releasesLink, 'junction')
+      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source))
+        regenerated.push({ name, pkgName, version, skillDir })
       spin.stop(`Linked ${name}`)
       continue
     }
@@ -251,10 +264,27 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         })), { dbPath: getPackageDbPath(pkgName, version) })
       }
 
+      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source))
+        regenerated.push({ name, pkgName, version, skillDir })
       spin.stop(`Downloaded and linked ${name}`)
     }
     else {
       spin.stop(`No docs found for ${name}`)
+    }
+  }
+
+  // Offer LLM enhancement for regenerated SKILL.md files
+  if (regenerated.length > 0 && !readConfig().skipLlm) {
+    const names = regenerated.map(r => r.name).join(', ')
+    const { sections, customPrompt, cancelled } = await selectSkillSections(`Enhance SKILL.md for ${names}`)
+    if (!cancelled && sections.length > 0) {
+      const model = await selectModel(false)
+      if (model) {
+        p.log.step(getModelLabel(model))
+        for (const { pkgName, version, skillDir } of regenerated) {
+          await enhanceRegenerated(pkgName, version, skillDir, model, sections, customPrompt)
+        }
+      }
     }
   }
 
@@ -317,4 +347,141 @@ function pkgHasShippedDocs(name: string, cwd: string, version?: string): boolean
       return true
   }
   return false
+}
+
+/** Run LLM enhancement on a regenerated SKILL.md */
+async function enhanceRegenerated(
+  pkgName: string,
+  version: string,
+  skillDir: string,
+  model: Parameters<typeof optimizeDocs>[0]['model'],
+  sections: SkillSection[],
+  customPrompt?: string,
+): Promise<void> {
+  const llmSpin = p.spinner()
+  llmSpin.start(`Agent exploring ${pkgName}`)
+
+  const docFiles = listReferenceFiles(skillDir)
+  const globalCachePath = getCacheDir(pkgName, version)
+  const hasGithub = existsSync(join(globalCachePath, 'github'))
+  const hasReleases = existsSync(join(globalCachePath, 'releases'))
+
+  const { optimized, wasOptimized } = await optimizeDocs({
+    packageName: pkgName,
+    skillDir,
+    model,
+    version,
+    hasGithub,
+    hasReleases,
+    docFiles,
+    sections,
+    customPrompt,
+    onProgress: ({ type, chunk }) => {
+      if (type === 'reasoning' && chunk.startsWith('['))
+        llmSpin.message(chunk)
+      else if (type === 'text')
+        llmSpin.message('Writing...')
+    },
+  })
+
+  if (wasOptimized) {
+    llmSpin.stop('Generated best practices')
+    const body = cleanSkillMd(optimized)
+    // Re-read local metadata for the enhanced version
+    const cwd = process.cwd()
+    const pkgPath = resolvePkgDir(pkgName, cwd, version)
+    let description: string | undefined
+    let dependencies: Record<string, string> | undefined
+    if (pkgPath) {
+      const pkgJsonPath = join(pkgPath, 'package.json')
+      if (existsSync(pkgJsonPath)) {
+        const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+        description = pkg.description
+        dependencies = pkg.dependencies
+      }
+    }
+
+    let docsType: 'llms.txt' | 'readme' | 'docs' = 'docs'
+    if (existsSync(join(globalCachePath, 'docs', 'llms.txt')))
+      docsType = 'llms.txt'
+    else if (isReadmeOnly(globalCachePath))
+      docsType = 'readme'
+
+    const skillMd = generateSkillMd({
+      name: pkgName,
+      version,
+      description,
+      dependencies,
+      body,
+      relatedSkills: [],
+      hasGithub,
+      hasReleases,
+      docsType,
+      hasShippedDocs: checkShippedDocs(pkgName, cwd, version),
+      pkgFiles: getPkgKeyFiles(pkgName, cwd, version),
+    })
+    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+  }
+  else {
+    llmSpin.stop('LLM optimization skipped')
+  }
+}
+
+/** Regenerate base SKILL.md from local metadata if missing */
+function regenerateBaseSkillMd(
+  skillDir: string,
+  pkgName: string,
+  version: string,
+  cwd: string,
+  allSkillNames: string[],
+  source?: string,
+): boolean {
+  const skillMdPath = join(skillDir, 'SKILL.md')
+  if (existsSync(skillMdPath))
+    return false
+
+  // Read description + deps from local package.json
+  const pkgPath = resolvePkgDir(pkgName, cwd, version)
+  let description: string | undefined
+  let dependencies: Record<string, string> | undefined
+  if (pkgPath) {
+    const pkgJsonPath = join(pkgPath, 'package.json')
+    if (existsSync(pkgJsonPath)) {
+      const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+      description = pkg.description
+      dependencies = pkg.dependencies
+    }
+  }
+
+  // Infer docsType from source or cache
+  const globalCachePath = getCacheDir(pkgName, version)
+  let docsType: 'llms.txt' | 'readme' | 'docs' = 'docs'
+  if (source?.includes('llms.txt') || existsSync(join(globalCachePath, 'docs', 'llms.txt')))
+    docsType = 'llms.txt'
+  else if (isReadmeOnly(globalCachePath))
+    docsType = 'readme'
+
+  // Check cache dirs for github/releases
+  const hasGithub = existsSync(join(globalCachePath, 'github'))
+  const hasReleases = existsSync(join(globalCachePath, 'releases'))
+
+  // Related skills from other lockfile entries
+  const relatedSkills = allSkillNames.filter(n => n !== pkgName)
+
+  const content = generateSkillMd({
+    name: pkgName,
+    version,
+    description,
+    dependencies,
+    relatedSkills,
+    hasGithub,
+    hasReleases,
+    docsType,
+    hasShippedDocs: checkShippedDocs(pkgName, cwd, version),
+    pkgFiles: getPkgKeyFiles(pkgName, cwd, version),
+  })
+
+  mkdirSync(skillDir, { recursive: true })
+  writeFileSync(skillMdPath, content)
+  return true
 }

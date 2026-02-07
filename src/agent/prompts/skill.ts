@@ -30,9 +30,9 @@ export interface SkillOptions {
 export function generateSkillMd(opts: SkillOptions): string {
   const header = generatePackageHeader(opts)
   const refs = generateReferencesBlock(opts)
-  const content = opts.body ? `${header}\n\n${refs}${opts.body}` : `${header}\n\n${refs}`
-  return `${generateFrontmatter(opts)}${content}
-${generateFooter(opts.relatedSkills)}`
+  const content = opts.body ? `${header}\n\n${refs}${opts.body}` : `${header}\n\n${refs.trimEnd()}`
+  const footer = generateFooter(opts.relatedSkills)
+  return `${generateFrontmatter(opts)}${content}\n${footer}`
 }
 
 function formatRelativeDate(isoDate: string): string {
@@ -113,7 +113,7 @@ function generateReferencesBlock({ name, hasGithub, hasReleases, docsType = 'doc
   const lines: string[] = [
     '## References',
     '',
-    `IMPORTANT: Search all references (semantic and keyword) using \`skilld ${name} -q "<query>"\`.`,
+    `IMPORTANT: Search all references (semantic and keyword) using \`skilld search "<query>" -p ${name}\`.`,
     '',
   ]
 

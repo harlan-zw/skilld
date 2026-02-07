@@ -9,6 +9,7 @@ import {
   agents,
 
   generateSkillMd,
+  getModelLabel,
   optimizeDocs,
 
   sanitizeName,
@@ -202,6 +203,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
       const model = config.model ?? await selectModel(false)
 
       if (model) {
+        p.log.step(getModelLabel(model))
         // Reset states for LLM phase
         for (const pkg of successfulPkgs) {
           states.set(pkg, { name: pkg, status: 'pending', message: 'Waiting...' })

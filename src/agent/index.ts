@@ -14,6 +14,7 @@ export type { ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, Ski
 export {
   buildSkillPrompt,
   getAvailableModels,
+  getModelLabel,
   getModelName,
   optimizeDocs,
 } from './llm'

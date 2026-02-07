@@ -1,13 +1,11 @@
-catalogMode: prefer
-
-shellEmulator: true
-
-trustPolicy: no-downgrade
 packages:
   - playground
 
 catalog:
   bumpp: ^10.4.1
+  tsx: ^4.21.0
+
+catalogMode: prefer
 
 catalogs:
   deps:
@@ -35,3 +33,7 @@ catalogs:
 
 onlyBuiltDependencies:
   - esbuild
+
+shellEmulator: true
+
+trustPolicy: no-downgrade

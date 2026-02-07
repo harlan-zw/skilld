@@ -1,15 +1,19 @@
 /**
- * E2E tests for the full sync pipeline.
+ * E2E tests for the full sync pipeline — all packages.
  *
  * Tests real packages against real network (npm, GitHub, llms.txt).
  * Skips LLM phase — only tests resolution → fetch → cache → index → SKILL.md.
  *
  * Uses the real ~/.skilld/ cache (warms it for actual use).
+ *
+ * For per-framework tests, use the preset-*.test.ts files instead:
+ *   pnpm test -- test/e2e/preset-nuxt.test.ts
+ *   pnpm test -- test/e2e/preset-react.test.ts
  */
 
 import type { PipelineResult } from './pipeline'
-import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { sanitizeName } from '../../src/agent'
 import {
@@ -22,6 +26,31 @@ import { search } from '../../src/retriv'
 import { PACKAGES } from './matrix'
 import { parseFrontmatter, runPipeline } from './pipeline'
 
+const ARTIFACTS_DIR = resolve(import.meta.dirname, '../../.artifacts')
+
+function writeArtifact(name: string, result: PipelineResult) {
+  const safeName = name.replace(/\//g, '__')
+  const dir = join(ARTIFACTS_DIR, 'all', safeName)
+  mkdirSync(dir, { recursive: true })
+
+  writeFileSync(join(dir, 'result.json'), JSON.stringify({
+    name: result.resolved.name,
+    version: result.version,
+    docsType: result.docsType,
+    repoUrl: result.resolved.repoUrl,
+    docsUrl: result.resolved.docsUrl,
+    llmsUrl: result.resolved.llmsUrl,
+    gitDocsUrl: result.resolved.gitDocsUrl,
+    gitRef: result.resolved.gitRef,
+    readmeUrl: result.resolved.readmeUrl,
+    cachedDocsCount: result.cachedDocsCount,
+    attempts: result.attempts,
+  }, null, 2))
+
+  writeFileSync(join(dir, 'cached-files.txt'), result.cachedFiles.join('\n'))
+  writeFileSync(join(dir, 'SKILL.md'), result.skillMd)
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 describe('e2e sync pipeline', () => {
@@ -33,14 +62,16 @@ describe('e2e sync pipeline', () => {
     await Promise.allSettled(
       PACKAGES.map(async (pkg) => {
         try {
-          results.set(pkg.name, await runPipeline(pkg.name))
+          const result = await runPipeline(pkg.name)
+          results.set(pkg.name, result)
+          writeArtifact(pkg.name, result)
         }
         catch (err) {
           errors.set(pkg.name, err as Error)
         }
       }),
     )
-  }, 180_000)
+  }, 300_000)
 
   for (const pkg of PACKAGES) {
     describe(pkg.name, () => {

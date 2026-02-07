@@ -56,7 +56,7 @@ function generateImportantBlock({ packageName, hasGithub, hasReleases, hasChange
   skillDir: string
 }): string {
   const searchDesc = hasGithub ? 'Docs + GitHub' : 'Docs'
-  const searchCmd = `\`Bash 'npx skilld ${packageName} -q "<query>"'\``
+  const searchCmd = `\`Bash 'npx skilld search "<query>" -p ${packageName}'\``
 
   const docsPath = hasShippedDocs
     ? `\`${skillDir}/.skilld/pkg/docs/\` or \`${skillDir}/.skilld/pkg/README.md\``

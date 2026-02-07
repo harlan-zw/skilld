@@ -10,6 +10,7 @@ import {
   detectImportedPackages,
   generateSkillMd,
   getAvailableModels,
+  getModelLabel,
   optimizeDocs,
 
   sanitizeName,
@@ -315,9 +316,9 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
   return modelChoice as OptimizeModel
 }
 
-export async function selectSkillSections(): Promise<{ sections: SkillSection[], customPrompt?: string, cancelled: boolean }> {
+export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: string, cancelled: boolean }> {
   const selected = await p.multiselect({
-    message: 'Generate SKILL.md with LLM',
+    message,
     options: [
       { label: 'Best practices', value: 'best-practices' as SkillSection, hint: 'gotchas, pitfalls, patterns' },
       { label: 'API reference', value: 'api' as SkillSection, hint: 'exported functions & composables' },
@@ -916,6 +917,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     if (!cancelled && sections.length > 0) {
       const model = config.model ?? await selectModel(false)
       if (model) {
+        p.log.step(getModelLabel(model))
         await enhanceSkillWithLLM({
           packageName,
           version,
@@ -1041,7 +1043,7 @@ async function findRelatedSkills(packageName: string, skillsDir: string): Promis
   return related.slice(0, 5)
 }
 
-function cleanSkillMd(content: string): string {
+export function cleanSkillMd(content: string): string {
   let cleaned = content
     .replace(/^```markdown\n?/m, '')
     .replace(/\n?```$/m, '')

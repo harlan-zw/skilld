@@ -21,11 +21,28 @@ export interface DocOverride {
  * Keyed by npm package name.
  */
 export const DOC_OVERRIDES: Record<string, DocOverride> = {
-  vue: {
+  'vue': {
     owner: 'vuejs',
     repo: 'docs',
     path: 'src',
     homepage: 'https://vuejs.org',
+  },
+  'tailwindcss': {
+    owner: 'tailwindlabs',
+    repo: 'tailwindcss.com',
+    path: 'src/docs',
+    homepage: 'https://tailwindcss.com',
+  },
+  'astro': {
+    owner: 'withastro',
+    repo: 'docs',
+    path: 'src/content/docs/en',
+    homepage: 'https://docs.astro.build',
+  },
+  '@vueuse/core': {
+    owner: 'vueuse',
+    repo: 'vueuse',
+    path: 'packages',
   },
 }
 

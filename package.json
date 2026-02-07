@@ -51,7 +51,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "release": "bumpp && pnpm publish",
+    "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
     "prepare": "skilld --prepare -b || true"
   },
@@ -76,6 +76,7 @@
     "bumpp": "catalog:",
     "evalite": "catalog:dev-test",
     "obuild": "catalog:dev-build",
+    "tsx": "catalog:",
     "vitest": "catalog:dev-test"
   }
 }

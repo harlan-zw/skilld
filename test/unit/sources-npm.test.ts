@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchNpmPackage, getInstalledSkillVersion, readLocalDependencies, resolvePackageDocs } from '../../src/sources/npm'
+import { fetchNpmPackage, getInstalledSkillVersion, readLocalDependencies, resolveInstalledVersion, resolvePackageDocs } from '../../src/sources/npm'
 
 // Mock the github and llms modules
 vi.mock('../../src/sources/github', () => ({
@@ -11,6 +11,11 @@ vi.mock('../../src/sources/github', () => ({
 
 vi.mock('../../src/sources/llms', () => ({
   fetchLlmsUrl: vi.fn(),
+}))
+
+// Mock mlly
+vi.mock('mlly', () => ({
+  resolvePathSync: vi.fn(),
 }))
 
 // Mock fs module
@@ -37,22 +42,29 @@ describe('sources/npm', () => {
       vi.restoreAllMocks()
     })
 
-    it('reads and combines dependencies and devDependencies', async () => {
+    it('resolves actual installed versions via mlly', async () => {
       const { existsSync, readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
       vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        dependencies: { vue: '^3.4.0', pinia: '~2.1.0' },
-        devDependencies: { vitest: '^1.0.0' },
-      }))
+      vi.mocked(readFileSync).mockImplementation((p: any) => {
+        if (String(p).endsWith('package.json') && String(p).includes('node_modules'))
+          return JSON.stringify({ version: '3.4.21' })
+        return JSON.stringify({
+          dependencies: { vue: '^3.4.0', pinia: '~2.1.0' },
+          devDependencies: { vitest: '^1.0.0' },
+        })
+      })
+      vi.mocked(resolvePathSync).mockImplementation((id: string) => `/test/node_modules/${id}`)
 
       const deps = await readLocalDependencies('/test')
 
-      expect(deps).toContainEqual({ name: 'vue', version: '3.4.0' })
-      expect(deps).toContainEqual({ name: 'pinia', version: '2.1.0' })
+      expect(deps).toContainEqual({ name: 'vue', version: '3.4.21' })
+      expect(deps).toContainEqual({ name: 'pinia', version: '3.4.21' })
     })
 
-    it('strips single-char version prefixes (^, ~)', async () => {
+    it('falls back to stripping semver prefix when module not installed', async () => {
       const { existsSync, readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
         dependencies: {
@@ -61,6 +73,9 @@ describe('sources/npm', () => {
           'pkg-exact': '4.0.0',
         },
       }))
+      vi.mocked(resolvePathSync).mockImplementation(() => {
+        throw new Error('not found')
+      })
 
       const deps = await readLocalDependencies('/test')
 
@@ -71,11 +86,17 @@ describe('sources/npm', () => {
 
     it('filters out @types packages', async () => {
       const { existsSync, readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
       vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        dependencies: { vue: '3.0.0' },
-        devDependencies: { '@types/node': '20.0.0' },
-      }))
+      vi.mocked(readFileSync).mockImplementation((p: any) => {
+        if (String(p).includes('node_modules'))
+          return JSON.stringify({ version: '3.0.0' })
+        return JSON.stringify({
+          dependencies: { vue: '3.0.0' },
+          devDependencies: { '@types/node': '20.0.0' },
+        })
+      })
+      vi.mocked(resolvePathSync).mockImplementation((id: string) => `/test/node_modules/${id}`)
 
       const deps = await readLocalDependencies('/test')
 
@@ -85,6 +106,7 @@ describe('sources/npm', () => {
 
     it('filters out common dev tools', async () => {
       const { existsSync, readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
         devDependencies: {
@@ -95,6 +117,9 @@ describe('sources/npm', () => {
           jest: '29.0.0',
         },
       }))
+      vi.mocked(resolvePathSync).mockImplementation(() => {
+        throw new Error('not found')
+      })
 
       const deps = await readLocalDependencies('/test')
 
@@ -108,6 +133,80 @@ describe('sources/npm', () => {
       await expect(readLocalDependencies('/test'))
         .rejects
         .toThrow('No package.json found')
+    })
+
+    it('resolves catalog: and workspace: via installed version', async () => {
+      const { existsSync, readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockImplementation((p: any) => {
+        const s = String(p)
+        if (s.includes('node_modules/@clack/prompts'))
+          return JSON.stringify({ version: '1.0.0' })
+        if (s.includes('node_modules/citty'))
+          return JSON.stringify({ version: '0.2.1' })
+        if (s.includes('node_modules/bumpp'))
+          return JSON.stringify({ version: '10.4.1' })
+        return JSON.stringify({
+          dependencies: {
+            '@clack/prompts': 'catalog:deps',
+            'citty': 'catalog:deps',
+            'bumpp': 'workspace:*',
+          },
+        })
+      })
+      vi.mocked(resolvePathSync).mockImplementation((id: string) => `/test/node_modules/${id}`)
+
+      const deps = await readLocalDependencies('/test')
+
+      expect(deps).toContainEqual({ name: '@clack/prompts', version: '1.0.0' })
+      expect(deps).toContainEqual({ name: 'citty', version: '0.2.1' })
+      expect(deps).toContainEqual({ name: 'bumpp', version: '10.4.1' })
+    })
+
+    it('returns null for unresolvable non-semver specifiers', async () => {
+      const { existsSync, readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
+        dependencies: { 'some-pkg': 'catalog:deps' },
+      }))
+      vi.mocked(resolvePathSync).mockImplementation(() => {
+        throw new Error('not found')
+      })
+
+      const deps = await readLocalDependencies('/test')
+
+      expect(deps).toHaveLength(0)
+    })
+  })
+
+  describe('resolveInstalledVersion', () => {
+    beforeEach(() => {
+      vi.resetAllMocks()
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+    })
+
+    it('resolves version from installed package.json', async () => {
+      const { readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
+      vi.mocked(resolvePathSync).mockReturnValue('/project/node_modules/vue/package.json')
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: '3.4.21' }))
+
+      expect(resolveInstalledVersion('vue', '/project')).toBe('3.4.21')
+      expect(vi.mocked(resolvePathSync)).toHaveBeenCalledWith('vue/package.json', { url: '/project' })
+    })
+
+    it('returns null when package not installed', async () => {
+      const { resolvePathSync } = await import('mlly')
+      vi.mocked(resolvePathSync).mockImplementation(() => {
+        throw new Error('not found')
+      })
+
+      expect(resolveInstalledVersion('nonexistent', '/project')).toBeNull()
     })
   })
 

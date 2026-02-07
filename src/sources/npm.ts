@@ -8,6 +8,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, unlinkS
 import { join, resolve } from 'node:path'
 import { Writable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
+import { resolvePathSync } from 'mlly'
 import { getCacheDir } from '../cache/version'
 import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo } from './github'
 import { fetchLlmsUrl } from './llms'
@@ -157,6 +158,11 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
       result.repoUrl = `https://github.com/${repo}`
   }
 
+  // Use npm homepage early (skip GitHub repo URLs)
+  if (pkg.homepage && !isGitHubRepoUrl(pkg.homepage)) {
+    result.docsUrl = pkg.homepage
+  }
+
   // GitHub repo handling - try versioned git docs first
   if (result.repoUrl?.includes('github.com')) {
     const gh = parseGitHubUrl(result.repoUrl)
@@ -187,7 +193,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
         }
       }
 
-      // If no docsUrl from homepage, try GitHub repo metadata
+      // If no docsUrl yet (npm had no homepage), try GitHub repo metadata
       if (!result.docsUrl) {
         onProgress?.('github-meta')
         const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
@@ -285,11 +291,6 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
     }
   }
 
-  // Try homepage for docs (skip if it's just a GitHub repo URL)
-  if (pkg.homepage && !isGitHubRepoUrl(pkg.homepage)) {
-    result.docsUrl = pkg.homepage
-  }
-
   // Check for llms.txt on docsUrl
   if (result.docsUrl) {
     onProgress?.('llms.txt')
@@ -305,7 +306,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
     else {
       attempts.push({
         source: 'llms.txt',
-        url: `${result.docsUrl}/llms.txt`,
+        url: `${new URL(result.docsUrl).origin}/llms.txt`,
         status: 'not-found',
         message: 'No llms.txt at docs URL',
       })
@@ -362,29 +363,14 @@ export function parseVersionSpecifier(
     return null // linked package doesn't exist
   }
 
-  // workspace: - strip protocol, keep name
-  if (version.startsWith('workspace:')) {
-    return {
-      name,
-      version: version.slice(10).replace(/^[\^~*]/, '') || '*',
-    }
-  }
-
-  // npm: - extract aliased package name and version
+  // npm: - extract aliased package name
   if (version.startsWith('npm:')) {
     const specifier = version.slice(4)
-    // Handle @scope/pkg@version vs pkg@version
     const atIndex = specifier.startsWith('@')
       ? specifier.indexOf('@', 1)
       : specifier.indexOf('@')
-    if (atIndex > 0) {
-      return {
-        name: specifier.slice(0, atIndex),
-        version: specifier.slice(atIndex + 1),
-      }
-    }
-    // npm:package without version
-    return { name: specifier, version: '*' }
+    const realName = atIndex > 0 ? specifier.slice(0, atIndex) : specifier
+    return { name: realName, version: resolveInstalledVersion(realName, cwd) || '*' }
   }
 
   // file: and git: - skip (local/custom sources)
@@ -392,10 +378,31 @@ export function parseVersionSpecifier(
     return null
   }
 
-  // Standard semver
-  return {
-    name,
-    version: version.replace(/^[\^~>=<]/, ''),
+  // For everything else (semver, catalog:, workspace:, etc.)
+  // resolve the actual installed version from node_modules
+  const installed = resolveInstalledVersion(name, cwd)
+  if (installed)
+    return { name, version: installed }
+
+  // Fallback: strip semver prefix if it looks like one
+  if (/^[\^~>=<\d]/.test(version))
+    return { name, version: version.replace(/^[\^~>=<]/, '') }
+
+  return null
+}
+
+/**
+ * Resolve the actual installed version of a package by finding its package.json
+ * via mlly's resolvePathSync. Works regardless of package manager or version protocol.
+ */
+export function resolveInstalledVersion(name: string, cwd: string): string | null {
+  try {
+    const resolved = resolvePathSync(`${name}/package.json`, { url: cwd })
+    const pkg = JSON.parse(readFileSync(resolved, 'utf-8'))
+    return pkg.version || null
+  }
+  catch {
+    return null
   }
 }
 

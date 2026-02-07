@@ -1,14 +1,14 @@
 ---
 name: oxc-parser-skilld
 description: Load skill when using anything from the package "oxc-parser".
-version: "0.112.0"
+version: "catalog:deps"
 ---
 
 # oxc-parser
 
 > Oxc Parser Node API
 
-**Version:** 0.112.0 (4 days ago)
+**Version:** catalog:deps (4 days ago)
 **Deps:** @oxc-project/types@^0.112.0
 **Tags:** latest: 0.112.0 (4 days ago)
 

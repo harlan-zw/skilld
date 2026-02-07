@@ -317,7 +317,27 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
  * Returns a GitHub URL like "https://github.com/owner/repo" or null.
  */
 export async function searchGitHubRepo(packageName: string): Promise<string | null> {
-  // Try gh CLI first
+  // Try ungh heuristic first — check if repo name matches package name
+  const shortName = packageName.replace(/^@.*\//, '')
+  for (const candidate of [packageName.replace(/^@/, '').replace('/', '/'), shortName]) {
+    // Only try if it looks like owner/repo
+    if (!candidate.includes('/')) {
+      // Try common patterns: {name}/{name}
+      const unghRes = await fetch(`https://ungh.cc/repos/${shortName}/${shortName}`, {
+        headers: { 'User-Agent': 'skilld/1.0' },
+      }).catch(() => null)
+      if (unghRes?.ok)
+        return `https://github.com/${shortName}/${shortName}`
+      continue
+    }
+    const unghRes = await fetch(`https://ungh.cc/repos/${candidate}`, {
+      headers: { 'User-Agent': 'skilld/1.0' },
+    }).catch(() => null)
+    if (unghRes?.ok)
+      return `https://github.com/${candidate}`
+  }
+
+  // Try gh CLI
   if (isGhAvailable()) {
     try {
       const json = execSync(

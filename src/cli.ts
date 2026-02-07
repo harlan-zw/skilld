@@ -610,23 +610,31 @@ const main = defineCommand({
 
       // Transition to project setup
       const pkgJsonPath = join(cwd, 'package.json')
-      const projectName = existsSync(pkgJsonPath)
+      const hasPkgJson = existsSync(pkgJsonPath)
+      const projectName = hasPkgJson
         ? JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).name
         : undefined
       const projectLabel = projectName
         ? `Generating skills for \x1B[36m${projectName}\x1B[0m`
         : 'Generating skills for current directory'
       p.log.step(projectLabel)
+
+      if (!hasPkgJson) {
+        p.log.warn('No package.json found — enter package names manually or run inside a project')
+      }
+
       p.log.info('Tip: Only generate skills for packages your agent struggles with.\n     The fewer skills, the more context you have for everything else :)')
 
-      const source = await p.select({
-        message: 'How should I find packages?',
-        options: [
-          { label: 'Scan source files', value: 'imports', hint: 'Find actually used imports' },
-          { label: 'Use package.json', value: 'deps', hint: `All ${state.deps.size} dependencies` },
-          { label: 'Enter manually', value: 'manual' },
-        ],
-      })
+      const source = hasPkgJson
+        ? await p.select({
+            message: 'How should I find packages?',
+            options: [
+              { label: 'Scan source files', value: 'imports', hint: 'Find actually used imports' },
+              { label: 'Use package.json', value: 'deps', hint: `All ${state.deps.size} dependencies` },
+              { label: 'Enter manually', value: 'manual' },
+            ],
+          })
+        : 'manual' as const
 
       if (p.isCancel(source)) {
         p.cancel('Setup cancelled')
@@ -742,15 +750,18 @@ const main = defineCommand({
           const installedNames = new Set(state.skills.map(s => s.packageName || s.name))
           const uninstalledDeps = [...state.deps.keys()].filter(d => !installedNames.has(d))
           const allDepsInstalled = uninstalledDeps.length === 0
+          const hasPkgJsonMenu = existsSync(join(cwd, 'package.json'))
 
-          const source = await p.select({
-            message: 'How should I find packages?',
-            options: [
-              { label: 'Scan source files', value: 'imports' as const, hint: allDepsInstalled ? 'all installed' : 'find actually used imports', disabled: allDepsInstalled },
-              { label: 'Use package.json', value: 'deps' as const, hint: allDepsInstalled ? 'all installed' : `${uninstalledDeps.length} uninstalled`, disabled: allDepsInstalled },
-              { label: 'Enter manually', value: 'manual' as const },
-            ],
-          })
+          const source = hasPkgJsonMenu
+            ? await p.select({
+                message: 'How should I find packages?',
+                options: [
+                  { label: 'Scan source files', value: 'imports' as const, hint: allDepsInstalled ? 'all installed' : 'find actually used imports', disabled: allDepsInstalled },
+                  { label: 'Use package.json', value: 'deps' as const, hint: allDepsInstalled ? 'all installed' : `${uninstalledDeps.length} uninstalled`, disabled: allDepsInstalled },
+                  { label: 'Enter manually', value: 'manual' as const },
+                ],
+              })
+            : 'manual' as const
 
           if (p.isCancel(source))
             continue

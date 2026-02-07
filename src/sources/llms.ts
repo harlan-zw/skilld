@@ -9,10 +9,10 @@ import { fetchText, verifyUrl } from './utils'
  * Check for llms.txt at a docs URL, returns the llms.txt URL if found
  */
 export async function fetchLlmsUrl(docsUrl: string): Promise<string | null> {
-  const llmsUrl = `${docsUrl.replace(/\/$/, '')}/llms.txt`
-  if (await verifyUrl(llmsUrl)) {
+  const origin = new URL(docsUrl).origin
+  const llmsUrl = `${origin}/llms.txt`
+  if (await verifyUrl(llmsUrl))
     return llmsUrl
-  }
   return null
 }
 
