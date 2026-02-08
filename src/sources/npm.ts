@@ -4,7 +4,7 @@
 
 import type { LocalDependency, NpmPackageInfo, ResolveAttempt, ResolvedPackage, ResolveResult } from './types'
 import { execSync } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { Writable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
@@ -12,7 +12,7 @@ import { resolvePathSync } from 'mlly'
 import { getCacheDir } from '../cache/version'
 import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo } from './github'
 import { fetchLlmsUrl } from './llms'
-import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubUrl } from './utils'
+import { isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl } from './utils'
 
 /**
  * Fetch package info from npm registry
@@ -147,19 +147,29 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
 
   // Extract repo URL (handle both object and shorthand string formats)
   let subdir: string | undefined
+  let rawRepoUrl: string | undefined
   if (typeof pkg.repository === 'object' && pkg.repository?.url) {
-    result.repoUrl = normalizeRepoUrl(pkg.repository.url)
+    rawRepoUrl = pkg.repository.url
+    result.repoUrl = normalizeRepoUrl(rawRepoUrl)
     subdir = pkg.repository.directory
   }
   else if (typeof pkg.repository === 'string') {
-    // Shorthand: "owner/repo" or "github:owner/repo"
-    const repo = pkg.repository.replace(/^github:/, '')
-    if (repo.includes('/') && !repo.includes(':'))
-      result.repoUrl = `https://github.com/${repo}`
+    if (pkg.repository.includes('://')) {
+      // Full URL string (e.g. "https://github.com/org/repo/tree/main/packages/sub")
+      const gh = parseGitHubUrl(pkg.repository)
+      if (gh)
+        result.repoUrl = `https://github.com/${gh.owner}/${gh.repo}`
+    }
+    else {
+      // Shorthand: "owner/repo" or "github:owner/repo"
+      const repo = pkg.repository.replace(/^github:/, '')
+      if (repo.includes('/') && !repo.includes(':'))
+        result.repoUrl = `https://github.com/${repo}`
+    }
   }
 
   // Use npm homepage early (skip GitHub repo URLs)
-  if (pkg.homepage && !isGitHubRepoUrl(pkg.homepage)) {
+  if (pkg.homepage && !isGitHubRepoUrl(pkg.homepage) && !isUselessDocsUrl(pkg.homepage)) {
     result.docsUrl = pkg.homepage
   }
 
@@ -172,7 +182,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
       // Try versioned git docs first (docs/**/*.md at git tag)
       if (targetVersion) {
         onProgress?.('github-docs')
-        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name)
+        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name, rawRepoUrl)
         if (gitDocs) {
           result.gitDocsUrl = gitDocs.baseUrl
           result.gitRef = gitDocs.ref
@@ -197,7 +207,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
       if (!result.docsUrl) {
         onProgress?.('github-meta')
         const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
-        if (repoMeta?.homepage) {
+        if (repoMeta?.homepage && !isUselessDocsUrl(repoMeta.homepage)) {
           result.docsUrl = repoMeta.homepage
           attempts.push({
             source: 'github-meta',
@@ -272,7 +282,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
         if (!result.docsUrl) {
           onProgress?.('github-meta')
           const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
-          if (repoMeta?.homepage)
+          if (repoMeta?.homepage && !isUselessDocsUrl(repoMeta.homepage))
             result.docsUrl = repoMeta.homepage
         }
 
@@ -317,19 +327,17 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
   if (!result.docsUrl && !result.llmsUrl && !result.readmeUrl && !result.gitDocsUrl && options.cwd) {
     onProgress?.('local')
     const pkgDir = join(options.cwd, 'node_modules', packageName)
-    // Check common readme variations
-    for (const filename of ['README.md', 'readme.md']) {
-      const readmePath = join(pkgDir, filename)
-      if (existsSync(readmePath)) {
-        result.readmeUrl = pathToFileURL(readmePath).href
-        attempts.push({
-          source: 'readme',
-          url: readmePath,
-          status: 'success',
-          message: 'Found local readme in node_modules',
-        })
-        break
-      }
+    // Check common readme variations (case-insensitive)
+    const readmeFile = existsSync(pkgDir) && readdirSync(pkgDir).find(f => /^readme\.md$/i.test(f))
+    if (readmeFile) {
+      const readmePath = join(pkgDir, readmeFile)
+      result.readmeUrl = pathToFileURL(readmePath).href
+      attempts.push({
+        source: 'readme',
+        url: readmePath,
+        status: 'success',
+        message: 'Found local readme in node_modules',
+      })
     }
   }
 
@@ -507,11 +515,11 @@ export async function resolveLocalPackageDocs(localPath: string): Promise<Resolv
     }
   }
 
-  // Fallback: read local README.md
+  // Fallback: read local readme (case-insensitive)
   if (!result.readmeUrl && !result.gitDocsUrl) {
-    const localReadme = join(localPath, 'README.md')
-    if (existsSync(localReadme)) {
-      result.readmeUrl = pathToFileURL(localReadme).href
+    const readmeFile = readdirSync(localPath).find(f => /^readme\.md$/i.test(f))
+    if (readmeFile) {
+      result.readmeUrl = pathToFileURL(join(localPath, readmeFile)).href
     }
   }
 

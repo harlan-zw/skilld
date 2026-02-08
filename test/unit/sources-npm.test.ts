@@ -366,6 +366,63 @@ description: Vue skill
       })
     })
 
+    it('skips homepage if its a social media URL', async () => {
+      const { fetchGitHubRepoMeta, fetchReadme } = await import('../../src/sources/github')
+      const { fetchLlmsUrl } = await import('../../src/sources/llms')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          name: 'autoprefixer',
+          version: '10.4.0',
+          homepage: 'https://twitter.com/autoprefixer',
+          repository: { url: 'https://github.com/postcss/autoprefixer' },
+        }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ time: { '10.4.0': '2024-01-01T00:00:00Z' } }),
+      })
+
+      vi.mocked(fetchGitHubRepoMeta).mockResolvedValue({ homepage: 'https://autoprefixer.github.io' })
+      vi.mocked(fetchReadme).mockResolvedValue('ungh://postcss/autoprefixer')
+      vi.mocked(fetchLlmsUrl).mockResolvedValue(null)
+
+      const result = await resolvePackageDocs('autoprefixer')
+
+      // twitter.com homepage should be filtered, falls through to GitHub meta
+      expect(result?.docsUrl).toBe('https://autoprefixer.github.io')
+    })
+
+    it('skips homepage if its a package registry URL', async () => {
+      const { fetchGitHubRepoMeta, fetchReadme } = await import('../../src/sources/github')
+      const { fetchLlmsUrl } = await import('../../src/sources/llms')
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          name: 'cross-env',
+          version: '7.0.3',
+          homepage: 'https://www.npmjs.com/package/cross-env',
+          repository: { url: 'https://github.com/kentcdodds/cross-env' },
+        }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ time: { '7.0.3': '2024-01-01T00:00:00Z' } }),
+      })
+
+      vi.mocked(fetchGitHubRepoMeta).mockResolvedValue(null)
+      vi.mocked(fetchReadme).mockResolvedValue('ungh://kentcdodds/cross-env')
+      vi.mocked(fetchLlmsUrl).mockResolvedValue(null)
+
+      const result = await resolvePackageDocs('cross-env')
+
+      // npmjs.com homepage should be filtered, no docsUrl set
+      expect(result?.docsUrl).toBeUndefined()
+      expect(result?.readmeUrl).toBe('ungh://kentcdodds/cross-env')
+    })
+
     it('skips homepage if its a GitHub URL', async () => {
       const { fetchGitHubRepoMeta, fetchReadme } = await import('../../src/sources/github')
       const { fetchLlmsUrl } = await import('../../src/sources/llms')

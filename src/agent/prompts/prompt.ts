@@ -193,7 +193,7 @@ ${rules.join('\n')}
 
 ## Output
 
-Write the body content to \`${skillDir}/_SKILL.md\` using the Write tool.
+Write the body content to \`${skillDir}/.skilld/_SKILL.md\` using the Write tool.
 Do NOT output the content to stdout. Write it to the file only.
 `
 }

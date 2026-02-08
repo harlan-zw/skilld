@@ -356,6 +356,23 @@ export const PACKAGES: PackageSpec[] = [
   // Cross-framework preset
   // ═══════════════════════════════════════════════════════════════════
 
+  // ── autoprefixer ────────────────────────────────────────────────────
+  // npm homepage is a Twitter URL — should be filtered out by isUselessDocsUrl.
+  // Falls through to GitHub meta for docsUrl. No git docs folder.
+  {
+    name: 'autoprefixer',
+    preset: 'cross-framework',
+    expectRepoUrl: 'github.com/postcss/autoprefixer',
+    expectDocsUrl: null,
+    expectSources: { npm: true, gitDocs: false, llmsTxt: false, readme: true },
+    expectDocsType: 'readme',
+    expectCacheFiles: [
+      'docs/README.md',
+    ],
+    minCacheDocs: 1,
+    expectDescriptionContains: '"autoprefixer"',
+  },
+
   // ── tailwindcss ───────────────────────────────────────────────────
   // CSS framework — docs live in tailwindlabs/tailwindcss.com repo (override).
   {

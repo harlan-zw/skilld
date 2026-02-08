@@ -708,9 +708,14 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
         indexTasks.push({
           title: `Indexing ${fetchedDocs.length} docs`,
           task: async (message) => {
-            await createIndex(fetchedDocs, { dbPath, onProgress: (current, total, doc) => {
-              const file = doc?.id ? doc.id.split('/').pop() : ''
-              message(`Indexing doc ${file} - ${current}/${total}`)
+            await createIndex(fetchedDocs, { dbPath, onProgress: ({ phase, current, total }) => {
+              if (phase === 'storing') {
+                const file = fetchedDocs[current - 1]?.id.split('/').pop() ?? ''
+                message(`Indexing doc ${file} - ${current}/${total}`)
+              }
+              else if (phase === 'embedding') {
+                message(`Embedding docs - ${current}/${total}`)
+              }
             } })
             return `Indexed ${fetchedDocs.length} docs`
           },
@@ -720,9 +725,14 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
         indexTasks.push({
           title: `Indexing ${fetchedIssues.length} issues`,
           task: async (message) => {
-            await createIndex(fetchedIssues, { dbPath, onProgress: (current, total, doc) => {
-              const file = doc?.id ? doc.id.split('/').pop() : ''
-              message(`Indexing doc ${file} - ${current}/${total}`)
+            await createIndex(fetchedIssues, { dbPath, onProgress: ({ phase, current, total }) => {
+              if (phase === 'storing') {
+                const file = fetchedIssues[current - 1]?.id.split('/').pop() ?? ''
+                message(`Indexing issue ${file} - ${current}/${total}`)
+              }
+              else if (phase === 'embedding') {
+                message(`Embedding issues - ${current}/${total}`)
+              }
             } })
             return `Indexed ${fetchedIssues.length} issues`
           },
@@ -732,9 +742,14 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
         indexTasks.push({
           title: `Indexing ${fetchedDiscussions.length} discussions`,
           task: async (message) => {
-            await createIndex(fetchedDiscussions, { dbPath, onProgress: (current, total, doc) => {
-              const file = doc?.id ? doc.id.split('/').pop() : ''
-              message(`Indexing doc ${file} - ${current}/${total}`)
+            await createIndex(fetchedDiscussions, { dbPath, onProgress: ({ phase, current, total }) => {
+              if (phase === 'storing') {
+                const file = fetchedDiscussions[current - 1]?.id.split('/').pop() ?? ''
+                message(`Indexing discussion ${file} - ${current}/${total}`)
+              }
+              else if (phase === 'embedding') {
+                message(`Embedding discussions - ${current}/${total}`)
+              }
             } })
             return `Indexed ${fetchedDiscussions.length} discussions`
           },
@@ -744,9 +759,14 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
         indexTasks.push({
           title: `Indexing ${fetchedReleases.length} releases`,
           task: async (message) => {
-            await createIndex(fetchedReleases, { dbPath, onProgress: (current, total, doc) => {
-              const file = doc?.id ? doc.id.split('/').pop() : ''
-              message(`Indexing doc ${file} - ${current}/${total}`)
+            await createIndex(fetchedReleases, { dbPath, onProgress: ({ phase, current, total }) => {
+              if (phase === 'storing') {
+                const file = fetchedReleases[current - 1]?.id.split('/').pop() ?? ''
+                message(`Indexing release ${file} - ${current}/${total}`)
+              }
+              else if (phase === 'embedding') {
+                message(`Embedding releases - ${current}/${total}`)
+              }
             } })
             return `Indexed ${fetchedReleases.length} releases`
           },
@@ -802,10 +822,16 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
             }
           }
 
-          await createIndex(docsToIndex, { dbPath, onProgress: (current, total, doc) => {
-            const type = doc?.type === 'source' || doc?.type === 'types' ? 'code' : 'doc'
-            const file = doc?.id ? doc.id.split('/').pop() : ''
-            message(`Indexing ${type} ${file} - ${current}/${total}`)
+          await createIndex(docsToIndex, { dbPath, onProgress: ({ phase, current, total }) => {
+            if (phase === 'storing') {
+              const d = docsToIndex[current - 1]
+              const type = d?.metadata?.type === 'source' || d?.metadata?.type === 'types' ? 'code' : 'doc'
+              const file = d?.id.split('/').pop() ?? ''
+              message(`Indexing ${type} ${file} - ${current}/${total}`)
+            }
+            else if (phase === 'embedding') {
+              message(`Embedding cached docs - ${current}/${total}`)
+            }
           } })
           return `Indexed ${docsToIndex.length} docs`
         },
@@ -827,9 +853,14 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
           id: e.path,
           content: e.content,
           metadata: { package: packageName, source: `pkg/${e.path}`, type: e.type },
-        })), { dbPath, onProgress: (current, total, doc) => {
-          const file = doc?.id ? doc.id.split('/').pop() : ''
-          message(`Indexing code ${file} - ${current}/${total}`)
+        })), { dbPath, onProgress: ({ phase, current, total }) => {
+          if (phase === 'storing') {
+            const file = entryFiles[current - 1]?.path.split('/').pop() ?? ''
+            message(`Indexing code ${file} - ${current}/${total}`)
+          }
+          else if (phase === 'embedding') {
+            message(`Embedding code - ${current}/${total}`)
+          }
         } })
         return `Indexed ${entryLabel}`
       },

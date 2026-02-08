@@ -5,7 +5,7 @@
 import { execSync } from 'node:child_process'
 import { isGhAvailable } from './issues'
 import { getDocOverride } from './overrides'
-import { fetchText, verifyUrl } from './utils'
+import { extractBranchHint, fetchText, parseGitHubUrl } from './utils'
 
 export interface GitDocsResult {
   /** URL pattern for fetching docs (use with ref) */
@@ -48,7 +48,7 @@ interface TagResult {
  * Find git tag for a version by checking if ungh can list files at that ref.
  * Tries v{version}, {version}, and optionally {packageName}@{version} (changeset convention).
  */
-async function findGitTag(owner: string, repo: string, version: string, packageName?: string): Promise<TagResult | null> {
+async function findGitTag(owner: string, repo: string, version: string, packageName?: string, branchHint?: string): Promise<TagResult | null> {
   const candidates = [`v${version}`, version]
   if (packageName)
     candidates.push(`${packageName}@${version}`)
@@ -69,8 +69,11 @@ async function findGitTag(owner: string, repo: string, version: string, packageN
     }
   }
 
-  // Last resort: try default branch
-  for (const branch of ['main', 'master']) {
+  // Last resort: try default branch (prefer hint from repo URL fragment)
+  const branches = branchHint
+    ? [branchHint, ...['main', 'master'].filter(b => b !== branchHint)]
+    : ['main', 'master']
+  for (const branch of branches) {
     const files = await listFilesAtRef(owner, repo, branch)
     if (files.length > 0)
       return { ref: branch, files }
@@ -270,7 +273,7 @@ async function listDocsAtRef(owner: string, repo: string, ref: string, pathPrefi
  * Fetch versioned docs from GitHub repo's docs/ folder.
  * Pass packageName to check doc overrides (e.g. vue -> vuejs/docs).
  */
-export async function fetchGitDocs(owner: string, repo: string, version: string, packageName?: string): Promise<GitDocsResult | null> {
+export async function fetchGitDocs(owner: string, repo: string, version: string, packageName?: string, repoUrl?: string): Promise<GitDocsResult | null> {
   const override = packageName ? getDocOverride(packageName) : undefined
   if (override) {
     const ref = override.ref || 'main'
@@ -284,7 +287,8 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
     }
   }
 
-  const tag = await findGitTag(owner, repo, version, packageName)
+  const branchHint = repoUrl ? extractBranchHint(repoUrl) : undefined
+  const tag = await findGitTag(owner, repo, version, packageName, branchHint)
   if (!tag)
     return null
 
@@ -312,10 +316,31 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
 }
 
 /**
- * Search GitHub for a repo matching a package name (when npm has no repository field).
- * Uses gh CLI search, falls back to GitHub REST search API.
- * Returns a GitHub URL like "https://github.com/owner/repo" or null.
+ * Verify a GitHub repo is the source for an npm package by checking package.json name field.
+ * Checks root first, then common monorepo paths (packages/{shortName}, packages/{name}).
  */
+async function verifyNpmRepo(owner: string, repo: string, packageName: string): Promise<boolean> {
+  const base = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD`
+  const shortName = packageName.replace(/^@.*\//, '')
+  const paths = [
+    'package.json',
+    `packages/${shortName}/package.json`,
+    `packages/${packageName.replace(/^@/, '').replace('/', '-')}/package.json`,
+  ]
+  for (const path of paths) {
+    const text = await fetchText(`${base}/${path}`)
+    if (!text)
+      continue
+    try {
+      const pkg = JSON.parse(text) as { name?: string }
+      if (pkg.name === packageName)
+        return true
+    }
+    catch {}
+  }
+  return false
+}
+
 export async function searchGitHubRepo(packageName: string): Promise<string | null> {
   // Try ungh heuristic first — check if repo name matches package name
   const shortName = packageName.replace(/^@.*\//, '')
@@ -337,23 +362,28 @@ export async function searchGitHubRepo(packageName: string): Promise<string | nu
       return `https://github.com/${candidate}`
   }
 
-  // Try gh CLI
+  // Try gh CLI — strip @ to avoid GitHub search syntax issues
+  const searchTerm = packageName.replace(/^@/, '')
   if (isGhAvailable()) {
     try {
       const json = execSync(
-        `gh search repos "${packageName}" --json fullName --limit 5`,
+        `gh search repos "${searchTerm}" --json fullName --limit 5`,
         { encoding: 'utf-8', timeout: 15_000 },
       )
       const repos = JSON.parse(json) as Array<{ fullName: string }>
+      // Prefer exact suffix match
       const match = repos.find(r =>
         r.fullName.toLowerCase().endsWith(`/${packageName.toLowerCase()}`)
-        || r.fullName.toLowerCase().endsWith(`/${packageName.replace(/^@.*\//, '').toLowerCase()}`),
+        || r.fullName.toLowerCase().endsWith(`/${shortName.toLowerCase()}`),
       )
       if (match)
         return `https://github.com/${match.fullName}`
-      // If no exact match but we got results, return the first one
-      if (repos.length > 0)
-        return `https://github.com/${repos[0].fullName}`
+      // Validate remaining results via package.json
+      for (const candidate of repos) {
+        const gh = parseGitHubUrl(`https://github.com/${candidate.fullName}`)
+        if (gh && await verifyNpmRepo(gh.owner, gh.repo, packageName))
+          return `https://github.com/${candidate.fullName}`
+      }
     }
     catch {
       // fall through to REST API
@@ -361,7 +391,7 @@ export async function searchGitHubRepo(packageName: string): Promise<string | nu
   }
 
   // Fallback: GitHub REST search API (no auth needed, but rate-limited)
-  const query = encodeURIComponent(`${packageName} in:name`)
+  const query = encodeURIComponent(`${searchTerm} in:name`)
   const res = await fetch(`https://api.github.com/search/repositories?q=${query}&per_page=5`, {
     headers: { 'User-Agent': 'skilld/1.0' },
   }).catch(() => null)
@@ -373,14 +403,22 @@ export async function searchGitHubRepo(packageName: string): Promise<string | nu
   if (!data?.items?.length)
     return null
 
+  // Prefer exact suffix match
   const match = data.items.find(r =>
     r.full_name.toLowerCase().endsWith(`/${packageName.toLowerCase()}`)
-    || r.full_name.toLowerCase().endsWith(`/${packageName.replace(/^@.*\//, '').toLowerCase()}`),
+    || r.full_name.toLowerCase().endsWith(`/${shortName.toLowerCase()}`),
   )
+  if (match)
+    return `https://github.com/${match.full_name}`
 
-  return match
-    ? `https://github.com/${match.full_name}`
-    : `https://github.com/${data.items[0].full_name}`
+  // Validate remaining results via package.json
+  for (const candidate of data.items) {
+    const gh = parseGitHubUrl(`https://github.com/${candidate.full_name}`)
+    if (gh && await verifyNpmRepo(gh.owner, gh.repo, packageName))
+      return `https://github.com/${candidate.full_name}`
+  }
+
+  return null
 }
 
 /**
@@ -434,14 +472,17 @@ export async function fetchReadme(owner: string, repo: string, subdir?: string):
     return `ungh://${owner}/${repo}${subdir ? `/${subdir}` : ''}`
   }
 
-  // Fallback to raw.githubusercontent.com
+  // Fallback to raw.githubusercontent.com — use GET instead of HEAD
+  // because raw.githubusercontent.com sometimes returns HTML on HEAD for valid URLs
   const basePath = subdir ? `${subdir}/` : ''
   for (const branch of ['main', 'master']) {
-    for (const filename of ['README.md', 'readme.md']) {
+    for (const filename of ['README.md', 'Readme.md', 'readme.md']) {
       const readmeUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${basePath}${filename}`
-      if (await verifyUrl(readmeUrl)) {
+      const res = await fetch(readmeUrl, {
+        headers: { 'User-Agent': 'skilld/1.0' },
+      }).catch(() => null)
+      if (res?.ok)
         return readmeUrl
-      }
     }
   }
 
@@ -507,8 +548,9 @@ function filterSourceFiles(files: string[]): string[] {
 /**
  * Fetch source files from GitHub repo's src/ folder
  */
-export async function fetchGitSource(owner: string, repo: string, version: string, packageName?: string): Promise<GitSourceResult | null> {
-  const tag = await findGitTag(owner, repo, version, packageName)
+export async function fetchGitSource(owner: string, repo: string, version: string, packageName?: string, repoUrl?: string): Promise<GitSourceResult | null> {
+  const branchHint = repoUrl ? extractBranchHint(repoUrl) : undefined
+  const tag = await findGitTag(owner, repo, version, packageName, branchHint)
   if (!tag)
     return null
 

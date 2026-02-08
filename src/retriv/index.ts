@@ -1,10 +1,10 @@
-import type { ChunkEntity, Document, IndexConfig, SearchFilter, SearchOptions, SearchResult, SearchSnippet } from './types'
+import type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet } from './types'
 import { createRetriv } from 'retriv'
 import { autoChunker } from 'retriv/chunkers/auto'
 import sqlite from 'retriv/db/sqlite'
 import { transformersJs } from 'retriv/embeddings/transformers-js'
 
-export type { ChunkEntity, Document, IndexConfig, SearchFilter, SearchOptions, SearchResult, SearchSnippet }
+export type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet }
 
 function getDb(config: IndexConfig) {
   return createRetriv({
@@ -22,17 +22,9 @@ export async function createIndex(
 ): Promise<void> {
   const db = await getDb(config)
 
-  // Batch documents to report progress
-  const BATCH_SIZE = 5
-  let indexed = 0
-
-  for (let i = 0; i < documents.length; i += BATCH_SIZE) {
-    const batch = documents.slice(i, i + BATCH_SIZE)
-    await db.index(batch)
-    indexed += batch.length
-    const last = batch[batch.length - 1]!
-    config.onProgress?.(indexed, documents.length, { id: last.id, type: last.metadata?.type })
-  }
+  await db.index(documents, {
+    onProgress: config.onProgress,
+  })
 
   await db.close?.()
 }

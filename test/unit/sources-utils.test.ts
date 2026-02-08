@@ -38,6 +38,17 @@ describe('sources/utils', () => {
       })
     })
 
+    it('strips .git suffix from repo name', () => {
+      expect(parseGitHubUrl('https://github.com/nextauthjs/next-auth.git')).toEqual({
+        owner: 'nextauthjs',
+        repo: 'next-auth',
+      })
+      expect(parseGitHubUrl('git+https://github.com/owner/repo.git')).toEqual({
+        owner: 'owner',
+        repo: 'repo',
+      })
+    })
+
     it('returns null for invalid URLs', () => {
       expect(parseGitHubUrl('https://gitlab.com/owner/repo')).toBeNull()
       expect(parseGitHubUrl('not-a-url')).toBeNull()

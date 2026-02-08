@@ -6,23 +6,40 @@ import { REFERENCES_DIR } from '../cache'
 import { formatSnippet } from '../core'
 import { searchSnippets } from '../retriv'
 
-/** Find all per-package search DBs, optionally filtered by package name */
+/** Collect all `<pkg>@<version>/search.db` paths, handling scoped (`@scope/name@ver`) and unscoped (`name@ver`) layouts */
 function findPackageDbs(packageFilter?: string): string[] {
   if (!existsSync(REFERENCES_DIR))
     return []
 
-  const normalize = (s: string) => s.toLowerCase().replace(/[-_]/g, '')
+  const normalize = (s: string) => s.toLowerCase().replace(/[-_@/]/g, '')
 
-  return readdirSync(REFERENCES_DIR)
-    .filter(name => name.includes('@'))
-    .filter((name) => {
+  // Build list of { pkg: full package name, dbPath }
+  const entries: { pkg: string, dbPath: string }[] = []
+  for (const entry of readdirSync(REFERENCES_DIR)) {
+    if (entry.startsWith('@')) {
+      // Scoped: @scope/ contains name@version dirs
+      const scopeDir = join(REFERENCES_DIR, entry)
+      for (const sub of readdirSync(scopeDir)) {
+        if (!sub.includes('@'))
+          continue
+        const name = sub.split('@')[0]!
+        entries.push({ pkg: `${entry}/${name}`, dbPath: join(scopeDir, sub, 'search.db') })
+      }
+    }
+    else if (entry.includes('@')) {
+      // Unscoped: name@version
+      entries.push({ pkg: entry.split('@')[0]!, dbPath: join(REFERENCES_DIR, entry, 'search.db') })
+    }
+  }
+
+  return entries
+    .filter(({ pkg }) => {
       if (!packageFilter)
         return true
-      const pkg = name.split('@')[0]
-      const filter = normalize(packageFilter)
-      return normalize(pkg).includes(filter) || pkg.startsWith(packageFilter)
+      const f = normalize(packageFilter)
+      return normalize(pkg).includes(f) || normalize(pkg) === f
     })
-    .map(dir => join(REFERENCES_DIR, dir, 'search.db'))
+    .map(e => e.dbPath)
     .filter(db => existsSync(db))
 }
 

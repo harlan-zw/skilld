@@ -193,11 +193,11 @@ export function getPkgKeyFiles(name: string, cwd: string, version?: string): str
       files.push(basename(pkg.module))
   }
 
-  // Check for common doc files
-  for (const f of ['README.md', 'CHANGELOG.md', 'changelog.md']) {
-    if (existsSync(join(pkgPath, f)))
-      files.push(f)
-  }
+  // Check for common doc files (case-insensitive readme match)
+  const entries = readdirSync(pkgPath).filter(f =>
+    /^readme\.md$/i.test(f) || /^changelog\.md$/i.test(f),
+  )
+  files.push(...entries)
 
   return [...new Set(files)]
 }

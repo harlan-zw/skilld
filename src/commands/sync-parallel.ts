@@ -520,11 +520,16 @@ async function syncBaseSkill(
     update(packageName, 'embedding', `Indexing ${docsToIndex.length} documents...`, versionKey)
     await createIndex(docsToIndex, {
       dbPath,
-      onProgress: (current, total, doc) => {
-        const type = doc?.type === 'source' || doc?.type === 'types' ? 'code' : 'doc'
-        const file = doc?.id ? doc.id.split('/').pop() : ''
-        const pct = Math.round((current / total) * 100)
-        update(packageName, 'embedding', `Indexing ${type} ${file}... ${current}/${total} ${pct}%`, versionKey)
+      onProgress: ({ phase, current, total }) => {
+        if (phase === 'storing') {
+          const d = docsToIndex[current - 1]
+          const type = d?.metadata?.type === 'source' || d?.metadata?.type === 'types' ? 'code' : 'doc'
+          const file = d?.id.split('/').pop() ?? ''
+          update(packageName, 'embedding', `Indexing ${type} ${file}... ${current}/${total}`, versionKey)
+        }
+        else if (phase === 'embedding') {
+          update(packageName, 'embedding', `Embedding ${current}/${total}`, versionKey)
+        }
       },
     })
   }

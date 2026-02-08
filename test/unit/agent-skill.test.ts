@@ -15,7 +15,9 @@ describe('agent/skill', () => {
       expect(result).toContain('---')
       expect(result).toContain('name: vue')
       expect(result).toContain('version: "3.4.0"')
-      expect(result).toContain('working with *.vue files or importing from "vue"')
+      expect(result).toContain('Expert knowledge for vue (Progressive JavaScript framework)')
+      expect(result).toContain('importing from "vue"')
+      expect(result).toContain('working with *.vue files')
       expect(result).toContain('# Vue')
     })
 
@@ -25,7 +27,8 @@ describe('agent/skill', () => {
         relatedSkills: [],
       })
 
-      expect(result).toContain('using anything from the package "test-pkg"')
+      expect(result).toContain('Expert knowledge for test-pkg')
+      expect(result).toContain('user mentions test pkg')
     })
 
     it('omits version if not provided', () => {

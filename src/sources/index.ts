@@ -79,6 +79,7 @@ export type {
 
 // Utils
 export {
+  extractBranchHint,
   fetchText,
   isGitHubRepoUrl,
   normalizeRepoUrl,

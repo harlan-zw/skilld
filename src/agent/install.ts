@@ -55,9 +55,10 @@ export function installSkillForAgents(
     const baseDir = isGlobal ? agent.globalSkillsDir! : join(cwd, agent.skillsDir)
     const skillDir = join(baseDir, sanitized)
 
-    // Create directory and write files
-    mkdirSync(skillDir, { recursive: true })
-    writeFileSync(join(skillDir, '_SKILL.md'), skillContent)
+    // Create directory and write files (inside .skilld/ to keep git clean)
+    const skilldDir = join(skillDir, '.skilld')
+    mkdirSync(skilldDir, { recursive: true })
+    writeFileSync(join(skilldDir, '_SKILL.md'), skillContent)
 
     // Write additional files
     if (options.files) {

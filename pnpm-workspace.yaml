@@ -1,11 +1,14 @@
+catalogMode: prefer
+
+shellEmulator: true
+
+trustPolicy: no-downgrade
 packages:
   - playground
 
 catalog:
   bumpp: ^10.4.1
   tsx: ^4.21.0
-
-catalogMode: prefer
 
 catalogs:
   deps:
@@ -18,7 +21,7 @@ catalogs:
     mlly: ^1.8.0
     oxc-parser: ^0.112.0
     p-limit: ^7.3.0
-    retriv: ^0.8.3
+    retriv: ^0.9.0
     sqlite-vec: ^0.1.6
     typescript: ^5.9.3
   dev-build:
@@ -33,7 +36,3 @@ catalogs:
 
 onlyBuiltDependencies:
   - esbuild
-
-shellEmulator: true
-
-trustPolicy: no-downgrade

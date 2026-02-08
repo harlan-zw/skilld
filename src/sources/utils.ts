@@ -34,6 +34,29 @@ export async function verifyUrl(url: string): Promise<boolean> {
 }
 
 /**
+ * Check if URL points to a social media or package registry site (not real docs)
+ */
+const USELESS_HOSTS = new Set([
+  'twitter.com',
+  'x.com',
+  'facebook.com',
+  'linkedin.com',
+  'youtube.com',
+  'instagram.com',
+  'npmjs.com',
+  'www.npmjs.com',
+  'yarnpkg.com',
+])
+
+export function isUselessDocsUrl(url: string): boolean {
+  try {
+    const { hostname } = new URL(url)
+    return USELESS_HOSTS.has(hostname)
+  }
+  catch { return false }
+}
+
+/**
  * Check if URL is a GitHub repo URL (not a docs site)
  */
 export function isGitHubRepoUrl(url: string): boolean {
@@ -50,7 +73,7 @@ export function isGitHubRepoUrl(url: string): boolean {
  * Parse owner/repo from GitHub URL
  */
 export function parseGitHubUrl(url: string): { owner: string, repo: string } | null {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/)
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:[/#]|$)/)
   if (!match)
     return null
   return { owner: match[1]!, repo: match[2]! }
@@ -62,7 +85,22 @@ export function parseGitHubUrl(url: string): { owner: string, repo: string } | n
 export function normalizeRepoUrl(url: string): string {
   return url
     .replace(/^git\+/, '')
+    .replace(/#.*$/, '')
     .replace(/\.git$/, '')
     .replace(/^git:\/\//, 'https://')
     .replace(/^ssh:\/\/git@github\.com/, 'https://github.com')
+}
+
+/**
+ * Extract branch hint from URL fragment (e.g. "git+https://...#main" → "main")
+ */
+export function extractBranchHint(url: string): string | undefined {
+  const hash = url.indexOf('#')
+  if (hash === -1)
+    return undefined
+  const fragment = url.slice(hash + 1)
+  // Ignore non-branch fragments like "readme"
+  if (!fragment || fragment === 'readme')
+    return undefined
+  return fragment
 }

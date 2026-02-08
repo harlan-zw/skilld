@@ -16,12 +16,20 @@ export interface ChunkingOptions {
   chunkOverlap?: number
 }
 
+export type IndexPhase = 'chunking' | 'embedding' | 'storing'
+
+export interface IndexProgress {
+  phase: IndexPhase
+  current: number
+  total: number
+}
+
 export interface IndexConfig {
   dbPath: string
   model?: string
   chunking?: ChunkingOptions
-  /** Progress callback (current, total, currentDoc) */
-  onProgress?: (current: number, total: number, doc?: { id: string, type?: string }) => void
+  /** Progress callback forwarded from retriv */
+  onProgress?: (progress: IndexProgress) => void
 }
 
 export interface SearchResult {

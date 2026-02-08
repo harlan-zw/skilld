@@ -54,7 +54,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
             yield { name, dir, agent: agentType, info: lock.skills[name], scope: 'local' }
           }
           else {
-            const info = parseSkillFrontmatter(join(dir, '_SKILL.md'))
+            const info = parseSkillFrontmatter(join(dir, '.skilld', '_SKILL.md'))
             if (info?.generator === 'skilld') {
               yield { name, dir, agent: agentType, info, scope: 'local' }
             }
@@ -76,7 +76,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
             yield { name, dir, agent: agentType, info: lock.skills[name], scope: 'global' }
           }
           else {
-            const info = parseSkillFrontmatter(join(dir, '_SKILL.md'))
+            const info = parseSkillFrontmatter(join(dir, '.skilld', '_SKILL.md'))
             if (info?.generator === 'skilld') {
               yield { name, dir, agent: agentType, info, scope: 'global' }
             }

@@ -361,10 +361,12 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
   const args = buildCliArgs(cli, cliModel, skillDir)
   const parseLine = cli === 'claude' ? parseClaudeLine : parseGeminiLine
 
-  // Write prompt for debugging
-  writeFileSync(join(skillDir, 'PROMPT.md'), prompt)
+  // Write prompt for debugging (inside .skilld/ to keep git clean)
+  const skilldDir = join(skillDir, '.skilld')
+  mkdirSync(skilldDir, { recursive: true })
+  writeFileSync(join(skilldDir, 'PROMPT.md'), prompt)
 
-  const outputPath = join(skillDir, '_SKILL.md')
+  const outputPath = join(skilldDir, '_SKILL.md')
 
   return new Promise<OptimizeResult>((resolve) => {
     const proc = spawn(cli, args, {

@@ -90,11 +90,38 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
   return lines.join('\n')
 }
 
-function generateFrontmatter({ name, version, globs }: SkillOptions): string {
+/**
+ * Expand a package name into keyword variants for better trigger matching.
+ * e.g. "@nuxt/ui" → ["nuxt ui", "nuxt/ui"], "vue-router" → ["vue router"]
+ */
+function expandPackageName(name: string): string[] {
+  const variants = new Set<string>()
+  // Strip scope for matching: @nuxt/ui → nuxt/ui → nuxt ui
+  const unscoped = name.replace(/^@/, '')
+  if (unscoped !== name) {
+    variants.add(unscoped) // nuxt/ui
+    variants.add(unscoped.replace(/\//g, ' ')) // nuxt ui
+  }
+  // Hyphen → space: vue-router → vue router
+  if (name.includes('-')) {
+    const spaced = name.replace(/^@/, '').replace(/\//g, ' ').replace(/-/g, ' ')
+    variants.add(spaced)
+  }
+  // Remove the original name itself from variants (it's already in the description)
+  variants.delete(name)
+  return [...variants]
+}
+
+function generateFrontmatter({ name, version, globs, description: pkgDescription }: SkillOptions): string {
   const patterns = globs ?? FILE_PATTERN_MAP[name]
-  const description = patterns?.length
-    ? `Load skill when working with ${patterns.join(', ')} files or importing from "${name}".`
-    : `Load skill when using anything from the package "${name}".`
+  const keywords = expandPackageName(name)
+  const fileHint = patterns?.length ? ` importing from "${name}" or working with ${patterns.join(', ')} files` : ` importing from "${name}"`
+  const keywordHint = keywords.length ? ` or user mentions ${keywords.join(', ')}` : ''
+
+  const lead = pkgDescription
+    ? `Expert knowledge for ${name} (${pkgDescription.replace(/\.$/, '')}).`
+    : `Expert knowledge for ${name}.`
+  const description = `${lead} Use when${fileHint}${keywordHint}.`
 
   const lines = [
     '---',
