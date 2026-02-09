@@ -11,7 +11,7 @@
 Agents suck at following latest conventions beyond their [reliable knowledge cut-off](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison). They shoot themselves in the foot
 with new APIs and conventions, and they don't know what they don't know.
 
-Agent Skills help us solve this by distilling the most important patterns and conventions for a package into a single SKILL.md file.
+[Agent Skills](https://agentskills.io/home) help us solve this by distilling the most important patterns and conventions for a package into a single SKILL.md file.
 Getting skills for our packages either involves the maintainer (or ourselves) taking on the maintenance burden and surfacing them or using skill sharing
 sites like [skills.sh](https://skills.sh/).
 
@@ -34,12 +34,12 @@ Skilld super-charges maintainers' efforts. They write us great docs, release not
 
 ## Features
 
-- 🌍 **Any NPM Package**: Repo, docs, releases, issues, discussions
-- 🤖 **BYO Agent**: Generate SKILL.md with or without an LLM
-- 📚 **Customizable**: `Best practices`, `LLM Gaps`, `Doc Map` or your own prompts
-- 🔍 **Semantic Search**: Token-optimized search via [retriv](https://github.com/harlan-zw/retriv)
-- 🎯 **Safe**: Prompt injection sanitization, version-aware output
-- 🤝 **Ecosystem**: [skills-npm](https://github.com/antfu/skills-npm) and `/llms.txt` support
+- 🌍 **Any NPM Package** - Repo, docs, releases, issues, discussions
+- 🤖 **BYO Agent** - Generate SKILL.md with or without an LLM
+- 📚 **Customizable** - `Best practices`, `LLM Gaps`, `Doc Map` or your own prompts
+- 🔍 **Semantic Search** - Token-optimized search via [retriv](https://github.com/harlan-zw/retriv)
+- 🎯 **Safe** - Prompt injection sanitization, version-aware output
+- 🤝 **Ecosystem** - [skills-npm](https://github.com/antfu/skills-npm) and `/llms.txt` support
 
 ## Quick Start
 
