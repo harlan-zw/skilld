@@ -16,8 +16,8 @@ Getting skills for our packages either involves the maintainer (or ourselves) ta
 sites like [skills.sh](https://skills.sh/).
 
 While these are great for generic skills, they aren't good for NPM skills:
-- No version-awareness, high maintenance burden to keep up with new releases and deprecations
-- Non-optimized context windows, prompt injection risks
+- No version-awareness, high maintenance burden to keep up with new releases and deprecations.
+- Non-optimized context windows, prompt injection risks, missing references.
 - Community-sourced skills leak personal opinions and biases. Maintainers are out of the loop, and may not even know about them.
 
 Skilld leverages maintainers existing effort. Maintainers write great docs for us, we generate our own local skills optimized for our models and codebase from them.
