@@ -68,7 +68,7 @@ function formatRelativeDate(isoDate: string): string {
   return `${years} year${years === 1 ? '' : 's'} ago`
 }
 
-function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, pkgFiles }: SkillOptions): string {
+function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, pkgFiles, packages }: SkillOptions): string {
   let title = `# ${name}`
   if (repoUrl) {
     const url = repoUrl.startsWith('http') ? repoUrl : `https://github.com/${repoUrl}`
@@ -108,6 +108,13 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
   lines.push('')
   const refs: string[] = []
   refs.push(`[package.json](./.skilld/pkg/package.json)`)
+  // Multi-package: add named pkg refs (e.g. pkg-vue, pkg-reactivity)
+  if (packages && packages.length > 1) {
+    for (const pkg of packages) {
+      const shortName = pkg.name.split('/').pop()!.toLowerCase()
+      refs.push(`[pkg-${shortName}](./.skilld/pkg-${shortName}/package.json)`)
+    }
+  }
   if (pkgFiles?.includes('README.md'))
     refs.push(`[README](./.skilld/pkg/README.md)`)
   if (hasIssues)
