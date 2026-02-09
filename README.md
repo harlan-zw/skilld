@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/skilld?color=yellow)](https://npmjs.com/package/skilld)
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
-[![license](https://img.shields.io/github/license/harlan-zw/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE)
 
 > Expert SKILL.md knowledge for your NPM dependencies.
 
@@ -34,12 +34,12 @@ Skilld super-charges maintainers' efforts. They write us great docs, release not
 
 ## Features
 
-- 🌍 **Any NPM Package**: Sources GitHub repo, doc sources, releases, issues, discussions and more
-- 🤖 **BYO Agent, or don't**: Generate SKILL.md for your key dependencies from sources (with or without an LLM)
-- 📚 **SKILL.md your way**: Optional `Best practices`, `LLM Gaps`, `Doc Map` sections; or write your own prompts
-- 🔍 **Token Optimized Search**: Semantic + token search with [retriv](https://github.com/harlan-zw/retriv)
-- 🎯 **Best practices**: Token-optimized output, prompt injection sanitization, and version-aware
-- 🤝 **Ecosystem Friendly**: [skills-npm](https://github.com/antfu/skills-npm) and repo `/llms.txt`
+- 🌍 **Any NPM Package**: Repo, docs, releases, issues, discussions
+- 🤖 **BYO Agent**: Generate SKILL.md with or without an LLM
+- 📚 **Customizable**: `Best practices`, `LLM Gaps`, `Doc Map` or your own prompts
+- 🔍 **Semantic Search**: Token-optimized search via [retriv](https://github.com/harlan-zw/retriv)
+- 🎯 **Safe**: Prompt injection sanitization, version-aware output
+- 🤝 **Ecosystem**: [skills-npm](https://github.com/antfu/skills-npm) and `/llms.txt` support
 
 ## Quick Start
 
