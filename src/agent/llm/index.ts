@@ -458,7 +458,7 @@ interface OptimizeSectionOptions {
 
 /** Spawn a single CLI process for one section */
 function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
-  const { section, prompt, outputFile, skillDir, model, packageName, onProgress, timeout, debug, preExistingFiles } = opts
+  const { section, prompt, outputFile, skillDir, model, onProgress, timeout, debug, preExistingFiles } = opts
 
   const cliConfig = CLI_MODELS[model]
   if (!cliConfig) {

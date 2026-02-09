@@ -11,6 +11,7 @@ export default antfu({
   ignores: [
     'CLAUDE.md',
     'docs/**',
+    '.claude/skills/**',
   ],
 }, {
   files: ['**/*.md/**'],
