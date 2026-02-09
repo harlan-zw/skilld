@@ -734,6 +734,10 @@ const main = defineCommand({
             placeholder: 'vue nuxt pinia',
           })
           if (p.isCancel(input)) {
+            if (!hasPkgJson) {
+              p.cancel('Setup cancelled')
+              return
+            }
             continue
           }
           if (!input) {
