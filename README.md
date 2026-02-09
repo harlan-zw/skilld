@@ -82,24 +82,23 @@ Add to `package.json` to keep skills fresh on install:
 skilld
 
 # Add skills for specific package(s)
-skilld add vueuse
 skilld add vue nuxt pinia
 
 # Update outdated skills
 skilld update
-skilld update vue
+skilld update tailwindcss
 
 # Search docs across installed skills
 skilld search "useFetch options" -p nuxt
 
 # Target a specific agent
-skilld add vueuse --agent cursor
+skilld add react --agent cursor
 
 # Install globally to ~/.claude/skills
-skilld add vueuse --global
+skilld add zod --global
 
 # Skip prompts
-skilld add vueuse --yes
+skilld add drizzle-orm --yes
 
 # Check skill info
 skilld info
