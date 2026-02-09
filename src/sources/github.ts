@@ -343,7 +343,9 @@ export function validateGitDocsWithLlms(
     let path = link.url
     // Strip absolute URL to pathname
     if (path.startsWith('http')) {
-      try { path = new URL(path).pathname }
+      try {
+        path = new URL(path).pathname
+      }
       catch { /* keep as-is */ }
     }
     return normalizePath(path)

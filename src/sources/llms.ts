@@ -82,7 +82,7 @@ export async function downloadLlmsDocs(
   let completed = 0
 
   const results = await Promise.all(
-    llmsContent.links.map((link, i) => limit(async () => {
+    llmsContent.links.map(link => limit(async () => {
       const url = link.url.startsWith('http')
         ? link.url
         : `${baseUrl.replace(/\/$/, '')}${link.url.startsWith('/') ? '' : '/'}${link.url}`

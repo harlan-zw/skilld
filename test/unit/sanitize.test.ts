@@ -388,6 +388,53 @@ describe('repairMarkdown', () => {
       expect(result).toBe(input)
     })
 
+    it('auto-closes code block when emoji starts a new line', () => {
+      const input = [
+        '```ts',
+        'const x = ref(0)',
+        '',
+        '✅ Use ref() for reactive state',
+      ].join('\n')
+      const result = repairMarkdown(input)
+      expect(result).toContain('```ts\nconst x = ref(0)\n\n```')
+      expect(result).toContain('✅ Use ref() for reactive state')
+      // Emoji line should be after the closing fence, not between opening and closing
+      const codeBlock = result.match(/```ts\n[\s\S]*?\n```/)
+      expect(codeBlock).toBeTruthy()
+      expect(codeBlock![0]).not.toContain('✅')
+    })
+
+    it('handles emoji line followed by orphaned closing fence', () => {
+      const input = [
+        '```ts',
+        'import { ref } from "vue"',
+        '',
+        '✅ Best practice here',
+        '',
+        '```',
+      ].join('\n')
+      const result = repairMarkdown(input)
+      // Code block closed before emoji, orphaned ``` removed as empty block
+      expect(result).toContain('```ts\nimport { ref } from "vue"')
+      expect(result).toContain('✅ Best practice here')
+      // Should not have an empty code block
+      expect(result).not.toMatch(/```[\t\v\f\r \xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]*\n\s*```/)
+    })
+
+    it('handles multiple emoji lines after code', () => {
+      const input = [
+        '```ts',
+        'const foo = bar()',
+        '✅ Thing one',
+        '⚠️ Thing two',
+        '```',
+      ].join('\n')
+      const result = repairMarkdown(input)
+      expect(result).toContain('```ts\nconst foo = bar()\n```')
+      expect(result).toContain('✅ Thing one')
+      expect(result).toContain('⚠️ Thing two')
+    })
+
     it('fixes the LLM best-practices pattern (real-world)', () => {
       const input = [
         '## Best Practices',
@@ -409,6 +456,64 @@ describe('repairMarkdown', () => {
       // Both code blocks should be closed
       const backtickOnly = (result.match(/^```\s*$/gm) || []).length
       expect(backtickOnly).toBe(2) // auto-close + explicit close
+    })
+  })
+
+  describe('code block cleanup', () => {
+    it('removes empty code blocks', () => {
+      const input = '```ts\n```\n\nSome text'
+      const result = repairMarkdown(input)
+      expect(result).not.toContain('```')
+      expect(result).toContain('Some text')
+    })
+
+    it('removes duplicate consecutive code blocks', () => {
+      const input = [
+        '```ts',
+        'const x = 1',
+        '```',
+        '',
+        '```ts',
+        'const x = 1',
+        '```',
+      ].join('\n')
+      const result = repairMarkdown(input)
+      // Should appear only once
+      const matches = result.match(/const x = 1/g)
+      expect(matches).toHaveLength(1)
+    })
+
+    it('preserves non-duplicate code blocks', () => {
+      const input = [
+        '```ts',
+        'const x = 1',
+        '```',
+        '',
+        '```ts',
+        'const y = 2',
+        '```',
+      ].join('\n')
+      const result = repairMarkdown(input)
+      expect(result).toContain('const x = 1')
+      expect(result).toContain('const y = 2')
+    })
+
+    it('does not dedup code blocks separated by text', () => {
+      const input = [
+        '```ts',
+        'const x = 1',
+        '```',
+        '',
+        'Explanation here.',
+        '',
+        '```ts',
+        'const x = 1',
+        '```',
+      ].join('\n')
+      const result = repairMarkdown(input)
+      // Text between resets dedup, so both should survive
+      const matches = result.match(/const x = 1/g)
+      expect(matches).toHaveLength(2)
     })
   })
 

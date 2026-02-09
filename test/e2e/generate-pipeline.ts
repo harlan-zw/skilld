@@ -67,12 +67,12 @@ const CLI_MODELS_MAP: Partial<Record<OptimizeModel, string>> = {
   'opus': 'claude',
   'sonnet': 'claude',
   'haiku': 'claude',
-  'gemini-2.5-pro': 'gemini',
-  'gemini-2.5-flash': 'gemini',
-  'gemini-2.5-flash-lite': 'gemini',
   'gemini-3-pro': 'gemini',
   'gemini-3-flash': 'gemini',
-  'codex': 'codex',
+  'gpt-5.2-codex': 'codex',
+  'gpt-5.1-codex-max': 'codex',
+  'gpt-5.2': 'codex',
+  'gpt-5.1-codex-mini': 'codex',
 }
 
 /** Check if the CLI for a given model is installed */

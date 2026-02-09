@@ -69,13 +69,6 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
   hasShippedDocs: boolean
   skillDir: string
 }): string {
-  const searchScope = [
-    'docs',
-    hasIssues && 'issues',
-    hasDiscussions && 'discussions',
-    hasReleases && 'releases',
-  ].filter(Boolean).join(', ')
-
   const docsPath = hasShippedDocs
     ? `\`${skillDir}/.skilld/pkg/docs/\` or \`${skillDir}/.skilld/pkg/README.md\``
     : docsType === 'llms.txt'

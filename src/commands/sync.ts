@@ -285,7 +285,7 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
 }
 
 /** Default sections when model is pre-set (non-interactive) */
-export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'api']
+export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'llm-gaps']
 
 export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: CustomPrompt, cancelled: boolean }> {
   const selected = await p.multiselect({
@@ -431,9 +431,9 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global)
   if (shippedResult) {
     for (const shipped of shippedResult.shipped) {
-      p.log.success(`Linked shipped skill: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
+      p.log.success(`Using published SKILL.md: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
     }
-    spin.stop(`Shipped ${shippedResult.shipped.length} skill(s) from ${packageName}`)
+    spin.stop(`Using published SKILL.md(s) from ${packageName}`)
     return
   }
 
@@ -587,6 +587,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     pkgFiles,
     dirName: skillDirName,
     packages: allPackages.length > 1 ? allPackages : undefined,
+    repoUrl: resolved.repoUrl,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
 
@@ -724,6 +725,7 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
       generatedBy: getModelLabel(model),
       dirName,
       packages,
+      repoUrl: resolved.repoUrl,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }

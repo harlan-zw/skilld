@@ -57,6 +57,7 @@ interface PackageState {
   version?: string
   streamPreview?: string
   startedAt?: number
+  completedAt?: number
 }
 
 const STATUS_ICONS: Record<PackageStatus, string> = {
@@ -131,8 +132,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
       const dim = '\x1B[90m'
       const name = s.name.padEnd(maxNameLen)
       const version = s.version ? `${dim}${s.version}${reset} ` : ''
-      const elapsed = (s.status === 'done' || s.status === 'error') && s.startedAt
-        ? ` ${dim}(${formatDuration(performance.now() - s.startedAt)})${reset}`
+      const elapsed = (s.status === 'done' || s.status === 'error') && s.startedAt && s.completedAt
+        ? ` ${dim}(${formatDuration(s.completedAt - s.startedAt)})${reset}`
         : ''
       const preview = s.streamPreview ? ` ${dim}${s.streamPreview}${reset}` : ''
       return `  ${color}${icon}${reset} ${name} ${version}${s.message}${elapsed}${preview}`
@@ -149,6 +150,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     const state = states.get(pkg)!
     if (!state.startedAt && status !== 'pending')
       state.startedAt = performance.now()
+    if ((status === 'done' || status === 'error') && !state.completedAt)
+      state.completedAt = performance.now()
     state.status = status
     state.message = message
     state.streamPreview = undefined // Clear preview on status change
@@ -174,12 +177,16 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
   // Collect successful packages for LLM phase (exclude shipped — they need no LLM)
   const successfulPkgs: string[] = []
+  const shippedPkgs: string[] = []
   const errors: Array<{ pkg: string, reason: string }> = []
   for (let i = 0; i < baseResults.length; i++) {
     const r = baseResults[i]!
     if (r.status === 'fulfilled' && r.value !== 'shipped') {
       successfulPkgs.push(packages[i]!)
       skillData.set(packages[i]!, r.value)
+    }
+    else if (r.status === 'fulfilled' && r.value === 'shipped') {
+      shippedPkgs.push(packages[i]!)
     }
     else if (r.status === 'rejected') {
       const err = r.reason
@@ -188,7 +195,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     }
   }
 
-  p.log.success(`Created ${successfulPkgs.length} base skills`)
+  const skillMsg = `Created ${successfulPkgs.length} base skills${shippedPkgs.length > 1 ? ` (Skipping ${shippedPkgs.length})` : ''}`
+  p.log.success(skillMsg)
 
   if (errors.length > 0) {
     for (const { pkg, reason } of errors) {
@@ -285,7 +293,7 @@ async function syncBaseSkill(
   // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
   const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global)
   if (shippedResult) {
-    update(packageName, 'done', 'Shipped', versionKey)
+    update(packageName, 'done', 'Published SKILL.md', versionKey)
     return 'shipped'
   }
 
@@ -324,7 +332,7 @@ async function syncBaseSkill(
   linkAllReferences(skillDir, packageName, cwd, version, resources.docsType)
 
   // Index all resources (single batch)
-  update(packageName, 'embedding', 'Creating search index...', versionKey)
+  update(packageName, 'embedding', 'Indexing docs', versionKey)
   await indexResources({
     packageName,
     version,
@@ -376,6 +384,7 @@ async function syncBaseSkill(
     pkgFiles,
     dirName: skillDirName,
     packages: allPackages.length > 1 ? allPackages : undefined,
+    repoUrl: resolved.repoUrl,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
@@ -383,7 +392,7 @@ async function syncBaseSkill(
     registerProject(cwd)
   }
 
-  update(packageName, 'done', 'Skill ready', versionKey)
+  update(packageName, 'done', 'Base skill created', versionKey)
 
   return {
     resolved,
@@ -466,9 +475,10 @@ async function enhanceWithLLM(
       pkgFiles: data.pkgFiles,
       dirName: data.skillDirName,
       packages: data.packages,
+      repoUrl: data.resolved.repoUrl,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
 
-  update(packageName, 'done', 'Enhanced', versionKey)
+  update(packageName, 'done', 'Skill optimized', versionKey)
 }

@@ -201,7 +201,7 @@ export function generateReleaseIndex(releases: GitHubRelease[], packageName?: st
     // Flag major/minor bumps for visibility
     const sv = parseSemver(version)
     const label = sv?.patch === 0 && sv.minor === 0 ? ' **[MAJOR]**' : sv?.patch === 0 ? ' **[MINOR]**' : ''
-    lines.push(`- [${r.tag}](./releases/${filename}.md): ${r.name || r.tag} (${date})${label}`)
+    lines.push(`- [${r.tag}](./${filename}.md): ${r.name || r.tag} (${date})${label}`)
   }
 
   lines.push('')

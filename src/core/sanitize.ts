@@ -9,6 +9,7 @@
  */
 
 /** Zero-width and invisible formatting characters used to hide text from human review */
+// eslint-disable-next-line no-misleading-character-class -- intentionally matching individual invisible chars
 const ZERO_WIDTH_RE = /[\u200B\u200C\uFEFF\u2060\u200D\u061C\u180E\u200E\u200F\u2028\u2029]/gu
 
 /** HTML comments (single-line and multi-line) */
@@ -217,6 +218,9 @@ const EXCESSIVE_BLANKS_RE = /\n{4,}/g
 /** Trailing whitespace on lines (preserve intentional double-space line breaks) */
 const TRAILING_WHITESPACE_RE = /[ \t]+$/gm
 
+/** Emoji at start of line inside a code block — LLM forgot to close the block */
+const EMOJI_LINE_START_RE = /^\p{Extended_Pictographic}/u
+
 /**
  * Close unclosed fenced code blocks.
  * Walks line-by-line tracking open/close state.
@@ -251,6 +255,12 @@ function closeUnclosedCodeBlocks(content: string): string {
           result.push(fence)
           // fence char/length stays the same since both match
         }
+        // Emoji at line start → LLM forgot to close code block before markdown content
+        else if (EMOJI_LINE_START_RE.test(trimmed)) {
+          result.push(fence)
+          inCodeBlock = false
+          fence = ''
+        }
       }
     }
     result.push(line)
@@ -265,6 +275,66 @@ function closeUnclosedCodeBlocks(content: string): string {
   }
 
   return result.join('\n')
+}
+
+/**
+ * Remove empty code blocks and deduplicate consecutive identical code blocks.
+ * Empty blocks arise when emoji/fence recovery leaves orphaned fences.
+ * Duplicate blocks arise when LLMs repeat the same code example.
+ */
+function cleanupCodeBlocks(content: string): string {
+  const lines = content.split('\n')
+  const toRemove = new Set<number>()
+  let prevCodeContent: string | undefined
+  let i = 0
+
+  while (i < lines.length) {
+    const trimmed = lines[i]!.trimStart()
+    const fm = trimmed.match(/^(`{3,}|~{3,})/)
+    if (!fm) {
+      // Non-blank text between code blocks resets dedup tracking
+      if (trimmed)
+        prevCodeContent = undefined
+      i++
+      continue
+    }
+
+    const fChar = fm[1][0]!
+    const fLen = fm[1].length
+    const openIdx = i
+    i++
+
+    let closeIdx = -1
+    while (i < lines.length) {
+      const ct = lines[i]!.trimStart()
+      const cm = ct.match(/^(`{3,}|~{3,})\s*$/)
+      if (cm && cm[1][0] === fChar && cm[1].length >= fLen) {
+        closeIdx = i
+        i++
+        break
+      }
+      i++
+    }
+
+    if (closeIdx === -1)
+      continue
+
+    const inner = lines.slice(openIdx + 1, closeIdx).join('\n').trim()
+
+    if (!inner) {
+      for (let j = openIdx; j <= closeIdx; j++) toRemove.add(j)
+    }
+    else if (inner === prevCodeContent) {
+      for (let j = openIdx; j <= closeIdx; j++) toRemove.add(j)
+    }
+    else {
+      prevCodeContent = inner
+    }
+  }
+
+  if (!toRemove.size)
+    return content
+  return lines.filter((_, idx) => !toRemove.has(idx)).join('\n')
 }
 
 /**
@@ -350,6 +420,9 @@ export function repairMarkdown(content: string): string {
 
   // Fix unclosed fenced code blocks (must run before other line-level fixes)
   result = closeUnclosedCodeBlocks(result)
+
+  // Remove empty and duplicate code blocks (artifacts from fence recovery)
+  result = cleanupCodeBlocks(result)
 
   // Fix unclosed inline code spans
   result = closeUnclosedInlineCode(result)

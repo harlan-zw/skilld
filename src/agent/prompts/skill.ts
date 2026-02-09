@@ -34,12 +34,14 @@ export interface SkillOptions {
   dirName?: string
   /** All packages tracked by this skill (multi-package skills) */
   packages?: Array<{ name: string }>
+  /** GitHub repo URL (owner/repo format or full URL) */
+  repoUrl?: string
 }
 
 export function generateSkillMd(opts: SkillOptions): string {
   const header = generatePackageHeader(opts)
-  const refs = generateReferencesBlock(opts)
-  const content = opts.body ? `${header}\n\n${refs}${opts.body}` : `${header}\n\n${refs.trimEnd()}`
+  const search = generateSearchBlock(opts.name, opts.hasIssues, opts.hasReleases)
+  const content = opts.body ? `${header}\n\n${search}\n\n${opts.body}` : `${header}\n\n${search}`
   const footer = generateFooter(opts.relatedSkills)
   return sanitizeMarkdown(repairMarkdown(`${generateFrontmatter(opts)}${content}\n${footer}`))
 }
@@ -66,8 +68,14 @@ function formatRelativeDate(isoDate: string): string {
   return `${years} year${years === 1 ? '' : 's'} ago`
 }
 
-function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, hasIssues, hasDiscussions }: SkillOptions & { repoUrl?: string }): string {
-  const lines: string[] = [`# ${name}`]
+function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, pkgFiles }: SkillOptions): string {
+  let title = `# ${name}`
+  if (repoUrl) {
+    const url = repoUrl.startsWith('http') ? repoUrl : `https://github.com/${repoUrl}`
+    const repoName = repoUrl.startsWith('http') ? repoUrl.split('/').slice(-2).join('/') : repoUrl
+    title = `# [${repoName}](${url}) \`${name}\``
+  }
+  const lines: string[] = [title]
 
   if (description)
     lines.push('', `> ${description}`)
@@ -96,10 +104,21 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
     lines.push(`**Tags:** ${tags}`)
   }
 
+  // References section
+  lines.push('')
+  const refs: string[] = []
+  refs.push(`[package.json](./.skilld/pkg/package.json)`)
+  if (pkgFiles?.includes('README.md'))
+    refs.push(`[README](./.skilld/pkg/README.md)`)
   if (hasIssues)
-    lines.push(`**Issues:** \`./.skilld/issues/\``)
+    refs.push(`[GitHub Issues](./.skilld/issues/_INDEX.md)`)
   if (hasDiscussions)
-    lines.push(`**Discussions:** \`./.skilld/discussions/\``)
+    refs.push(`[GitHub Discussions](./.skilld/discussions/_INDEX.md)`)
+  if (hasReleases)
+    refs.push(`[Releases](./.skilld/releases/_INDEX.md)`)
+
+  if (refs.length > 0)
+    lines.push(`**References:** ${refs.join(' • ')}`)
 
   return lines.join('\n')
 }
@@ -126,7 +145,29 @@ function expandPackageName(name: string): string[] {
   return [...variants]
 }
 
-function generateFrontmatter({ name, version, description: pkgDescription, globs, body, generatedBy, dirName, packages }: SkillOptions): string {
+/**
+ * Extract and expand GitHub repo name into keyword variants.
+ * e.g. "motion-v" → ["motion-v", "motion v"]
+ */
+function expandRepoName(repoUrl: string): string[] {
+  const variants = new Set<string>()
+  // Extract repo name from URL or owner/repo format
+  const repoName = repoUrl.startsWith('http')
+    ? repoUrl.split('/').pop()!
+    : repoUrl.split('/').pop()!
+
+  if (!repoName)
+    return []
+
+  variants.add(repoName) // motion-v
+  // Hyphen → space: motion-v → motion v
+  if (repoName.includes('-')) {
+    variants.add(repoName.replace(/-/g, ' '))
+  }
+  return [...variants]
+}
+
+function generateFrontmatter({ name, version, description: pkgDescription, globs, body, generatedBy, dirName, packages, repoUrl }: SkillOptions): string {
   const patterns = globs ?? FILE_PATTERN_MAP[name]
   const globHint = patterns?.length ? ` or working with ${patterns.join(', ')} files` : ''
   const descSuffix = pkgDescription ? ` (${pkgDescription.replace(/\.?\s*$/, '')})` : ''
@@ -145,8 +186,16 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
     desc = `Using code importing from ${importList}${globHint}. Researching or debugging ${keywordList}.${descSuffix}`
   }
   else {
-    const keywords = expandPackageName(name)
-    const nameList = [name, ...keywords].join(', ')
+    const allKeywords = new Set<string>()
+    allKeywords.add(name)
+    for (const kw of expandPackageName(name))
+      allKeywords.add(kw)
+    // Add repo name variants if available
+    if (repoUrl) {
+      for (const kw of expandRepoName(repoUrl))
+        allKeywords.add(kw)
+    }
+    const nameList = [...allKeywords].join(', ')
     desc = `Using code importing from "${name}"${globHint}. Researching or debugging ${nameList}.${descSuffix}`
   }
 
@@ -183,49 +232,6 @@ ${examples.join('\n')}
 \`\`\`
 
 Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.`
-}
-
-function generateReferencesBlock({ name, hasIssues, hasDiscussions, hasReleases, docsType = 'docs', hasShippedDocs = false, pkgFiles = [], packages }: SkillOptions): string {
-  const lines: string[] = [
-    generateSearchBlock(name, hasIssues, hasReleases),
-    '',
-    '## References',
-    '',
-  ]
-
-  // Package with inline file list
-  const fileList = pkgFiles.length ? ` — ${pkgFiles.map(f => `\`${f}\``).join(', ')}` : ''
-  lines.push(`**Package:** \`./.skilld/pkg/\`${fileList}`)
-
-  // Named package symlinks for multi-package skills
-  if (packages && packages.length > 1) {
-    for (const pkg of packages) {
-      const shortName = pkg.name.split('/').pop()!.toLowerCase()
-      lines.push(`**Package (${pkg.name}):** \`./.skilld/pkg-${shortName}/\``)
-    }
-  }
-
-  // Docs (only if separate from pkg)
-  if (hasShippedDocs) {
-    lines.push(`**Docs:** \`./.skilld/pkg/docs/\``)
-  }
-  else if (docsType === 'llms.txt') {
-    lines.push(`**Docs:** \`./.skilld/docs/llms.txt\``)
-  }
-  else if (docsType === 'docs') {
-    lines.push(`**Docs:** \`./.skilld/docs/\``)
-  }
-
-  if (hasIssues)
-    lines.push(`**Issues:** \`./.skilld/issues/\``)
-  if (hasDiscussions)
-    lines.push(`**Discussions:** \`./.skilld/discussions/\``)
-
-  if (hasReleases)
-    lines.push(`**Releases:** \`./.skilld/releases/\``)
-
-  lines.push('')
-  return lines.join('\n')
 }
 
 function generateFooter(relatedSkills: string[]): string {

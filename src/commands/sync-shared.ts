@@ -539,18 +539,17 @@ export async function indexResources(opts: {
   if (allDocs.length === 0)
     return
 
-  onProgress(`Indexing ${allDocs.length} documents`)
+  onProgress(`Building search index (${allDocs.length} docs)`)
   await createIndex(allDocs, {
     dbPath,
     onProgress: ({ phase, current, total }) => {
       if (phase === 'storing') {
         const d = allDocs[current - 1]
         const type = d?.metadata?.type === 'source' || d?.metadata?.type === 'types' ? 'code' : (d?.metadata?.type || 'doc')
-        const file = d?.id.split('/').pop() ?? ''
-        onProgress(`Indexing ${type} ${file} - ${current}/${total}`)
+        onProgress(`Storing ${type} (${current}/${total})`)
       }
       else if (phase === 'embedding') {
-        onProgress(`Embedding ${current}/${total}`)
+        onProgress(`Creating embeddings (${current}/${total})`)
       }
     },
   })

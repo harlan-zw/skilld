@@ -21,10 +21,11 @@ let running = false
 function resolveWorkerPath(): { path: string, execArgv?: string[] } {
   const dir = dirname(fileURLToPath(import.meta.url))
 
-  // Bundled: dist/retriv/pool.mjs → dist/retriv/worker.mjs
-  const bundled = join(dir, 'worker.mjs')
-  if (existsSync(bundled))
-    return { path: bundled }
+  // Bundled: dist/retriv/worker.mjs (resolve from package root, not chunk dir)
+  for (const candidate of [join(dir, 'worker.mjs'), join(dir, '..', 'retriv', 'worker.mjs')]) {
+    if (existsSync(candidate))
+      return { path: candidate }
+  }
 
   // Dev stub: src/retriv/pool.ts → src/retriv/worker.ts
   return { path: join(dir, 'worker.ts'), execArgv: ['--experimental-strip-types'] }

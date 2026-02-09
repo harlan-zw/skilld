@@ -28,10 +28,10 @@ export type OptimizeModel
     | 'haiku'
     | 'gemini-3-pro'
     | 'gemini-3-flash'
-    | 'gemini-2.5-pro'
-    | 'gemini-2.5-flash'
-    | 'gemini-2.5-flash-lite'
-    | 'codex'
+    | 'gpt-5.2-codex'
+    | 'gpt-5.1-codex-max'
+    | 'gpt-5.2'
+    | 'gpt-5.1-codex-mini'
 
 export interface ModelInfo {
   id: OptimizeModel
@@ -107,15 +107,15 @@ interface CliModelConfig {
 
 /** CLI config per model */
 const CLI_MODELS: Partial<Record<OptimizeModel, CliModelConfig>> = {
-  'opus': { cli: 'claude', model: 'opus', name: 'Opus 4.5', hint: 'Most capable', agentId: 'claude-code' },
-  'sonnet': { cli: 'claude', model: 'sonnet', name: 'Sonnet 4.5', hint: 'Balanced', recommended: true, agentId: 'claude-code' },
-  'haiku': { cli: 'claude', model: 'haiku', name: 'Haiku 4.5', hint: 'Fastest', agentId: 'claude-code' },
-  'gemini-2.5-pro': { cli: 'gemini', model: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', hint: 'Most capable', agentId: 'gemini-cli' },
-  'gemini-2.5-flash': { cli: 'gemini', model: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', hint: 'Balanced', agentId: 'gemini-cli' },
-  'gemini-2.5-flash-lite': { cli: 'gemini', model: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', hint: 'Fastest', agentId: 'gemini-cli' },
+  'opus': { cli: 'claude', model: 'opus', name: 'Opus 4.6', hint: 'Most capable for complex work', agentId: 'claude-code' },
+  'sonnet': { cli: 'claude', model: 'sonnet', name: 'Sonnet 4.5', hint: 'Best for everyday tasks', recommended: true, agentId: 'claude-code' },
+  'haiku': { cli: 'claude', model: 'haiku', name: 'Haiku 4.5', hint: 'Fastest for quick answers', agentId: 'claude-code' },
   'gemini-3-pro': { cli: 'gemini', model: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', hint: 'Most capable', agentId: 'gemini-cli' },
-  'gemini-3-flash': { cli: 'gemini', model: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', hint: 'Balanced', agentId: 'gemini-cli' },
-  'codex': { cli: 'codex', model: 'gpt-5-codex', name: 'Codex (GPT-5)', hint: 'OpenAI', agentId: 'codex' },
+  'gemini-3-flash': { cli: 'gemini', model: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', hint: 'Balanced', recommended: true, agentId: 'gemini-cli' },
+  'gpt-5.2-codex': { cli: 'codex', model: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', hint: 'Frontier agentic coding model', agentId: 'codex' },
+  'gpt-5.1-codex-max': { cli: 'codex', model: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', hint: 'Codex-optimized flagship', agentId: 'codex' },
+  'gpt-5.2': { cli: 'codex', model: 'gpt-5.2', name: 'GPT-5.2', hint: 'Latest frontier model', agentId: 'codex' },
+  'gpt-5.1-codex-mini': { cli: 'codex', model: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', hint: 'Optimized for codex, cheaper & faster', recommended: true, agentId: 'codex' },
 }
 
 export function getModelName(id: OptimizeModel): string {
@@ -598,7 +598,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
         writeFileSync(outputPath, content)
       }
 
-      const warnings = content ? validateSectionOutput(content, section, packageName) : undefined
+      const warnings = content ? validateSectionOutput(content, section) : undefined
 
       resolve({
         section,
@@ -805,7 +805,7 @@ interface ValidationWarning {
 }
 
 /** Validate a section's output against heuristic quality checks */
-function validateSectionOutput(content: string, section: SkillSection, packageName: string): ValidationWarning[] {
+function validateSectionOutput(content: string, section: SkillSection): ValidationWarning[] {
   const warnings: ValidationWarning[] = []
   const lines = content.split('\n').length
   const maxLines = SECTION_MAX_LINES[section]
@@ -816,12 +816,6 @@ function validateSectionOutput(content: string, section: SkillSection, packageNa
 
   if (lines < 3) {
     warnings.push({ section, warning: `Output only ${lines} lines — likely too sparse` })
-  }
-
-  // Check that package name appears at least once (sanity check)
-  const simpleName = packageName.replace(/^@[^/]+\//, '')
-  if (!content.toLowerCase().includes(simpleName.toLowerCase())) {
-    warnings.push({ section, warning: `Package name "${simpleName}" not found in output` })
   }
 
   return warnings
@@ -853,7 +847,7 @@ function cleanSectionOutput(content: string): string {
   if (firstMarker?.index && firstMarker.index > 0) {
     const preamble = cleaned.slice(0, firstMarker.index)
     // Only strip if preamble looks like code (contains function/const/export/return patterns)
-    if (/\b(function|const |let |var |export |return |import |async |class )\b/.test(preamble)) {
+    if (/\b(?:function|const |let |var |export |return |import |async |class )\b/.test(preamble)) {
       cleaned = cleaned.slice(firstMarker.index).trim()
     }
   }

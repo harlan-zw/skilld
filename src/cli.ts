@@ -336,7 +336,7 @@ const addCommand = defineCommand({
   args: {
     package: {
       type: 'positional',
-      description: 'Package(s) to sync (e.g., vue nuxt pinia or vue,nuxt,pinia)',
+      description: 'Package(s) to sync (space or comma-separated, e.g., vue nuxt pinia)',
       required: true,
     },
     ...sharedArgs,
@@ -353,7 +353,7 @@ const addCommand = defineCommand({
     const state = await getProjectState(cwd)
     p.intro(introLine({ state }))
 
-    const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(',')).map(s => s.trim()).filter(Boolean))]
+    const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
     return syncCommand(state, {
       packages,
       global: args.global,
@@ -392,7 +392,7 @@ const updateSubCommand = defineCommand({
 
     // Specific packages
     if (args.package) {
-      const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(',')).map(s => s.trim()).filter(Boolean))]
+      const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
       return syncCommand(state, {
         packages,
         global: args.global,
@@ -706,95 +706,110 @@ const main = defineCommand({
 
       p.log.info('Tip: Only generate skills for packages your agent struggles with.\n     The fewer skills, the more context you have for everything else :)')
 
-      const source = hasPkgJson
-        ? await p.select({
-            message: 'How should I find packages?',
-            options: [
-              { label: 'Scan source files', value: 'imports', hint: 'Find actually used imports' },
-              { label: 'Use package.json', value: 'deps', hint: `All ${state.deps.size} dependencies` },
-              { label: 'Enter manually', value: 'manual' },
-            ],
-          })
-        : 'manual' as const
+      // Initial setup loop — allow user to go back
+      let setupComplete = false
+      while (!setupComplete) {
+        const source = hasPkgJson
+          ? await p.select({
+              message: 'How should I find packages?',
+              options: [
+                { label: 'Scan source files', value: 'imports', hint: 'Find actually used imports' },
+                { label: 'Use package.json', value: 'deps', hint: `All ${state.deps.size} dependencies` },
+                { label: 'Enter manually', value: 'manual' },
+              ],
+            })
+          : 'manual' as const
 
-      if (p.isCancel(source)) {
-        p.cancel('Setup cancelled')
-        return
-      }
-
-      // Get packages based on source
-      let selected: string[]
-
-      if (source === 'manual') {
-        const input = await p.text({
-          message: 'Enter package names (comma-separated)',
-          placeholder: 'vue, nuxt, pinia',
-        })
-        if (p.isCancel(input) || !input) {
-          p.cancel('No packages entered')
+        if (p.isCancel(source)) {
+          p.cancel('Setup cancelled')
           return
         }
-        selected = input.split(',').map(s => s.trim()).filter(Boolean)
-      }
-      else {
-        let usages: PackageUsage[]
-        if (source === 'imports') {
-          const spinner = timedSpinner()
-          spinner.start('Scanning imports...')
-          const result = await detectImportedPackages(cwd)
 
-          if (result.packages.length === 0) {
-            spinner.stop('No imports found, falling back to package.json')
-            usages = [...state.deps.keys()].map(name => ({ name, count: 0 }))
+        // Get packages based on source
+        let selected: string[]
+
+        if (source === 'manual') {
+          const input = await p.text({
+            message: 'Enter package names (space or comma-separated)',
+            placeholder: 'vue nuxt pinia',
+          })
+          if (p.isCancel(input)) {
+            continue
           }
-          else {
-            const depSet = new Set(state.deps.keys())
-            usages = result.packages.filter(pkg => depSet.has(pkg.name) || pkg.source === 'preset')
-
-            if (usages.length === 0) {
-              spinner.stop(`Found ${result.packages.length} imported packages but none match dependencies`)
-              usages = result.packages
-            }
-            else {
-              spinner.stop(`Found ${usages.length} imported packages`)
-            }
+          if (!input) {
+            p.log.warn('No packages entered')
+            continue
+          }
+          selected = input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
+          if (selected.length === 0) {
+            p.log.warn('No valid packages entered')
+            continue
           }
         }
         else {
-          usages = [...state.deps.keys()].map(name => ({ name, count: 0 }))
+          let usages: PackageUsage[]
+          if (source === 'imports') {
+            const spinner = timedSpinner()
+            spinner.start('Scanning imports...')
+            const result = await detectImportedPackages(cwd)
+
+            if (result.packages.length === 0) {
+              spinner.stop('No imports found, falling back to package.json')
+              usages = [...state.deps.keys()].map(name => ({ name, count: 0 }))
+            }
+            else {
+              const depSet = new Set(state.deps.keys())
+              usages = result.packages.filter(pkg => depSet.has(pkg.name) || pkg.source === 'preset')
+
+              if (usages.length === 0) {
+                spinner.stop(`Found ${result.packages.length} imported packages but none match dependencies`)
+                usages = result.packages
+              }
+              else {
+                spinner.stop(`Found ${usages.length} imported packages`)
+              }
+            }
+          }
+          else {
+            usages = [...state.deps.keys()].map(name => ({ name, count: 0 }))
+          }
+
+          // Let user select which packages
+          const packages = usages.map(u => u.name)
+          const sourceMap = new Map(usages.map(u => [u.name, u.source]))
+          const maxLen = Math.max(...packages.map(n => n.length))
+          const choice = await p.multiselect({
+            message: `Select packages (${packages.length} found)`,
+            options: packages.map((name) => {
+              const ver = state.deps.get(name)?.replace(/^[\^~>=<]/, '') || ''
+              const repo = getRepoHint(name, cwd)
+              const hint = sourceMap.get(name) === 'preset' ? 'nuxt module' : undefined
+              const pad = ' '.repeat(maxLen - name.length + 2)
+              const meta = [ver, hint, repo].filter(Boolean).join('  ')
+              return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
+            }),
+            initialValues: packages,
+          })
+
+          if (p.isCancel(choice)) {
+            continue
+          }
+          if (choice.length === 0) {
+            p.log.warn('No packages selected')
+            continue
+          }
+          selected = choice
         }
 
-        // Let user select which packages
-        const packages = usages.map(u => u.name)
-        const sourceMap = new Map(usages.map(u => [u.name, u.source]))
-        const maxLen = Math.max(...packages.map(n => n.length))
-        const choice = await p.multiselect({
-          message: `Select packages (${packages.length} found)`,
-          options: packages.map((name) => {
-            const ver = state.deps.get(name)?.replace(/^[\^~>=<]/, '') || ''
-            const repo = getRepoHint(name, cwd)
-            const hint = sourceMap.get(name) === 'preset' ? 'nuxt module' : undefined
-            const pad = ' '.repeat(maxLen - name.length + 2)
-            const meta = [ver, hint, repo].filter(Boolean).join('  ')
-            return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
-          }),
-          initialValues: packages,
+        // syncCommand will ask about LLM after generating base skills
+        await syncCommand(state, {
+          packages: selected,
+          global: false,
+          agent: currentAgent,
+          yes: false,
         })
-
-        if (p.isCancel(choice) || choice.length === 0) {
-          p.cancel('No packages selected')
-          return
-        }
-        selected = choice
+        setupComplete = true
       }
-
-      // syncCommand will ask about LLM after generating base skills
-      return syncCommand(state, {
-        packages: selected,
-        global: false,
-        agent: currentAgent,
-        yes: false,
-      })
     }
 
     // Has skills - show status + interactive menu
@@ -853,12 +868,12 @@ const main = defineCommand({
 
           if (source === 'manual') {
             const input = await p.text({
-              message: 'Enter package names (comma-separated)',
-              placeholder: 'vue, nuxt, pinia',
+              message: 'Enter package names (space or comma-separated)',
+              placeholder: 'vue nuxt pinia',
             })
             if (p.isCancel(input) || !input)
               continue
-            selected = input.split(',').map(s => s.trim()).filter(Boolean)
+            selected = input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
             if (selected.length === 0)
               continue
           }

@@ -85,7 +85,7 @@ const { existsSync, readFileSync, rmSync } = await import('node:fs')
 const { getCacheDir, getPackageDbPath, readCachedDocs, writeToCache, clearCache } = await import('../../src/cache')
 const { $fetch, fetchGitDocs, fetchGitHubIssues, fetchGitHubDiscussions, fetchLlmsTxt, fetchReadmeContent, fetchReleaseNotes, downloadLlmsDocs, isGhAvailable, isShallowGitDocs, resolveEntryFiles, resolveLocalPackageDocs } = await import('../../src/sources')
 const { registerProject } = await import('../../src/core/config')
-const { readLock, writeLock } = await import('../../src/core/lockfile')
+const { writeLock } = await import('../../src/core/lockfile')
 const { createIndex } = await import('../../src/retriv')
 const { getShippedSkills, linkShippedSkill, resolvePkgDir } = await import('../../src/cache')
 

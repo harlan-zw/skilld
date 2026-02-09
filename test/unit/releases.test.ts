@@ -1,6 +1,6 @@
 import type { GitHubRelease } from '../../src/sources/releases'
 import { describe, expect, it } from 'vitest'
-import { isChangelogRedirectPattern, selectReleases } from '../../src/sources/releases'
+import { isChangelogRedirectPattern } from '../../src/sources/releases'
 
 function makeRelease(tag: string, markdown: string, prerelease = false): GitHubRelease {
   return { id: 1, tag, name: tag, prerelease, createdAt: '2024-01-01T00:00:00Z', publishedAt: '2024-01-01T00:00:00Z', markdown }

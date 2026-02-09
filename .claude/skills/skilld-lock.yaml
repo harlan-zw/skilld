@@ -1,43 +1,9 @@
 skills:
-  retriv:
-    packageName: "retriv"
-    version: "catalog:deps"
-    source: "ungh://harlan-zw/retriv"
-    syncedAt: "2026-02-06"
-    generator: "skilld"
-  clack-prompts:
+  bombshell-dev-clack:
     packageName: "@clack/prompts"
-    version: "1.0.0"
+    version: 1.0.0
+    packages: "@clack/prompts@1.0.0"
+    repo: bombshell-dev/clack
     source: "ungh://bombshell-dev/clack/packages/prompts"
-    syncedAt: "2026-02-08"
-    generator: "skilld"
-  oxc-parser:
-    packageName: "oxc-parser"
-    version: "0.112.0"
-    source: "https://github.com/oxc-project/oxc/tree/main/docs"
-    syncedAt: "2026-02-08"
-    generator: "skilld"
-  mlly:
-    packageName: "mlly"
-    version: "catalog:deps"
-    source: "ungh://unjs/mlly"
-    syncedAt: "2026-02-06"
-    generator: "skilld"
-  p-limit:
-    packageName: "p-limit"
-    version: "catalog:deps"
-    source: "https://raw.githubusercontent.com/sindresorhus/p-limit/main/readme.md"
-    syncedAt: "2026-02-06"
-    generator: "skilld"
-  antfu-eslint-config:
-    packageName: "@antfu/eslint-config"
-    version: "7.2.0"
-    source: "ungh://antfu/eslint-config"
-    syncedAt: "2026-02-08"
-    generator: "skilld"
-  obuild:
-    packageName: "obuild"
-    version: "catalog:dev-build"
-    source: "ungh://unjs/obuild"
-    syncedAt: "2026-02-06"
-    generator: "skilld"
+    syncedAt: 2026-02-09
+    generator: skilld

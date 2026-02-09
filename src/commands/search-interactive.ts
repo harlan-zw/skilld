@@ -32,7 +32,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
     const msg = packageFilter
       ? `No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`
       : 'No docs indexed yet. Run `skilld add <package>` first.'
-    console.log(`\x1B[33m${msg}\x1B[0m`)
+    process.stderr.write(`\x1B[33m${msg}\x1B[0m\n`)
     return
   }
 
@@ -225,12 +225,15 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
       const refPath = `.claude/skills/${r.package}/.skilld/${r.source}`
       const lineRange = r.lineStart === r.lineEnd ? `L${r.lineStart}` : `L${r.lineStart}-${r.lineEnd}`
       const highlighted = highlightTerms(sanitizeMarkdown(r.content), r.highlights)
-      console.log('')
-      console.log(`  \x1B[1m${r.package}\x1B[0m ${scoreColor(r.score)}${r.score.toFixed(2)}\x1B[0m`)
-      console.log(`  \x1B[90m${refPath}:${lineRange}\x1B[0m`)
-      console.log('')
-      console.log(`  ${highlighted.replace(/\n/g, '\n  ')}`)
-      console.log('')
+      const out = [
+        '',
+        `  \x1B[1m${r.package}\x1B[0m ${scoreColor(r.score)}${r.score.toFixed(2)}\x1B[0m`,
+        `  \x1B[90m${refPath}:${lineRange}\x1B[0m`,
+        '',
+        `  ${highlighted.replace(/\n/g, '\n  ')}`,
+        '',
+      ].join('\n')
+      process.stdout.write(`${out}\n`)
       resolve()
     }
 
