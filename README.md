@@ -4,23 +4,23 @@
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
 [![license](https://img.shields.io/github/license/harlan-zw/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE)
 
-> Skilld gives your AI agent skills for your npm dependencies, generated from versioned docs, dist files and GitHub data.
+> Expert SKILL.md knowledge for your NPM dependencies.
 
 ## Why?
 
-Agents already know how most packages work from training data. Skills should focus on what they *don't* know and push them to follow best practices. Without this:
+Agents suck at following latest conventions beyond their [reliable knowledge cut-off](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison). They shoot themselves in the foot
+with new APIs and conventions, and they don't know what they don't know.
 
-- **Generic patterns** - AI uses common approaches instead of package-specific conventions
-- **Missed best practices** - Optimal patterns go unused because the AI defaults to "good enough"
-- **Version drift** - Training data lags behind latest APIs and deprecations
+Agent Skills help us solve this by distilling the most important patterns and conventions for a package into a single SKILL.md file. 
+Getting skills for our packages either involves the maintainer (or ourselves) taking on the maintenance burden and surfacing them or using skill sharing
+sites like [shills.sh](https://shills.sh/).
 
-skilld generates skills from the package's *actual* documentation using your existing agent. Works with any public npm package, no author opt-in needed.
+While these are great for generic skills, they aren't good for NPM skills:
+- No version-awareness, high maintenance burden to keep up with new releases and deprecations
+- Non-optimized context windows, prompt injection risks
+- Community sourced skills leak personal opinions and biases. Maintainers are out of the loop, and may not even know about them.
 
-```
-npm install vueuse → skilld add vueuse → AI knows current vueuse API
-```
-
-Compatible with [skills-npm](https://github.com/antfu/skills-npm)—if a package ships a `skills/` directory, skilld uses it directly. Generation is the fallback.
+Skilld super-charges maintainers efforts. They write us great docs, release notes and GitHub comments. We generate our own local skills optimized for our models and code base from them.
 
 <p align="center">
 <table>
@@ -34,20 +34,36 @@ Compatible with [skills-npm](https://github.com/antfu/skills-npm)—if a package
 
 ## Features
 
-- 🤖 **Agent-powered** - Uses your existing LLM to generate SKILL.md for your key dependencies; works with any coding agent
-- 🎯 **Best practices first** - Token-optimized output focused on non-obvious patterns and conventions, not generic knowledge
-- 🔗 **Context-aware** - Generation adapts to your preferences and accepts custom prompts
-- ✏️ **You own it** - Skills live in your project, easy to customize; sync new package versions with zero config
-- 🛡️ **Sanitized content** - All fetched markdown is sanitized against known injection patterns (zero-width chars, HTML injection, entity encoding, directive lines) before reaching your agent
-- 🚀 **Zero friction** - Works with any public npm package, no author opt-in; respects `llms.txt` and shipped `skills/` when available
+- 🌍 **Any NPM Package**: Sources GitHub repo, doc soures, releases, issues, discussions and more
+- 🤖 **BYO Agent, or don't**: Generate SKILL.md for your key dependencies from sources (with or without an LLM)
+- 📚 **SKILL.md your way**: Optional `Best practices`, `LLM Gaps`, `Doc Map` sections; or write your own prompts
+- 🔍 **Token Optimized Search**: Semantic + token search with [retriv](https://github.com/harlan-zw/retriv)
+- 🎯 **Best practices**: Token-optimized output, prompt injection sanitization, and version-aware
+- 🤝 **Ecosystem Friendly**: [skills-npm](https://github.com/antfu/skills-npm) and repo `/llms.txt`
+
+## Quick Start
+
+Run skilld in a project to generate skills for your dependencies through a simple interactive wizard:
+
+```bash
+npx skilld
+```
+
+If you need to re-configure skilld just run `npx skilld config` to update your agent, model, or preferences.
 
 ## Installation
 
+If you'd like to install skilld and track the lock file references, add it as a dev dependency:
+
 ```bash
-pnpm add -g skilld
+npm install -D skilld
+# or
+yarn add -D skilld
+# or
+pnpm add -D skilld
 ```
 
-## Automatic Updates
+### Automatic Updates
 
 Add to `package.json` to keep skills fresh on install:
 
@@ -58,8 +74,6 @@ Add to `package.json` to keep skills fresh on install:
   }
 }
 ```
-
-skilld fast-paths unchanged versions—only regenerates when minor/major versions bump.
 
 ## CLI Usage
 
@@ -87,8 +101,12 @@ skilld add vueuse --global
 # Skip prompts
 skilld add vueuse --yes
 
-# Check skill status
-skilld status
+# Check skill info
+skilld info
+
+# List installed skills
+skilld list
+skilld list --json
 
 # Manage settings
 skilld config
@@ -102,11 +120,13 @@ skilld config
 | `skilld add <pkg...>` | Add skills for package(s), space or comma-separated |
 | `skilld update [pkg]` | Update outdated skills (all or specific) |
 | `skilld search <query>` | Search indexed docs (`-p` to filter by package) |
-| `skilld status` | Show skill status across agents |
-| `skilld config` | Configure agent, model, preferences |
-| `skilld install` | Restore references from lockfile |
-| `skilld remove` | Remove installed skills |
-| `skilld uninstall` | Remove all skilld data |
+| `skilld list`           | List installed skills (`--json` for machine-readable output) |
+| `skilld info`           | Show skill info and config |
+| `skilld config`         | Configure agent, model, preferences |
+| `skilld install`        | Restore references from lockfile |
+| `skilld remove`         | Remove installed skills |
+| `skilld uninstall`      | Remove all skilld data |
+| `skilld cache`          | Cache management (clean expired LLM cache entries) |
 
 ### CLI Options
 
@@ -116,87 +136,16 @@ skilld config
 | `--agent` | `-a` | auto-detect | Target specific agent (claude-code, cursor, etc.) |
 | `--yes` | `-y` | `false` | Skip prompts, use defaults |
 | `--force` | `-f` | `false` | Ignore all caches, re-fetch docs and regenerate |
-| `--prepare` | | `false` | Non-interactive sync for prepare hook (outdated only) |
-| `--background` | `-b` | `false` | Run `--prepare` in a detached background process |
-
-## How It Works
-
-```
-Package name → Resolve docs → Fetch → Generate → Install
-```
-
-1. **Resolve** - Looks up npm registry for homepage, repository URL
-2. **Fetch** - Tries versioned git docs → GitHub README → llms.txt (via ungh)
-3. **Generate** - Your agent creates SKILL.md from fetched docs
-4. **Cache** - References stored in `~/.skilld/` (shared across projects)
-5. **Install** - Writes SKILL.md to `./<agent>/skills/<package>/` (e.g. `.claude/skills/vueuse/`)
-
-Supported agents: Claude Code, Cursor, Windsurf, Cline, Codex, GitHub Copilot, Gemini CLI, Goose, Amp, OpenCode, Roo Code
-
-## Output Structure
-
-Skills install to each detected agent's skill directory. References are cached globally and shared across projects:
-
-```
-.claude/skills/vueuse/
-├── SKILL.md                    # Project-specific, adapts to your conventions
-└── .skilld/                    # Gitignored, recreated by `skilld install`
-    ├── pkg -> node_modules/vueuse
-    └── docs -> ~/.skilld/references/vueuse@10.9.0/docs
-
-~/.skilld/references/
-└── vueuse@10.9.0/              # Global cache, static docs
-    ├── docs/
-    ├── issues/
-    └── discussions/
-```
-
-SKILL.md is regenerated per-project (different conventions), but references stay static (same package docs). Version frontmatter enables sync:
-
-```yaml
----
-name: vueuse
-version: 10.9.0
-description: Collection of Vue Composition Utilities
----
-```
-
-## Package.json Auto-Discovery
-
-Run `skilld` without arguments to interactively generate skills for your dependencies:
-
-```bash
-cd my-project
-pnpx skilld
-```
-
-On first run, skilld launches a wizard to configure your agent and model, then lets you choose packages from:
-- **Source imports** — scans your code for actually used packages
-- **package.json** — all dependencies and devDependencies
-- **Manual entry** — comma-separated package names
-
-Skips `@types/*` and common dev tools (typescript, eslint, vitest, etc).
-
-## Shipped Skills (skills-npm)
-
-skilld supports the [skills-npm](https://github.com/antfu/skills-npm) convention. If a package ships a `skills/` directory, skilld symlinks it directly — no doc fetching, no caching, no LLM generation, no tokens spent.
-
-```
-node_modules/@slidev/cli/skills/
-  slidev/
-    SKILL.md
-    references/
-
-→ .claude/skills/slidev -> node_modules/@slidev/cli/skills/slidev
-```
-
-Package authors can ship skills alongside their code. skilld detects and links them automatically during sync. Generation is the fallback for packages that haven't adopted the convention yet.
+| `--model`      | `-m` | config default | LLM model for skill generation (sonnet, haiku, opus, etc.) |
+| `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
+| `--prepare`    |      | `false`        | Non-interactive sync for prepare hook (outdated only) |
+| `--background` | `-b` | `false`        | Run `--prepare` in a detached background process |
 
 ## Related
 
 - [skills-npm](https://github.com/antfu/skills-npm) - Convention for shipping agent skills in npm packages
-- [mdream](https://github.com/harlan-zw/mdream) - HTML to Markdown converter used for crawling
-- [retriv](https://github.com/harlan-zw/retriv) - Vector database abstraction layer
+- [mdream](https://github.com/harlan-zw/mdream) - HTML to Markdown converter
+- [retriv](https://github.com/harlan-zw/retriv) - Vector search with sqlite-vec
 
 ## License
 

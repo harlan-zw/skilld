@@ -9,8 +9,12 @@ pnpm build          # Build with obuild
 pnpm dev:prepare    # Stub for development (obuild --stub)
 pnpm typecheck      # TypeScript check (tsc --noEmit)
 pnpm lint           # ESLint (@antfu/eslint-config)
-pnpm test           # Run vitest (tests in test/, not src/)
-pnpm test -- test/cache.test.ts  # Single test file
+pnpm lint:fix       # ESLint with auto-fix
+pnpm test           # Run vitest in watch mode
+pnpm test:run       # Run vitest once (CI-style)
+pnpm test -- test/unit/cache.test.ts     # Single test file
+pnpm test -- --project unit              # Unit tests only
+pnpm test -- --project e2e               # E2E tests only
 ```
 
 ### CLI Commands
@@ -33,7 +37,7 @@ skilld search "query" -p nuxt  # Search filtered by package
 
 ## Architecture
 
-CLI tool that generates AI agent skills from NPM package documentation. Flow: `package name → resolve docs → cache references → generate SKILL.md → install to agent dirs`.
+CLI tool that generates AI agent skills from NPM package documentation. Requires Node >= 22.6.0. Flow: `package name → resolve docs → cache references → generate SKILL.md → install to agent dirs`.
 
 **Key directories:**
 - `~/.skilld/` - Global cache: `references/<pkg>@<version>/`, `llm-cache/`, `config.yaml`
@@ -45,17 +49,23 @@ CLI tool that generates AI agent skills from NPM package documentation. Flow: `p
 - `src/retriv/` - Vector search with sqlite-vec + @huggingface/transformers embeddings
 - `src/core/` - Config (custom YAML parser), skills iteration, formatting, lockfile
 
-**Doc resolution cascade:**
+**Doc resolution cascade (src/commands/sync.ts):**
 1. Package ships `skills/` directory → symlink directly (skills-npm convention)
 2. Git-hosted versioned docs → fetch from GitHub tags via ungh.cc
-3. `llms.txt` at package homepage → parse and download linked .md files
-4. GitHub README via ungh proxy → fallback
+3. GitHub repo metadata → issues, discussions, releases (optional features)
+4. `llms.txt` at package homepage → parse and download linked .md files
+5. GitHub README via ungh proxy → fallback
+
+Resolution tracked via `ResolveAttempt[]` array for debugging failures.
 
 **LLM integration (NO AI SDK):**
 Spawns CLI processes directly (`claude`, `gemini`) with `--add-dir` for references. Custom stream-json parsing for progress. Results cached at `~/.skilld/llm-cache/<sha256>.json` with 7-day TTL.
 
 **Agent detection (`src/agent/detect.ts`):**
-Checks env vars (`CLAUDE_CODE`, `CURSOR_SESSION`) and project dirs (`.claude/`, `.cursor/`) to auto-detect target. Registry in `src/agent/registry.ts` defines per-agent skill dirs and detection.
+Checks env vars (`CLAUDE_CODE`, `CURSOR_SESSION`) and project dirs (`.claude/`, `.cursor/`) to auto-detect target. Registry in `src/agent/registry.ts` defines per-agent skill dirs and detection. Supports 11 agents: claude-code, cursor, windsurf, cline, codex, github-copilot, gemini-cli, goose, amp, opencode, roo.
+
+**Import scanning (`src/agent/detect-imports.ts`):**
+AST-based import detection via oxc-parser. `FILE_PATTERN_MAP` in `src/agent/types.ts` maps ~98 packages to file glob patterns (e.g., `vue` → `*.vue`) for efficient scanning. `detect-presets.ts` handles framework-specific package discovery (e.g., Nuxt modules).
 
 **Cache structure:**
 ```
@@ -76,6 +86,7 @@ References are global/static; SKILL.md is per-project (different conventions). C
 - **Parallelization** — `p-limit` for concurrency, batch downloads (20 at a time), `sync-parallel.ts` for multi-package
 - **Overrides** — `src/sources/overrides.ts` maps package names → `{ owner, repo, path, ref?, homepage? }` for packages with broken npm metadata
 - **Version comparison** — `isOutdated()` compares major.minor only, ignores patch
-- **Tests** — vitest projects (unit + e2e), `globals: true`, tests in `test/unit/` and `test/e2e/`, fs mocked via `vi.mock('node:fs')`
+- **Tests** — vitest projects (unit + e2e), `globals: true`, tests in `test/unit/` and `test/e2e/`, fs mocked via `vi.mock('node:fs')`. E2E tests include preset workflows (nuxt, vue, react, svelte, etc.) in `test/e2e/preset-*.test.ts`
 - **Build** — `obuild` bundles multiple entry points (cli, index, types, cache, retriv, agent, sources) as subpath exports
 - **CLI modes** — `--prepare` flag for pnpm hooks (sync outdated only, no LLM, silent), `--background` spawns detached process
+- **First-run wizard** — `src/commands/wizard.ts` handles agent/model config and package selection on first run
