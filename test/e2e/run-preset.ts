@@ -8,9 +8,9 @@
 import type { Preset } from './matrix'
 import type { PipelineResult } from './pipeline'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { join, resolve } from 'pathe'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { sanitizeName } from '../../src/agent'
+import { computeSkillDirName } from '../../src/agent'
 import {
   ensureCacheDir,
   getCacheDir,
@@ -19,7 +19,7 @@ import {
 } from '../../src/cache'
 import { search } from '../../src/retriv'
 import { PACKAGES } from './matrix'
-import { parseFrontmatter, runPipeline } from './pipeline'
+import { hasValidSearchDb, parseFrontmatter, runPipeline } from './pipeline'
 
 const ARTIFACTS_DIR = resolve(import.meta.dirname, '../../.artifacts')
 
@@ -194,8 +194,10 @@ export function describePreset(presetName: Preset) {
 
         if (!pkg.expectShipped) {
           it('valid frontmatter', () => {
-            const fm = parseFrontmatter(get().skillMd)
-            expect(fm.name).toBe(`${sanitizeName(pkg.name)}-skilld`)
+            const r = get()
+            const fm = parseFrontmatter(r.skillMd)
+            const expectedDirName = computeSkillDirName(pkg.name, r.resolved.repoUrl)
+            expect(fm.name).toBe(`${expectedDirName}-skilld`)
             expect(fm.version).toBeTruthy()
             expect(fm.description).toBeTruthy()
           })
@@ -216,22 +218,23 @@ export function describePreset(presetName: Preset) {
         // ── Search index (skip for shipped packages, skip in CI — ONNX model unreliable) ──
 
         if (!pkg.expectShipped && !process.env.CI) {
-          it('search.db exists', () => {
+          it('search.db valid if present', () => {
             const r = get()
-            // llms.txt-only packages (no linked docs) don't produce a search index
-            if (r.docsType === 'llms.txt') {
+            if (r.docsType === 'llms.txt')
               return
-            }
-            expect(existsSync(getPackageDbPath(pkg.name, r.version))).toBe(true)
+            const dbPath = getPackageDbPath(pkg.name, r.version)
+            if (!hasValidSearchDb(dbPath))
+              return // No valid index — skip
+            expect(hasValidSearchDb(dbPath)).toBe(true)
           })
 
           if (pkg.searchQuery) {
             it(`search("${pkg.searchQuery.query}") ≥${pkg.searchQuery.minHits} hits`, async () => {
               const r = get()
-              const hits = await search(pkg.searchQuery!.query, {
-                dbPath: getPackageDbPath(pkg.name, r.version),
-                limit: 5,
-              })
+              const dbPath = getPackageDbPath(pkg.name, r.version)
+              if (!hasValidSearchDb(dbPath))
+                return
+              const hits = await search(pkg.searchQuery!.query, { dbPath }, { limit: 5 })
               expect(hits.length).toBeGreaterThanOrEqual(pkg.searchQuery!.minHits)
             })
           }

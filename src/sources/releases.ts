@@ -2,8 +2,9 @@
  * GitHub release notes fetching via gh CLI (preferred) with ungh.cc fallback
  */
 
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { isGhAvailable } from './issues'
+import { $fetch } from './utils'
 
 export interface GitHubRelease {
   id: number
@@ -85,10 +86,14 @@ function compareSemver(a: SemVer, b: SemVer): number {
  */
 function fetchReleasesViaGh(owner: string, repo: string): GitHubRelease[] {
   try {
-    const json = execSync(
-      `gh api "repos/${owner}/${repo}/releases?per_page=100" --jq '[.[] | {id: .id, tag: .tag_name, name: .name, prerelease: .prerelease, createdAt: .created_at, publishedAt: .published_at, markdown: .body}]'`,
-      { encoding: 'utf-8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] },
-    )
+    const { stdout: json } = spawnSync('gh', [
+      'api',
+      `repos/${owner}/${repo}/releases?per_page=100`,
+      '--jq',
+      '[.[] | {id: .id, tag: .tag_name, name: .name, prerelease: .prerelease, createdAt: .created_at, publishedAt: .published_at, markdown: .body}]',
+    ], { encoding: 'utf-8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] })
+    if (!json)
+      return []
     return JSON.parse(json) as GitHubRelease[]
   }
   catch {
@@ -100,15 +105,10 @@ function fetchReleasesViaGh(owner: string, repo: string): GitHubRelease[] {
  * Fetch all releases from a GitHub repo via ungh.cc (fallback)
  */
 async function fetchReleasesViaUngh(owner: string, repo: string): Promise<GitHubRelease[]> {
-  const res = await fetch(
+  const data = await $fetch<UnghReleasesResponse>(
     `https://ungh.cc/repos/${owner}/${repo}/releases`,
-    { headers: { 'User-Agent': 'skilld/1.0' }, signal: AbortSignal.timeout(15_000) },
+    { signal: AbortSignal.timeout(15_000) },
   ).catch(() => null)
-
-  if (!res?.ok)
-    return []
-
-  const data = await res.json().catch(() => null) as UnghReleasesResponse | null
   return data?.releases ?? []
 }
 
@@ -161,11 +161,65 @@ export function selectReleases(releases: GitHubRelease[], packageName?: string):
 }
 
 /**
- * Format a release as markdown
+ * Format a release as markdown with YAML frontmatter
  */
-function formatRelease(release: GitHubRelease): string {
+function formatRelease(release: GitHubRelease, packageName?: string): string {
   const date = (release.publishedAt || release.createdAt).split('T')[0]
-  return `# ${release.name || release.tag}\n\nTag: ${release.tag} | Published: ${date}\n\n${release.markdown}`
+  const version = extractVersion(release.tag, packageName) || release.tag
+
+  const fm = [
+    '---',
+    `tag: ${release.tag}`,
+    `version: ${version}`,
+    `published: ${date}`,
+  ]
+  if (release.name && release.name !== release.tag)
+    fm.push(`name: "${release.name.replace(/"/g, '\\"')}"`)
+  fm.push('---')
+
+  return `${fm.join('\n')}\n\n# ${release.name || release.tag}\n\n${release.markdown}`
+}
+
+/**
+ * Generate a summary index of all releases for quick LLM scanning.
+ * Shows version timeline so LLM can quickly identify breaking changes.
+ */
+export function generateReleaseIndex(releases: GitHubRelease[], packageName?: string): string {
+  const fm = [
+    '---',
+    `total: ${releases.length}`,
+    `latest: ${releases[0]?.tag || 'unknown'}`,
+    '---',
+  ]
+
+  const lines: string[] = [fm.join('\n'), '', '# Releases Index', '']
+
+  for (const r of releases) {
+    const date = (r.publishedAt || r.createdAt).split('T')[0]
+    const filename = r.tag.includes('@') || r.tag.startsWith('v') ? r.tag : `v${r.tag}`
+    const version = extractVersion(r.tag, packageName) || r.tag
+    // Flag major/minor bumps for visibility
+    const sv = parseSemver(version)
+    const label = sv?.patch === 0 && sv.minor === 0 ? ' **[MAJOR]**' : sv?.patch === 0 ? ' **[MINOR]**' : ''
+    lines.push(`- [${r.tag}](./releases/${filename}.md): ${r.name || r.tag} (${date})${label}`)
+  }
+
+  lines.push('')
+  return lines.join('\n')
+}
+
+/**
+ * Detect if releases are just short stubs redirecting to CHANGELOG.md.
+ * Samples up to 3 releases — if all are short (<500 chars) and mention CHANGELOG, it's a redirect pattern.
+ */
+export function isChangelogRedirectPattern(releases: GitHubRelease[]): boolean {
+  const sample = releases.slice(0, 3)
+  if (sample.length === 0)
+    return false
+  return sample.every((r) => {
+    const body = (r.markdown || '').trim()
+    return body.length < 500 && /changelog\.md/i.test(body)
+  })
 }
 
 /**
@@ -174,9 +228,9 @@ function formatRelease(release: GitHubRelease): string {
 async function fetchChangelog(owner: string, repo: string, ref: string): Promise<string | null> {
   for (const filename of ['CHANGELOG.md', 'changelog.md', 'CHANGES.md']) {
     const url = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${filename}`
-    const res = await fetch(url, { headers: { 'User-Agent': 'skilld/1.0' }, signal: AbortSignal.timeout(10_000) }).catch(() => null)
-    if (res?.ok)
-      return res.text()
+    const content = await $fetch(url, { responseType: 'text', signal: AbortSignal.timeout(10_000) }).catch(() => null)
+    if (content)
+      return content
   }
   return null
 }
@@ -199,17 +253,30 @@ export async function fetchReleaseNotes(
   const selected = selectReleases(releases, packageName)
 
   if (selected.length > 0) {
-    return selected.map((r) => {
-      // For monorepo tags (pkg@version), use tag as-is
-      // For standard tags (1.2.3), prefix with v
+    // Detect changelog-redirect pattern: short stubs that just link to CHANGELOG.md
+    // Sample up to 3 releases to check
+    if (isChangelogRedirectPattern(selected)) {
+      const ref = gitRef || selected[0]!.tag
+      const changelog = await fetchChangelog(owner, repo, ref)
+      if (changelog)
+        return [{ path: 'CHANGELOG.md', content: changelog }]
+    }
+
+    const docs = selected.map((r) => {
       const filename = r.tag.includes('@') || r.tag.startsWith('v')
         ? r.tag
         : `v${r.tag}`
       return {
         path: `releases/${filename}.md`,
-        content: formatRelease(r),
+        content: formatRelease(r, packageName),
       }
     })
+    // Add index for quick LLM scanning
+    docs.push({
+      path: 'releases/_INDEX.md',
+      content: generateReleaseIndex(selected, packageName),
+    })
+    return docs
   }
 
   // Fallback: CHANGELOG.md (indexed as single file)

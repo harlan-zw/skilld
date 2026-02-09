@@ -1,10 +1,10 @@
 import type { AgentType } from '../agent'
 import type { SkillInfo } from './lockfile'
 import { existsSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join } from 'pathe'
 import { agents } from '../agent'
 import { readLocalDependencies } from '../sources'
-import { parseSkillFrontmatter, readLock } from './lockfile'
+import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile'
 
 export interface SkillEntry {
   name: string
@@ -108,10 +108,13 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
   const skillByName = new Map(skills.map(s => [s.name, s]))
 
   // Secondary lookup: packageName from lockfile (shipped skills have different names)
+  // Also includes all packages from multi-package skills
   const skillByPkgName = new Map<string, SkillEntry>()
   for (const s of skills) {
     if (s.info?.packageName)
       skillByPkgName.set(s.info.packageName, s)
+    for (const pkg of parsePackages(s.info?.packages))
+      skillByPkgName.set(pkg.name, s)
   }
 
   const missing: string[] = []

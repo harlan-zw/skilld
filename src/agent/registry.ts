@@ -5,7 +5,7 @@
 import type { AgentConfig, AgentType } from './types'
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
 
 const home = homedir()
 const configHome = process.env.XDG_CONFIG_HOME || join(home, '.config')

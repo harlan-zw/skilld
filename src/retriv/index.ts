@@ -6,6 +6,8 @@ import { transformersJs } from 'retriv/embeddings/transformers-js'
 
 export type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet }
 
+type RetrivInstance = Awaited<ReturnType<typeof createRetriv>>
+
 function getDb(config: IndexConfig) {
   return createRetriv({
     driver: sqlite({
@@ -16,17 +18,30 @@ function getDb(config: IndexConfig) {
   })
 }
 
-export async function createIndex(
+/**
+ * Index documents in-process (no worker thread).
+ * Preferred for tests and environments where worker_threads is unreliable.
+ */
+export async function createIndexDirect(
   documents: Document[],
   config: IndexConfig,
 ): Promise<void> {
   const db = await getDb(config)
-
-  await db.index(documents, {
-    onProgress: config.onProgress,
-  })
-
+  await db.index(documents, { onProgress: config.onProgress })
   await db.close?.()
+}
+
+/**
+ * Index documents in a background worker thread.
+ * Falls back to direct indexing if worker fails to spawn.
+ */
+export async function createIndex(
+  documents: Document[],
+  config: IndexConfig,
+): Promise<void> {
+  // Dynamic import justified: search/searchSnippets shouldn't pull in worker_threads
+  const { createIndexInWorker } = await import('./pool')
+  return createIndexInWorker(documents, config)
 }
 
 export async function search(
@@ -68,7 +83,10 @@ export async function searchSnippets(
   options: SearchOptions = {},
 ): Promise<SearchSnippet[]> {
   const results = await search(query, config, options)
+  return toSnippets(results)
+}
 
+function toSnippets(results: SearchResult[]): SearchSnippet[] {
   return results.map((r) => {
     const content = stripFrontmatter(r.content)
     const source = r.metadata.source || r.id
@@ -86,4 +104,45 @@ export async function searchSnippets(
       scope: r.scope,
     }
   })
+}
+
+// ── Pooled DB access for interactive search ──
+
+export async function openPool(dbPaths: string[]): Promise<Map<string, RetrivInstance>> {
+  const pool = new Map<string, RetrivInstance>()
+  await Promise.all(dbPaths.map(async (dbPath) => {
+    const db = await getDb({ dbPath })
+    pool.set(dbPath, db)
+  }))
+  return pool
+}
+
+export async function searchPooled(
+  query: string,
+  pool: Map<string, RetrivInstance>,
+  options: SearchOptions = {},
+): Promise<SearchSnippet[]> {
+  const { limit = 10, filter } = options
+  const allResults = await Promise.all(
+    [...pool.values()].map(async (db) => {
+      const results = await db.search(query, { limit, filter, returnContent: true, returnMetadata: true, returnMeta: true })
+      return results.map(r => ({
+        id: r.id,
+        content: r.content ?? '',
+        score: r.score,
+        metadata: r.metadata ?? {},
+        highlights: r._meta?.highlights ?? [],
+        lineRange: r._chunk?.lineRange as [number, number] | undefined,
+        entities: r._chunk?.entities,
+        scope: r._chunk?.scope,
+      }))
+    }),
+  )
+  const merged = allResults.flat().sort((a, b) => b.score - a.score).slice(0, limit)
+  return toSnippets(merged)
+}
+
+export async function closePool(pool: Map<string, RetrivInstance>): Promise<void> {
+  await Promise.all([...pool.values()].map(db => db.close?.()))
+  pool.clear()
 }

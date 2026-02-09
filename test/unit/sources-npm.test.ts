@@ -1,5 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchNpmPackage, getInstalledSkillVersion, readLocalDependencies, resolveInstalledVersion, resolvePackageDocs } from '../../src/sources/npm'
+
+// Mock ofetch — simulates ofetch behavior using mockFetch
+const mockFetch = vi.fn()
+
+function createMockFetch() {
+  async function $fetch(url: string, opts?: any): Promise<any> {
+    const mockRes = await mockFetch(url, opts)
+    if (!mockRes?.ok)
+      throw new Error('fetch failed')
+    if (opts?.responseType === 'text')
+      return mockRes.text()
+    return mockRes.json()
+  }
+  $fetch.raw = async (url: string, opts?: any) => {
+    return mockFetch(url, opts)
+  }
+  return $fetch
+}
+
+vi.mock('ofetch', () => ({
+  ofetch: { create: () => createMockFetch() },
+}))
 
 // Mock the github and llms modules
 vi.mock('../../src/sources/github', () => ({
@@ -28,9 +49,8 @@ vi.mock('node:fs', async () => {
   }
 })
 
-// Mock global fetch
-const mockFetch = vi.fn()
-vi.stubGlobal('fetch', mockFetch)
+// Must import after vi.mock
+const { fetchNpmPackage, getInstalledSkillVersion, readLocalDependencies, resolveInstalledVersion, resolvePackageDocs } = await import('../../src/sources/npm')
 
 describe('sources/npm', () => {
   describe('readLocalDependencies', () => {
@@ -164,12 +184,34 @@ describe('sources/npm', () => {
       expect(deps).toContainEqual({ name: 'bumpp', version: '10.4.1' })
     })
 
-    it('returns null for unresolvable non-semver specifiers', async () => {
+    it('resolves catalog: specifiers with wildcard when node_modules lookup fails', async () => {
       const { existsSync, readFileSync } = await import('node:fs')
       const { resolvePathSync } = await import('mlly')
-      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(existsSync).mockImplementation((p) => {
+        // package.json exists, but node_modules/<pkg>/package.json does not
+        return String(p) === '/test/package.json'
+      })
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
         dependencies: { 'some-pkg': 'catalog:deps' },
+      }))
+      vi.mocked(resolvePathSync).mockImplementation(() => {
+        throw new Error('not found')
+      })
+
+      const deps = await readLocalDependencies('/test')
+
+      expect(deps).toHaveLength(1)
+      expect(deps[0]).toEqual({ name: 'some-pkg', version: '*' })
+    })
+
+    it('returns null for unresolvable non-standard specifiers', async () => {
+      const { existsSync, readFileSync } = await import('node:fs')
+      const { resolvePathSync } = await import('mlly')
+      vi.mocked(existsSync).mockImplementation((p) => {
+        return String(p) === '/test/package.json'
+      })
+      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
+        dependencies: { 'some-pkg': 'custom:something' },
       }))
       vi.mocked(resolvePathSync).mockImplementation(() => {
         throw new Error('not found')
@@ -234,7 +276,7 @@ describe('sources/npm', () => {
       })
       expect(mockFetch).toHaveBeenCalledWith(
         'https://unpkg.com/vue/package.json',
-        expect.objectContaining({ headers: { 'User-Agent': 'skilld/1.0' } }),
+        undefined,
       )
     })
 

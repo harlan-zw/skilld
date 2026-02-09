@@ -2,10 +2,17 @@
  * GitHub/ungh README resolution + versioned docs
  */
 
-import { execSync } from 'node:child_process'
+import type { LlmsLink } from './types'
+import { spawnSync } from 'node:child_process'
 import { isGhAvailable } from './issues'
 import { getDocOverride } from './overrides'
-import { extractBranchHint, fetchText, parseGitHubUrl } from './utils'
+import { $fetch, extractBranchHint, fetchText, parseGitHubUrl } from './utils'
+
+/** Minimum git-doc file count to prefer over llms.txt */
+export const MIN_GIT_DOCS = 5
+
+/** True when git-docs exist but are too few to be useful (< MIN_GIT_DOCS) */
+export const isShallowGitDocs = (n: number) => n > 0 && n < MIN_GIT_DOCS
 
 export interface GitDocsResult {
   /** URL pattern for fetching docs (use with ref) */
@@ -16,6 +23,8 @@ export interface GitDocsResult {
   files: string[]
   /** Prefix to strip when normalizing paths to docs/ (e.g. 'apps/evalite-docs/src/content/') for nested monorepo docs */
   docsPrefix?: string
+  /** Full repo file tree — only set when discoverDocFiles() heuristic was used (not standard docs/ prefix) */
+  allFiles?: string[]
 }
 
 interface UnghFilesResponse {
@@ -27,15 +36,9 @@ interface UnghFilesResponse {
  * List files at a git ref using ungh (no rate limits)
  */
 async function listFilesAtRef(owner: string, repo: string, ref: string): Promise<string[]> {
-  const res = await fetch(
+  const data = await $fetch<UnghFilesResponse>(
     `https://ungh.cc/repos/${owner}/${repo}/files/${ref}`,
-    { headers: { 'User-Agent': 'skilld/1.0' } },
   ).catch(() => null)
-
-  if (!res?.ok)
-    return []
-
-  const data = await res.json().catch(() => null) as UnghFilesResponse | null
   return data?.files?.map(f => f.path) ?? []
 }
 
@@ -87,15 +90,9 @@ async function findGitTag(owner: string, repo: string, version: string, packageN
  * Handles monorepos where npm version doesn't match git tag version.
  */
 async function findLatestReleaseTag(owner: string, repo: string, packageName: string): Promise<string | null> {
-  const res = await fetch(
+  const data = await $fetch<{ releases?: Array<{ tag: string }> }>(
     `https://ungh.cc/repos/${owner}/${repo}/releases`,
-    { headers: { 'User-Agent': 'skilld/1.0' } },
   ).catch(() => null)
-
-  if (!res?.ok)
-    return null
-
-  const data = await res.json().catch(() => null) as { releases?: Array<{ tag: string }> } | null
   const prefix = `${packageName}@`
   return data?.releases?.find(r => r.tag.startsWith(prefix))?.tag ?? null
 }
@@ -294,6 +291,7 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
 
   let docs = filterDocFiles(tag.files, 'docs/')
   let docsPrefix: string | undefined
+  let allFiles: string[] | undefined
 
   // Fallback: discover docs in nested paths (monorepos, content collections)
   if (docs.length === 0) {
@@ -301,6 +299,7 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
     if (discovered) {
       docs = discovered.files
       docsPrefix = discovered.prefix || undefined
+      allFiles = tag.files
     }
   }
 
@@ -312,7 +311,60 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
     ref: tag.ref,
     files: docs,
     docsPrefix,
+    allFiles,
   }
+}
+
+/**
+ * Strip file extension (.md, .mdx) and leading slash from a path
+ */
+function normalizePath(p: string): string {
+  return p.replace(/^\//, '').replace(/\.(?:md|mdx)$/, '')
+}
+
+/**
+ * Validate that discovered git docs are relevant by cross-referencing llms.txt links
+ * against the repo file tree. Uses extensionless suffix matching to handle monorepo nesting.
+ *
+ * Returns { isValid, matchRatio } where isValid = matchRatio >= 0.3
+ */
+export function validateGitDocsWithLlms(
+  llmsLinks: LlmsLink[],
+  repoFiles: string[],
+): { isValid: boolean, matchRatio: number } {
+  if (llmsLinks.length === 0)
+    return { isValid: true, matchRatio: 1 }
+
+  // Sample up to 10 links
+  const sample = llmsLinks.slice(0, 10)
+
+  // Normalize llms link paths
+  const normalizedLinks = sample.map((link) => {
+    let path = link.url
+    // Strip absolute URL to pathname
+    if (path.startsWith('http')) {
+      try { path = new URL(path).pathname }
+      catch { /* keep as-is */ }
+    }
+    return normalizePath(path)
+  })
+
+  // Pre-process repo files: strip extensions to get extensionless paths
+  const repoNormalized = new Set(repoFiles.map(normalizePath))
+
+  let matches = 0
+  for (const linkPath of normalizedLinks) {
+    // Check if any repo file ends with this path (suffix matching for monorepo nesting)
+    for (const repoPath of repoNormalized) {
+      if (repoPath === linkPath || repoPath.endsWith(`/${linkPath}`)) {
+        matches++
+        break
+      }
+    }
+  }
+
+  const matchRatio = matches / sample.length
+  return { isValid: matchRatio >= 0.3, matchRatio }
 }
 
 /**
@@ -348,16 +400,12 @@ export async function searchGitHubRepo(packageName: string): Promise<string | nu
     // Only try if it looks like owner/repo
     if (!candidate.includes('/')) {
       // Try common patterns: {name}/{name}
-      const unghRes = await fetch(`https://ungh.cc/repos/${shortName}/${shortName}`, {
-        headers: { 'User-Agent': 'skilld/1.0' },
-      }).catch(() => null)
+      const unghRes = await $fetch.raw(`https://ungh.cc/repos/${shortName}/${shortName}`).catch(() => null)
       if (unghRes?.ok)
         return `https://github.com/${shortName}/${shortName}`
       continue
     }
-    const unghRes = await fetch(`https://ungh.cc/repos/${candidate}`, {
-      headers: { 'User-Agent': 'skilld/1.0' },
-    }).catch(() => null)
+    const unghRes = await $fetch.raw(`https://ungh.cc/repos/${candidate}`).catch(() => null)
     if (unghRes?.ok)
       return `https://github.com/${candidate}`
   }
@@ -366,10 +414,12 @@ export async function searchGitHubRepo(packageName: string): Promise<string | nu
   const searchTerm = packageName.replace(/^@/, '')
   if (isGhAvailable()) {
     try {
-      const json = execSync(
-        `gh search repos "${searchTerm}" --json fullName --limit 5`,
-        { encoding: 'utf-8', timeout: 15_000 },
-      )
+      const { stdout: json } = spawnSync('gh', ['search', 'repos', searchTerm, '--json', 'fullName', '--limit', '5'], {
+        encoding: 'utf-8',
+        timeout: 15_000,
+      })
+      if (!json)
+        throw new Error('no output')
       const repos = JSON.parse(json) as Array<{ fullName: string }>
       // Prefer exact suffix match
       const match = repos.find(r =>
@@ -392,14 +442,9 @@ export async function searchGitHubRepo(packageName: string): Promise<string | nu
 
   // Fallback: GitHub REST search API (no auth needed, but rate-limited)
   const query = encodeURIComponent(`${searchTerm} in:name`)
-  const res = await fetch(`https://api.github.com/search/repositories?q=${query}&per_page=5`, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
-
-  if (!res?.ok)
-    return null
-
-  const data = await res.json().catch(() => null) as { items?: Array<{ full_name: string }> } | null
+  const data = await $fetch<{ items?: Array<{ full_name: string }> }>(
+    `https://api.github.com/search/repositories?q=${query}&per_page=5`,
+  ).catch(() => null)
   if (!data?.items?.length)
     return null
 
@@ -433,10 +478,12 @@ export async function fetchGitHubRepoMeta(owner: string, repo: string, packageNa
   // Prefer gh CLI to avoid rate limits
   if (isGhAvailable()) {
     try {
-      const json = execSync(`gh api "repos/${owner}/${repo}" -q '{homepage}'`, {
+      const { stdout: json } = spawnSync('gh', ['api', `repos/${owner}/${repo}`, '-q', '{homepage}'], {
         encoding: 'utf-8',
         timeout: 10_000,
       })
+      if (!json)
+        throw new Error('no output')
       const data = JSON.parse(json) as { homepage?: string }
       return data?.homepage ? { homepage: data.homepage } : null
     }
@@ -445,13 +492,9 @@ export async function fetchGitHubRepoMeta(owner: string, repo: string, packageNa
     }
   }
 
-  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
-
-  if (!res?.ok)
-    return null
-  const data = await res.json().catch(() => null)
+  const data = await $fetch<{ homepage?: string }>(
+    `https://api.github.com/repos/${owner}/${repo}`,
+  ).catch(() => null)
   return data?.homepage ? { homepage: data.homepage } : null
 }
 
@@ -464,9 +507,7 @@ export async function fetchReadme(owner: string, repo: string, subdir?: string):
     ? `https://ungh.cc/repos/${owner}/${repo}/files/main/${subdir}/README.md`
     : `https://ungh.cc/repos/${owner}/${repo}/readme`
 
-  const unghRes = await fetch(unghUrl, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
+  const unghRes = await $fetch.raw(unghUrl).catch(() => null)
 
   if (unghRes?.ok) {
     return `ungh://${owner}/${repo}${subdir ? `/${subdir}` : ''}`
@@ -478,9 +519,7 @@ export async function fetchReadme(owner: string, repo: string, subdir?: string):
   for (const branch of ['main', 'master']) {
     for (const filename of ['README.md', 'Readme.md', 'readme.md']) {
       const readmeUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${basePath}${filename}`
-      const res = await fetch(readmeUrl, {
-        headers: { 'User-Agent': 'skilld/1.0' },
-      }).catch(() => null)
+      const res = await $fetch.raw(readmeUrl).catch(() => null)
       if (res?.ok)
         return readmeUrl
     }
@@ -589,14 +628,10 @@ export async function fetchReadmeContent(url: string): Promise<string | null> {
       ? `https://ungh.cc/repos/${owner}/${repo}/files/main/${subdir}/README.md`
       : `https://ungh.cc/repos/${owner}/${repo}/readme`
 
-    const res = await fetch(unghUrl, {
-      headers: { 'User-Agent': 'skilld/1.0' },
-    }).catch(() => null)
-
-    if (!res?.ok)
+    const text = await $fetch(unghUrl, { responseType: 'text' }).catch(() => null)
+    if (!text)
       return null
 
-    const text = await res.text()
     try {
       const json = JSON.parse(text) as { markdown?: string, file?: { contents?: string } }
       return json.markdown || json.file?.contents || null

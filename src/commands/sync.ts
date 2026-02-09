@@ -1,75 +1,50 @@
-import type { AgentType, OptimizeModel, SkillSection } from '../agent'
+import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent'
 import type { ProjectState } from '../core/skills'
-import type { ResolveAttempt, ResolveStep } from '../sources'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import type { ResolveAttempt } from '../sources'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { join, relative } from 'pathe'
 import {
   agents,
+  computeSkillDirName,
 
   detectImportedPackages,
   generateSkillMd,
   getAvailableModels,
   getModelLabel,
   optimizeDocs,
-
-  sanitizeName,
 } from '../agent'
 import {
-  CACHE_DIR,
-  clearCache,
   ensureCacheDir,
-  getCacheDir,
-  getPackageDbPath,
   getPkgKeyFiles,
-  getShippedSkills,
   getVersionKey,
   hasShippedDocs,
   isCached,
-  linkGithub,
-  linkPkg,
-  linkReferences,
-  linkReleases,
-  linkShippedSkill,
+  linkPkgNamed,
   listReferenceFiles,
-  readCachedDocs,
   resolvePkgDir,
-  writeToCache,
 } from '../cache'
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config'
-import { writeLock } from '../core/lockfile'
-import { createIndex } from '../retriv'
+import { timedSpinner } from '../core/formatting'
+import { parsePackages, readLock, writeLock } from '../core/lockfile'
 import {
-  downloadLlmsDocs,
-  fetchGitDocs,
-  fetchGitHubDiscussions,
-  fetchGitHubIssues,
-  fetchLlmsTxt,
-  fetchNpmPackage,
   fetchPkgDist,
-  fetchReadmeContent,
-  fetchReleaseNotes,
-  formatDiscussionsAsMarkdown,
-  formatIssuesAsMarkdown,
-  isGhAvailable,
-  normalizeLlmsLinks,
-  parseGitHubUrl,
   readLocalDependencies,
-
-  resolveEntryFiles,
-  resolveLocalPackageDocs,
   resolvePackageDocsWithAttempts,
+  searchNpmPackages,
 } from '../sources'
-
-const RESOLVE_STEP_LABELS: Record<ResolveStep, string> = {
-  'npm': 'npm registry',
-  'github-docs': 'GitHub docs',
-  'github-meta': 'GitHub meta',
-  'github-search': 'GitHub search',
-  'readme': 'README',
-  'llms.txt': 'llms.txt',
-  'local': 'node_modules',
-}
+import {
+  detectChangelog,
+  fetchAndCacheResources,
+  findRelatedSkills,
+  forceClearCache,
+  handleShippedSkills,
+  indexResources,
+  linkAllReferences,
+  RESOLVE_STEP_LABELS,
+  resolveBaseDir,
+  resolveLocalDep,
+} from './sync-shared'
 
 function showResolveAttempts(attempts: ResolveAttempt[]): void {
   if (attempts.length === 0)
@@ -82,16 +57,6 @@ function showResolveAttempts(attempts: ResolveAttempt[]): void {
     const msg = attempt.message ? ` - ${attempt.message}` : ''
     p.log.message(`  ${icon} ${source}${msg}`)
   }
-}
-
-function formatTaskResults(results: Array<{ msg: string, status: 'ok' | 'warn' | 'error' }>): string {
-  return results.map((r) => {
-    if (r.status === 'error')
-      return `\x1B[31m✖\x1B[0m  ${r.msg}`
-    if (r.status === 'warn')
-      return `\x1B[33m▲\x1B[0m  ${r.msg}`
-    return `\x1B[32m✓\x1B[0m  ${r.msg}`
-  }).join('\n')
 }
 
 /**
@@ -148,6 +113,7 @@ export interface SyncOptions {
   model?: OptimizeModel
   yes: boolean
   force?: boolean
+  debug?: boolean
 }
 
 export async function syncCommand(state: ProjectState, opts: SyncOptions): Promise<void> {
@@ -163,6 +129,7 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
         model: opts.model,
         yes: opts.yes,
         force: opts.force,
+        debug: opts.debug,
       })
     }
 
@@ -188,6 +155,7 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
       model: opts.model,
       yes: opts.yes,
       force: opts.force,
+      debug: opts.debug,
     })
   }
 
@@ -196,7 +164,7 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
 }
 
 async function interactivePicker(state: ProjectState): Promise<string[] | null> {
-  const spin = p.spinner()
+  const spin = timedSpinner()
   spin.start('Detecting imports...')
 
   const cwd = process.cwd()
@@ -316,15 +284,19 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
   return modelChoice as OptimizeModel
 }
 
-export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: string, cancelled: boolean }> {
+/** Default sections when model is pre-set (non-interactive) */
+export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'api']
+
+export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: CustomPrompt, cancelled: boolean }> {
   const selected = await p.multiselect({
     message,
     options: [
+      { label: 'LLM gaps', value: 'llm-gaps' as SkillSection, hint: 'deprecated APIs, silent failures, changed defaults' },
       { label: 'Best practices', value: 'best-practices' as SkillSection, hint: 'gotchas, pitfalls, patterns' },
-      { label: 'API reference', value: 'api' as SkillSection, hint: 'exported functions & composables' },
-      { label: 'Custom prompt', value: 'custom' as SkillSection, hint: 'add your own instructions' },
+      { label: 'Doc map', value: 'api' as SkillSection, hint: 'compact index of exports linked to source files' },
+      { label: 'Custom section', value: 'custom' as SkillSection, hint: 'add your own section' },
     ],
-    initialValues: ['best-practices', 'api'] as SkillSection[],
+    initialValues: DEFAULT_SECTIONS,
     required: false,
   })
 
@@ -335,18 +307,52 @@ export async function selectSkillSections(message = 'Generate SKILL.md with LLM'
   if (sections.length === 0)
     return { sections: [], cancelled: false }
 
-  let customPrompt: string | undefined
+  let customPrompt: CustomPrompt | undefined
   if (sections.includes('custom')) {
-    const text = await p.text({
-      message: 'Custom instructions',
-      placeholder: 'e.g. "Focus on SSR patterns" or "Include migration notes from v2 to v3"',
+    const heading = await p.text({
+      message: 'Section heading',
+      placeholder: 'e.g. "Migration from v2" or "SSR Patterns"',
     })
-    if (p.isCancel(text))
+    if (p.isCancel(heading))
       return { sections: [], cancelled: true }
-    customPrompt = text as string
+
+    const body = await p.text({
+      message: 'Instructions for this section',
+      placeholder: 'e.g. "Document breaking changes and migration steps from v2 to v3"',
+    })
+    if (p.isCancel(body))
+      return { sections: [], cancelled: true }
+
+    customPrompt = { heading: heading as string, body: body as string }
   }
 
   return { sections, customPrompt, cancelled: false }
+}
+
+export interface LlmConfig {
+  model: OptimizeModel
+  sections: SkillSection[]
+  customPrompt?: CustomPrompt
+}
+
+/**
+ * Resolve sections + model for LLM enhancement.
+ * If presetModel is provided, uses DEFAULT_SECTIONS without prompting.
+ * Returns null if cancelled or no sections/model selected.
+ */
+export async function selectLlmConfig(presetModel?: OptimizeModel, message?: string): Promise<LlmConfig | null> {
+  const { sections, customPrompt, cancelled } = presetModel
+    ? { sections: DEFAULT_SECTIONS, customPrompt: undefined, cancelled: false }
+    : await selectSkillSections(message)
+
+  if (cancelled || sections.length === 0)
+    return null
+
+  const model = presetModel ?? await selectModel(false)
+  if (!model)
+    return null
+
+  return { model, sections, customPrompt }
 }
 
 interface SyncConfig {
@@ -355,10 +361,11 @@ interface SyncConfig {
   model?: OptimizeModel
   yes: boolean
   force?: boolean
+  debug?: boolean
 }
 
 async function syncSinglePackage(packageName: string, config: SyncConfig): Promise<void> {
-  const spin = p.spinner()
+  const spin = timedSpinner()
   spin.start(`Resolving ${packageName}`)
 
   const cwd = process.cwd()
@@ -375,24 +382,37 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
 
   // If npm fails, check if it's a link: dep and try local resolution
   if (!resolved) {
-    const { readFileSync, existsSync } = await import('node:fs')
-    const { join, resolve } = await import('node:path')
-    const pkgPath = join(cwd, 'package.json')
-
-    if (existsSync(pkgPath)) {
-      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-      const deps = { ...pkg.dependencies, ...pkg.devDependencies }
-      const depVersion = deps[packageName]
-
-      if (depVersion?.startsWith('link:')) {
-        spin.message(`Resolving local package: ${packageName}`)
-        const localPath = resolve(cwd, depVersion.slice(5))
-        resolved = await resolveLocalPackageDocs(localPath)
-      }
-    }
+    spin.message(`Resolving local package: ${packageName}`)
+    resolved = await resolveLocalDep(packageName, cwd)
   }
 
   if (!resolved) {
+    // Search npm for alternatives before giving up
+    spin.message(`Searching npm for "${packageName}"...`)
+    const suggestions = await searchNpmPackages(packageName)
+
+    if (suggestions.length > 0) {
+      spin.stop(`Package "${packageName}" not found on npm`)
+      showResolveAttempts(resolveResult.attempts)
+
+      const selected = await p.select({
+        message: 'Did you mean one of these?',
+        options: [
+          ...suggestions.map(s => ({
+            label: s.name,
+            value: s.name,
+            hint: s.description,
+          })),
+          { label: 'None of these', value: '_none_' as const },
+        ],
+      })
+
+      if (!p.isCancel(selected) && selected !== '_none_')
+        return syncSinglePackage(selected as string, config)
+
+      return
+    }
+
     spin.stop(`Could not find docs for: ${packageName}`)
     showResolveAttempts(resolveResult.attempts)
     return
@@ -408,37 +428,18 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   }
 
   // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
-  const shippedSkills = getShippedSkills(packageName, cwd, version)
-  if (shippedSkills.length > 0) {
-    const agent = agents[config.agent]
-    const baseDir = config.global
-      ? join(CACHE_DIR, 'skills')
-      : join(cwd, agent.skillsDir)
-    mkdirSync(baseDir, { recursive: true })
-
-    for (const shipped of shippedSkills) {
-      linkShippedSkill(baseDir, shipped.skillName, shipped.skillDir)
-      writeLock(baseDir, shipped.skillName, {
-        packageName,
-        version,
-        source: 'shipped',
-        syncedAt: new Date().toISOString().split('T')[0],
-        generator: 'skilld',
-      })
+  const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global)
+  if (shippedResult) {
+    for (const shipped of shippedResult.shipped) {
       p.log.success(`Linked shipped skill: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
     }
-    if (!config.global)
-      registerProject(cwd)
-    spin.stop(`Shipped ${shippedSkills.length} skill(s) from ${packageName}`)
+    spin.stop(`Shipped ${shippedResult.shipped.length} skill(s) from ${packageName}`)
     return
   }
 
   // Force: nuke cached references + search index so all existsSync guards re-fetch
   if (config.force) {
-    clearCache(packageName, version)
-    const forcedDbPath = getPackageDbPath(packageName, version)
-    if (existsSync(forcedDbPath))
-      rmSync(forcedDbPath, { recursive: true, force: true })
+    forceClearCache(packageName, version)
   }
 
   const useCache = isCached(packageName, version)
@@ -446,471 +447,129 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
 
   ensureCacheDir()
 
-  const agent = agents[config.agent]
-  const baseDir = config.global
-    ? join(CACHE_DIR, 'skills')
-    : join(cwd, agent.skillsDir)
-
-  const skillDir = join(baseDir, sanitizeName(packageName))
+  const baseDir = resolveBaseDir(cwd, config.agent, config.global)
+  const skillDirName = computeSkillDirName(packageName, resolved.repoUrl)
+  const skillDir = join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
 
-  let docSource: string = resolved.readmeUrl || 'readme'
-  let docsType: 'llms.txt' | 'readme' | 'docs' = 'readme'
+  // ── Merge mode: skill dir already exists with a different primary package ──
+  const existingLock = readLock(baseDir)?.skills[skillDirName]
+  const isMerge = existingLock && existingLock.packageName !== packageName
 
-  // Collect all fetched resources for indexing phase
-  const fetchedDocs: Array<{ id: string, content: string, metadata: Record<string, any> }> = []
-  const fetchedIssues: Array<{ id: string, content: string, metadata: Record<string, any> }> = []
-  const fetchedDiscussions: Array<{ id: string, content: string, metadata: Record<string, any> }> = []
-  const fetchedReleases: Array<{ id: string, content: string, metadata: Record<string, any> }> = []
+  if (isMerge) {
+    spin.stop(`Merging ${packageName} into ${skillDirName}`)
 
-  // ── Phase 1: Finding resources ──
-  // Build task list dynamically based on what needs fetching
-  interface TaskItem { title: string, task: (message: (msg: string) => void) => Promise<string> }
-  const resourceTasks: TaskItem[] = []
+    // Create named symlink for this package
+    linkPkgNamed(skillDir, packageName, cwd, version)
 
-  if (!useCache) {
-    resourceTasks.push({
-      title: 'Fetching documentation',
-      task: async (message) => {
-        const cachedDocs: Array<{ path: string, content: string }> = []
-
-        // Try versioned git docs first
-        if (resolved.gitDocsUrl && resolved.repoUrl) {
-          const gh = parseGitHubUrl(resolved.repoUrl)
-          if (gh) {
-            const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version, packageName)
-            if (gitDocs && gitDocs.files.length > 0) {
-              message(`Downloading ${gitDocs.files.length} docs from ${gitDocs.ref}`)
-
-              const BATCH_SIZE = 20
-              const results: Array<{ file: string, content: string } | null> = []
-
-              for (let i = 0; i < gitDocs.files.length; i += BATCH_SIZE) {
-                const batch = gitDocs.files.slice(i, i + BATCH_SIZE)
-                const batchResults = await Promise.all(
-                  batch.map(async (file) => {
-                    const url = `${gitDocs.baseUrl}/${file}`
-                    const res = await fetch(url, { headers: { 'User-Agent': 'skilld/1.0' } }).catch(() => null)
-                    if (!res?.ok)
-                      return null
-                    const content = await res.text()
-                    return { file, content }
-                  }),
-                )
-                results.push(...batchResults)
-              }
-
-              for (const r of results) {
-                if (r) {
-                  // Normalize nested monorepo paths to docs/ (e.g. apps/pkg-docs/src/content/docs/guide.md → docs/guide.md)
-                  const cachePath = gitDocs.docsPrefix ? r.file.replace(gitDocs.docsPrefix, '') : r.file
-                  cachedDocs.push({ path: cachePath, content: r.content })
-                  fetchedDocs.push({
-                    id: cachePath,
-                    content: r.content,
-                    metadata: { package: packageName, source: cachePath, type: 'doc' },
-                  })
-                }
-              }
-
-              const downloaded = results.filter(Boolean).length
-              if (downloaded > 0) {
-                docSource = `${resolved.repoUrl}/tree/${gitDocs.ref}/docs`
-                docsType = 'docs'
-                writeToCache(packageName, version, cachedDocs)
-                return `Downloaded ${downloaded} git docs`
-              }
-            }
-          }
-        }
-
-        // Try llms.txt
-        if (resolved.llmsUrl && cachedDocs.length === 0) {
-          message('Fetching llms.txt')
-          const llmsContent = await fetchLlmsTxt(resolved.llmsUrl)
-          if (llmsContent) {
-            docSource = resolved.llmsUrl!
-            docsType = 'llms.txt'
-            const baseUrl = resolved.docsUrl || new URL(resolved.llmsUrl).origin
-            cachedDocs.push({ path: 'llms.txt', content: normalizeLlmsLinks(llmsContent.raw, baseUrl) })
-
-            if (llmsContent.links.length > 0) {
-              message(`Downloading ${llmsContent.links.length} linked docs`)
-              const docs = await downloadLlmsDocs(llmsContent, baseUrl)
-
-              for (const doc of docs) {
-                const localPath = doc.url.startsWith('/') ? doc.url.slice(1) : doc.url
-                const cachePath = join('docs', ...localPath.split('/'))
-                cachedDocs.push({ path: cachePath, content: doc.content })
-                fetchedDocs.push({
-                  id: doc.url,
-                  content: doc.content,
-                  metadata: { package: packageName, source: cachePath, type: 'doc' },
-                })
-              }
-
-              writeToCache(packageName, version, cachedDocs)
-              return `Saved ${docs.length + 1} docs from llms.txt`
-            }
-
-            writeToCache(packageName, version, cachedDocs)
-            return 'Saved llms.txt'
-          }
-        }
-
-        // Fallback to README
-        if (resolved.readmeUrl && cachedDocs.length === 0) {
-          message('Fetching README')
-          const content = await fetchReadmeContent(resolved.readmeUrl)
-          if (content) {
-            cachedDocs.push({ path: 'docs/README.md', content })
-            fetchedDocs.push({
-              id: 'README.md',
-              content,
-              metadata: { package: packageName, source: 'docs/README.md', type: 'doc' },
-            })
-            writeToCache(packageName, version, cachedDocs)
-            return 'Saved README.md'
-          }
-        }
-
-        return 'No docs found'
-      },
+    // Merge into lockfile
+    const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+    writeLock(baseDir, skillDirName, {
+      packageName,
+      version,
+      repo: repoSlug,
+      source: existingLock.source,
+      syncedAt: new Date().toISOString().split('T')[0],
+      generator: 'skilld',
     })
+
+    // Regenerate SKILL.md with all packages listed
+    const updatedLock = readLock(baseDir)?.skills[skillDirName]
+    const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+    const relatedSkills = await findRelatedSkills(packageName, baseDir)
+    const pkgFiles = getPkgKeyFiles(existingLock.packageName!, cwd, existingLock.version)
+    const shippedDocs = hasShippedDocs(existingLock.packageName!, cwd, existingLock.version)
+
+    const skillMd = generateSkillMd({
+      name: existingLock.packageName!,
+      version: existingLock.version,
+      relatedSkills,
+      hasIssues: existsSync(join(skillDir, '.skilld', 'issues')),
+      hasDiscussions: existsSync(join(skillDir, '.skilld', 'discussions')),
+      hasReleases: existsSync(join(skillDir, '.skilld', 'releases')),
+      docsType: (existingLock.source?.includes('llms.txt') ? 'llms.txt' : 'docs') as 'llms.txt' | 'readme' | 'docs',
+      hasShippedDocs: shippedDocs,
+      pkgFiles,
+      dirName: skillDirName,
+      packages: allPackages,
+    })
+    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+
+    if (!config.global)
+      registerProject(cwd)
+
+    p.outro(`Merged ${packageName} into ${skillDirName}`)
+    return
   }
 
   const features = readConfig().features ?? defaultFeatures
 
-  // Issues task (runs for both fresh and cached if issues don't exist yet)
-  const issuesPath = join(getCacheDir(packageName, version), 'github', 'RECENT-ISSUES.md')
-  if (features.issues && resolved.repoUrl && isGhAvailable() && !existsSync(issuesPath)) {
-    const gh = parseGitHubUrl(resolved.repoUrl)
-    if (gh) {
-      resourceTasks.push({
-        title: 'Fetching GitHub issues',
-        task: async () => {
-          const issues = await fetchGitHubIssues(gh.owner, gh.repo, 20)
-          if (issues.length > 0) {
-            const issuesMd = formatIssuesAsMarkdown(issues)
-            writeToCache(packageName, version, [{ path: 'github/RECENT-ISSUES.md', content: issuesMd }])
-            for (const issue of issues) {
-              fetchedIssues.push({
-                id: `issue-${issue.number}`,
-                content: `#${issue.number}: ${issue.title}\n\n${issue.body || ''}`,
-                metadata: { package: packageName, source: 'github/RECENT-ISSUES.md', type: 'issue', number: issue.number },
-              })
-            }
-            return `Cached ${issues.length} issues`
-          }
-          return 'No issues found'
-        },
-      })
-    }
+  // ── Phase 1: Fetch & cache all resources ──
+  const resSpin = timedSpinner()
+  resSpin.start('Finding resources')
+  const resources = await fetchAndCacheResources({
+    packageName,
+    resolved,
+    version,
+    useCache,
+    features,
+    onProgress: msg => resSpin.message(msg),
+  })
+  const resParts: string[] = []
+  if (resources.docsToIndex.length > 0) {
+    const docCount = resources.docsToIndex.filter(d => d.metadata?.type === 'doc').length
+    if (docCount > 0)
+      resParts.push(`${docCount} docs`)
   }
-
-  // Discussions task
-  const discussionsPath = join(getCacheDir(packageName, version), 'github', 'RECENT-DISCUSSIONS.md')
-  if (features.discussions && resolved.repoUrl && isGhAvailable() && !existsSync(discussionsPath)) {
-    const gh = parseGitHubUrl(resolved.repoUrl)
-    if (gh) {
-      resourceTasks.push({
-        title: 'Fetching GitHub discussions',
-        task: async () => {
-          const discussions = await fetchGitHubDiscussions(gh.owner, gh.repo, 20)
-          if (discussions.length > 0) {
-            const discussionsMd = formatDiscussionsAsMarkdown(discussions)
-            writeToCache(packageName, version, [{ path: 'github/RECENT-DISCUSSIONS.md', content: discussionsMd }])
-            for (const d of discussions) {
-              fetchedDiscussions.push({
-                id: `discussion-${d.number}`,
-                content: `#${d.number}: ${d.title}\n\n${d.body || ''}`,
-                metadata: { package: packageName, source: 'github/RECENT-DISCUSSIONS.md', type: 'discussion', number: d.number },
-              })
-            }
-            return `Cached ${discussions.length} discussions`
-          }
-          return 'No discussions found'
-        },
-      })
-    }
-  }
-
-  // Releases task
-  const releasesPath = join(getCacheDir(packageName, version), 'releases')
-  if (features.releases && resolved.repoUrl && !existsSync(releasesPath)) {
-    const gh = parseGitHubUrl(resolved.repoUrl)
-    if (gh) {
-      resourceTasks.push({
-        title: 'Fetching release notes',
-        task: async () => {
-          const releaseDocs = await fetchReleaseNotes(gh.owner, gh.repo, version, resolved.gitRef, packageName)
-          if (releaseDocs.length > 0) {
-            writeToCache(packageName, version, releaseDocs)
-            for (const doc of releaseDocs) {
-              fetchedReleases.push({
-                id: doc.path,
-                content: doc.content,
-                metadata: { package: packageName, source: doc.path, type: 'release' },
-              })
-            }
-            return `Cached ${releaseDocs.length} release note(s)`
-          }
-          return 'No releases found'
-        },
-      })
-    }
-  }
-
-  // Run resource tasks
-  if (resourceTasks.length > 0) {
-    const resSpin = p.spinner()
-    resSpin.start('Finding resources')
-    const resResults: Array<{ msg: string, status: 'ok' | 'warn' | 'error' }> = []
-    for (const task of resourceTasks) {
-      resSpin.message(task.title)
-      try {
-        const result = await task.task(msg => resSpin.message(msg))
-        // Discussions are opt-in on GitHub, silently skip if missing
-        if (result === 'No discussions found')
-          continue
-        resResults.push({ msg: result, status: result.startsWith('No ') ? 'warn' : 'ok' })
-      }
-      catch {
-        resResults.push({ msg: `${task.title} failed`, status: 'error' })
-      }
-    }
-    resSpin.stop('Fetched resources')
-    p.log.message(formatTaskResults(resResults))
-  }
+  if (resources.hasIssues)
+    resParts.push('issues')
+  if (resources.hasDiscussions)
+    resParts.push('discussions')
+  if (resources.hasReleases)
+    resParts.push('releases')
+  resSpin.stop(`Fetched ${resParts.length > 0 ? resParts.join(', ') : 'resources'}`)
 
   // Create symlinks
-  try {
-    linkPkg(skillDir, packageName, cwd, version)
-    if (!hasShippedDocs(packageName, cwd, version) && docsType !== 'readme') {
-      linkReferences(skillDir, packageName, version)
-    }
-    linkGithub(skillDir, packageName, version)
-    linkReleases(skillDir, packageName, version)
-  }
-  catch {
-    // Symlink may fail on some systems
-  }
+  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType)
 
-  // ── Phase 2: Creating search index ──
-  const dbPath = getPackageDbPath(packageName, version)
-  const indexTasks: TaskItem[] = []
+  // ── Phase 2: Search index ──
+  const idxSpin = timedSpinner()
+  idxSpin.start('Creating search index')
+  await indexResources({
+    packageName,
+    version,
+    cwd,
+    docsToIndex: resources.docsToIndex,
+    features,
+    onProgress: msg => idxSpin.message(msg),
+  })
+  idxSpin.stop('Search index ready')
 
-  if (!existsSync(dbPath)) {
-    // Fresh index needed — use fetched data or read from cache
-    if (fetchedDocs.length > 0 || fetchedIssues.length > 0 || fetchedDiscussions.length > 0 || fetchedReleases.length > 0) {
-      // We have freshly fetched data
-      if (fetchedDocs.length > 0) {
-        indexTasks.push({
-          title: `Indexing ${fetchedDocs.length} docs`,
-          task: async (message) => {
-            await createIndex(fetchedDocs, { dbPath, onProgress: ({ phase, current, total }) => {
-              if (phase === 'storing') {
-                const file = fetchedDocs[current - 1]?.id.split('/').pop() ?? ''
-                message(`Indexing doc ${file} - ${current}/${total}`)
-              }
-              else if (phase === 'embedding') {
-                message(`Embedding docs - ${current}/${total}`)
-              }
-            } })
-            return `Indexed ${fetchedDocs.length} docs`
-          },
-        })
-      }
-      if (fetchedIssues.length > 0) {
-        indexTasks.push({
-          title: `Indexing ${fetchedIssues.length} issues`,
-          task: async (message) => {
-            await createIndex(fetchedIssues, { dbPath, onProgress: ({ phase, current, total }) => {
-              if (phase === 'storing') {
-                const file = fetchedIssues[current - 1]?.id.split('/').pop() ?? ''
-                message(`Indexing issue ${file} - ${current}/${total}`)
-              }
-              else if (phase === 'embedding') {
-                message(`Embedding issues - ${current}/${total}`)
-              }
-            } })
-            return `Indexed ${fetchedIssues.length} issues`
-          },
-        })
-      }
-      if (fetchedDiscussions.length > 0) {
-        indexTasks.push({
-          title: `Indexing ${fetchedDiscussions.length} discussions`,
-          task: async (message) => {
-            await createIndex(fetchedDiscussions, { dbPath, onProgress: ({ phase, current, total }) => {
-              if (phase === 'storing') {
-                const file = fetchedDiscussions[current - 1]?.id.split('/').pop() ?? ''
-                message(`Indexing discussion ${file} - ${current}/${total}`)
-              }
-              else if (phase === 'embedding') {
-                message(`Embedding discussions - ${current}/${total}`)
-              }
-            } })
-            return `Indexed ${fetchedDiscussions.length} discussions`
-          },
-        })
-      }
-      if (fetchedReleases.length > 0) {
-        indexTasks.push({
-          title: `Indexing ${fetchedReleases.length} releases`,
-          task: async (message) => {
-            await createIndex(fetchedReleases, { dbPath, onProgress: ({ phase, current, total }) => {
-              if (phase === 'storing') {
-                const file = fetchedReleases[current - 1]?.id.split('/').pop() ?? ''
-                message(`Indexing release ${file} - ${current}/${total}`)
-              }
-              else if (phase === 'embedding') {
-                message(`Embedding releases - ${current}/${total}`)
-              }
-            } })
-            return `Indexed ${fetchedReleases.length} releases`
-          },
-        })
-      }
-    }
-    else {
-      // Cached data — read from disk and index
-      indexTasks.push({
-        title: 'Indexing cached docs',
-        task: async (message) => {
-          const cachedDocs = readCachedDocs(packageName, version)
-          if (cachedDocs.length === 0)
-            return 'No docs to index'
-
-          const docsToIndex: Array<{ id: string, content: string, metadata: Record<string, any> }> = cachedDocs
-            .filter(doc => !doc.path.startsWith('github/'))
-            .map(doc => ({
-              id: doc.path,
-              content: doc.content,
-              metadata: { package: packageName, source: doc.path, type: 'doc' },
-            }))
-
-          // Parse issues individually
-          const issuesDoc = cachedDocs.find(doc => doc.path === 'github/RECENT-ISSUES.md')
-          if (issuesDoc) {
-            const issueBlocks = issuesDoc.content.split(/\n---\n/).filter(Boolean)
-            for (const block of issueBlocks) {
-              const match = block.match(/## #(\d+): (.+)/)
-              if (match) {
-                docsToIndex.push({
-                  id: `issue-${match[1]}`,
-                  content: block,
-                  metadata: { package: packageName, source: 'github/RECENT-ISSUES.md', type: 'issue', number: Number(match[1]) },
-                })
-              }
-            }
-          }
-
-          // Parse discussions individually
-          const discussionsDoc = cachedDocs.find(doc => doc.path === 'github/RECENT-DISCUSSIONS.md')
-          if (discussionsDoc) {
-            const discussionBlocks = discussionsDoc.content.split(/\n---\n/).filter(Boolean)
-            for (const block of discussionBlocks) {
-              const match = block.match(/## #(\d+): (.+)/)
-              if (match) {
-                docsToIndex.push({
-                  id: `discussion-${match[1]}`,
-                  content: block,
-                  metadata: { package: packageName, source: 'github/RECENT-DISCUSSIONS.md', type: 'discussion', number: Number(match[1]) },
-                })
-              }
-            }
-          }
-
-          await createIndex(docsToIndex, { dbPath, onProgress: ({ phase, current, total }) => {
-            if (phase === 'storing') {
-              const d = docsToIndex[current - 1]
-              const type = d?.metadata?.type === 'source' || d?.metadata?.type === 'types' ? 'code' : 'doc'
-              const file = d?.id.split('/').pop() ?? ''
-              message(`Indexing ${type} ${file} - ${current}/${total}`)
-            }
-            else if (phase === 'embedding') {
-              message(`Embedding cached docs - ${current}/${total}`)
-            }
-          } })
-          return `Indexed ${docsToIndex.length} docs`
-        },
-      })
-    }
-  }
-
-  // Index package entry files (.d.ts / .js)
   const pkgDir = resolvePkgDir(packageName, cwd, version)
-  const entryFiles = features.search && pkgDir ? await resolveEntryFiles(pkgDir) : []
-  if (entryFiles.length > 0) {
-    const entryLabel = entryFiles.length === 1
-      ? entryFiles[0]!.path
-      : `${entryFiles.length} entry files`
-    indexTasks.push({
-      title: `Indexing ${entryLabel}`,
-      task: async (message) => {
-        await createIndex(entryFiles.map(e => ({
-          id: e.path,
-          content: e.content,
-          metadata: { package: packageName, source: `pkg/${e.path}`, type: e.type },
-        })), { dbPath, onProgress: ({ phase, current, total }) => {
-          if (phase === 'storing') {
-            const file = entryFiles[current - 1]?.path.split('/').pop() ?? ''
-            message(`Indexing code ${file} - ${current}/${total}`)
-          }
-          else if (phase === 'embedding') {
-            message(`Embedding code - ${current}/${total}`)
-          }
-        } })
-        return `Indexed ${entryLabel}`
-      },
-    })
-  }
-
-  if (indexTasks.length > 0) {
-    const idxSpin = p.spinner()
-    idxSpin.start('Creating search index')
-    const idxResults: Array<{ msg: string, status: 'ok' | 'warn' | 'error' }> = []
-    for (const task of indexTasks) {
-      idxSpin.message(task.title)
-      try {
-        const result = await task.task(msg => idxSpin.message(msg))
-        idxResults.push({ msg: result, status: result.startsWith('No ') ? 'warn' : 'ok' })
-      }
-      catch {
-        idxResults.push({ msg: `${task.title} failed`, status: 'error' })
-      }
-    }
-    idxSpin.stop('Search index ready')
-    p.log.message(formatTaskResults(idxResults))
-  }
-
-  // Detect docs type from cache
-  const cacheDir = getCacheDir(packageName, version)
-  if (useCache) {
-    if (existsSync(join(cacheDir, 'docs', 'index.md')) || existsSync(join(cacheDir, 'docs', 'guide'))) {
-      docSource = resolved.repoUrl ? `${resolved.repoUrl}/tree/v${version}/docs` : 'git'
-      docsType = 'docs'
-    }
-    else if (existsSync(join(cacheDir, 'llms.txt'))) {
-      docSource = resolved.llmsUrl || 'llms.txt'
-      docsType = 'llms.txt'
-    }
-    else if (existsSync(join(cacheDir, 'docs', 'README.md'))) {
-      docsType = 'readme'
-    }
-  }
-
-  const githubDir = join(getCacheDir(packageName, version), 'github')
-  const hasGithub = existsSync(githubDir)
-  const hasReleases = existsSync(releasesPath)
-  const hasChangelog = pkgDir ? (['CHANGELOG.md', 'changelog.md'].find(f => existsSync(join(pkgDir, f))) || false) : false
-
+  const hasChangelog = detectChangelog(pkgDir)
   const relatedSkills = await findRelatedSkills(packageName, baseDir)
   const shippedDocs = hasShippedDocs(packageName, cwd, version)
   const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
 
   // Write base SKILL.md (no LLM needed)
+  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+
+  // Also create named symlink for this package
+  linkPkgNamed(skillDir, packageName, cwd, version)
+
+  writeLock(baseDir, skillDirName, {
+    packageName,
+    version,
+    repo: repoSlug,
+    source: resources.docSource,
+    syncedAt: new Date().toISOString().split('T')[0],
+    generator: 'skilld',
+  })
+
+  // Read back merged packages from lockfile for SKILL.md generation
+  const updatedLock = readLock(baseDir)?.skills[skillDirName]
+  const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+
   const baseSkillMd = generateSkillMd({
     name: packageName,
     version,
@@ -919,54 +578,47 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     dependencies: resolved.dependencies,
     distTags: resolved.distTags,
     relatedSkills,
-    hasGithub,
-    hasReleases,
+    hasIssues: resources.hasIssues,
+    hasDiscussions: resources.hasDiscussions,
+    hasReleases: resources.hasReleases,
     hasChangelog,
-    docsType,
+    docsType: resources.docsType,
     hasShippedDocs: shippedDocs,
     pkgFiles,
+    dirName: skillDirName,
+    packages: allPackages.length > 1 ? allPackages : undefined,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
-
-  writeLock(baseDir, sanitizeName(packageName), {
-    packageName,
-    version,
-    source: docSource,
-    syncedAt: new Date().toISOString().split('T')[0],
-    generator: 'skilld',
-  })
 
   p.log.success(`Created base skill: ${relative(cwd, skillDir)}`)
 
   // Ask about LLM optimization (skip if -y flag, skipLlm config, or model already specified)
   const globalConfig = readConfig()
   if (!globalConfig.skipLlm && (!config.yes || config.model)) {
-    const { sections, customPrompt, cancelled } = config.model
-      ? { sections: ['best-practices', 'api'] as SkillSection[], customPrompt: undefined, cancelled: false }
-      : await selectSkillSections()
-
-    if (!cancelled && sections.length > 0) {
-      const model = config.model ?? await selectModel(false)
-      if (model) {
-        p.log.step(getModelLabel(model))
-        await enhanceSkillWithLLM({
-          packageName,
-          version,
-          skillDir,
-          model,
-          resolved,
-          relatedSkills,
-          hasGithub,
-          hasReleases,
-          hasChangelog,
-          docsType,
-          hasShippedDocs: shippedDocs,
-          pkgFiles,
-          force: config.force,
-          sections,
-          customPrompt,
-        })
-      }
+    const llmConfig = await selectLlmConfig(config.model)
+    if (llmConfig) {
+      p.log.step(getModelLabel(llmConfig.model))
+      await enhanceSkillWithLLM({
+        packageName,
+        version,
+        skillDir,
+        dirName: skillDirName,
+        model: llmConfig.model,
+        resolved,
+        relatedSkills,
+        hasIssues: resources.hasIssues,
+        hasDiscussions: resources.hasDiscussions,
+        hasReleases: resources.hasReleases,
+        hasChangelog,
+        docsType: resources.docsType,
+        hasShippedDocs: shippedDocs,
+        pkgFiles,
+        force: config.force,
+        debug: config.debug,
+        sections: llmConfig.sections,
+        customPrompt: llmConfig.customPrompt,
+        packages: allPackages.length > 1 ? allPackages : undefined,
+      })
     }
   }
 
@@ -975,7 +627,10 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     registerProject(cwd)
   }
 
-  await ensureGitignore(agent.skillsDir, cwd, config.global)
+  await ensureGitignore(agents[config.agent].skillsDir, cwd, config.global)
+
+  const { shutdownWorker } = await import('../retriv/pool')
+  await shutdownWorker()
 
   p.outro(`Synced ${packageName} to ${relative(cwd, skillDir)}`)
 }
@@ -984,27 +639,32 @@ interface EnhanceOptions {
   packageName: string
   version: string
   skillDir: string
+  dirName?: string
   model: OptimizeModel
   resolved: { repoUrl?: string, llmsUrl?: string, releasedAt?: string, docsUrl?: string, gitRef?: string, dependencies?: Record<string, string>, distTags?: Record<string, { version: string, releasedAt?: string }> }
   relatedSkills: string[]
-  hasGithub: boolean
+  hasIssues: boolean
+  hasDiscussions: boolean
   hasReleases: boolean
   hasChangelog: string | false
   docsType: 'llms.txt' | 'readme' | 'docs'
   hasShippedDocs: boolean
   pkgFiles: string[]
   force?: boolean
+  debug?: boolean
   sections?: SkillSection[]
-  customPrompt?: string
+  customPrompt?: CustomPrompt
+  packages?: Array<{ name: string }>
 }
 
 async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
-  const { packageName, version, skillDir, model, resolved, relatedSkills, hasGithub, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, sections, customPrompt } = opts
+  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages } = opts
 
-  const llmSpin = p.spinner()
+  const llmSpin = timedSpinner()
   llmSpin.start(`Agent exploring ${packageName}`)
   const docFiles = listReferenceFiles(skillDir)
-  const { optimized, wasOptimized } = await optimizeDocs({
+  const hasGithub = hasIssues || hasDiscussions
+  const { optimized, wasOptimized, usage, cost, warnings, debugLogsDir } = await optimizeDocs({
     packageName,
     skillDir,
     model,
@@ -1013,89 +673,61 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     hasReleases,
     hasChangelog,
     docFiles,
+    docsType,
+    hasShippedDocs: shippedDocs,
     noCache: force,
+    debug,
     sections,
     customPrompt,
-    onProgress: ({ type, chunk }) => {
+    onProgress: ({ type, chunk, section }) => {
+      const prefix = section ? `[${section}] ` : ''
       if (type === 'reasoning' && chunk.startsWith('[')) {
-        llmSpin.message(chunk)
+        llmSpin.message(`${prefix}${chunk}`)
       }
       else if (type === 'text') {
-        llmSpin.message(`Writing...`)
+        llmSpin.message(`${prefix}Writing...`)
       }
     },
   })
 
   if (wasOptimized) {
-    llmSpin.stop('Generated best practices')
-    const body = cleanSkillMd(optimized)
+    const costParts: string[] = []
+    if (usage) {
+      const totalK = Math.round(usage.totalTokens / 1000)
+      costParts.push(`${totalK}k tokens`)
+    }
+    if (cost)
+      costParts.push(`$${cost.toFixed(2)}`)
+    const costSuffix = costParts.length > 0 ? ` (${costParts.join(', ')})` : ''
+    llmSpin.stop(`Generated best practices${costSuffix}`)
+    if (debugLogsDir)
+      p.log.info(`Debug logs: ${debugLogsDir}`)
+    if (warnings?.length) {
+      for (const w of warnings)
+        p.log.warn(`\x1B[33m${w}\x1B[0m`)
+    }
     const skillMd = generateSkillMd({
       name: packageName,
       version,
       releasedAt: resolved.releasedAt,
       dependencies: resolved.dependencies,
       distTags: resolved.distTags,
-      body,
+      body: optimized,
       relatedSkills,
-      hasGithub,
+      hasIssues,
+      hasDiscussions,
       hasReleases,
       hasChangelog,
       docsType,
       hasShippedDocs: shippedDocs,
       pkgFiles,
+      generatedBy: getModelLabel(model),
+      dirName,
+      packages,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
     llmSpin.stop('LLM optimization failed')
   }
-}
-
-async function findRelatedSkills(packageName: string, skillsDir: string): Promise<string[]> {
-  const related: string[] = []
-
-  const npmInfo = await fetchNpmPackage(packageName)
-  if (!npmInfo?.dependencies)
-    return related
-
-  const deps = Object.keys(npmInfo.dependencies)
-
-  if (!existsSync(skillsDir))
-    return related
-
-  const installedSkills = readdirSync(skillsDir)
-
-  for (const skill of installedSkills) {
-    if (deps.some(d => sanitizeName(d) === skill)) {
-      related.push(skill)
-    }
-  }
-
-  return related.slice(0, 5)
-}
-
-export function cleanSkillMd(content: string): string {
-  let cleaned = content
-    .replace(/^```markdown\n?/m, '')
-    .replace(/\n?```$/m, '')
-    .trim()
-
-  // Strip any accidental frontmatter or leading horizontal rules
-  // We always add our own frontmatter
-  // Match 3+ dashes (handles ---, ------, etc)
-  const fmMatch = cleaned.match(/^-{3,}\n/)
-  if (fmMatch) {
-    const afterOpen = fmMatch[0].length
-    const closeMatch = cleaned.slice(afterOpen).match(/\n-{3,}/)
-    if (closeMatch) {
-      // Has closing dashes (frontmatter), strip entire block
-      cleaned = cleaned.slice(afterOpen + closeMatch.index! + closeMatch[0].length).trim()
-    }
-    else {
-      // Just leading dashes, strip them
-      cleaned = cleaned.slice(afterOpen).trim()
-    }
-  }
-
-  return cleaned
 }

@@ -10,6 +10,7 @@ export default defineBuildConfig({
         './src/types.ts',
         './src/cache/index.ts',
         './src/retriv/index.ts',
+        './src/retriv/worker.ts',
         './src/agent/index.ts',
         './src/sources/index.ts',
       ],

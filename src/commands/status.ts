@@ -2,12 +2,13 @@ import type { AgentType } from '../agent'
 import type { SkillInfo } from '../core/lockfile'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { join } from 'node:path'
 import * as p from '@clack/prompts'
+import { join } from 'pathe'
 import { agents, getAgentVersion } from '../agent'
 import { CACHE_DIR, getPackageDbPath } from '../cache'
 import { getCacheDir } from '../cache/version'
 import { defaultFeatures, hasConfig, readConfig } from '../core/config'
+import { parsePackages } from '../core/lockfile'
 import { iterateSkills } from '../core/skills'
 
 const require = createRequire(import.meta.url)
@@ -219,7 +220,11 @@ export function statusCommand(opts: StatusOptions = {}): void {
       const isShipped = info.source === 'shipped'
       const icon = isShipped ? '▶' : '◆'
 
-      const parts = [`${icon} ${bold(pkg.name)}`]
+      const pkgsList = parsePackages(info.packages)
+      const nameDisplay = pkgsList.length > 1
+        ? `${pkg.name} ${dim(`(${pkgsList.map(p => p.name).join(', ')})`)}`
+        : pkg.name
+      const parts = [`${icon} ${bold(nameDisplay)}`]
       if (info.version)
         parts.push(dim(info.version))
       const source = formatSource(info.source)

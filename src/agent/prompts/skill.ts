@@ -2,6 +2,8 @@
  * SKILL.md file generation
  */
 
+import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize'
+import { yamlEscape } from '../../core/yaml'
 import { sanitizeName } from '../install'
 import { FILE_PATTERN_MAP } from '../types'
 
@@ -18,13 +20,20 @@ export interface SkillOptions {
   /** LLM-generated body — replaces default heading + description */
   body?: string
   relatedSkills: string[]
-  hasGithub?: boolean
+  hasIssues?: boolean
+  hasDiscussions?: boolean
   hasReleases?: boolean
   hasChangelog?: string | false
   docsType?: 'llms.txt' | 'readme' | 'docs'
   hasShippedDocs?: boolean
   /** Key files in package (entry points + docs) */
   pkgFiles?: string[]
+  /** Model used to generate LLM sections */
+  generatedBy?: string
+  /** Override directory name for frontmatter (repo-based, e.g. "vuejs-core") */
+  dirName?: string
+  /** All packages tracked by this skill (multi-package skills) */
+  packages?: Array<{ name: string }>
 }
 
 export function generateSkillMd(opts: SkillOptions): string {
@@ -32,7 +41,7 @@ export function generateSkillMd(opts: SkillOptions): string {
   const refs = generateReferencesBlock(opts)
   const content = opts.body ? `${header}\n\n${refs}${opts.body}` : `${header}\n\n${refs.trimEnd()}`
   const footer = generateFooter(opts.relatedSkills)
-  return `${generateFrontmatter(opts)}${content}\n${footer}`
+  return sanitizeMarkdown(repairMarkdown(`${generateFrontmatter(opts)}${content}\n${footer}`))
 }
 
 function formatRelativeDate(isoDate: string): string {
@@ -46,15 +55,18 @@ function formatRelativeDate(isoDate: string): string {
   if (diffDays === 1)
     return 'yesterday'
   if (diffDays < 7)
-    return `${diffDays} days ago`
+    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`
+  const weeks = Math.floor(diffDays / 7)
   if (diffDays < 30)
-    return `${Math.floor(diffDays / 7)} weeks ago`
+    return `${weeks} week${weeks === 1 ? '' : 's'} ago`
+  const months = Math.floor(diffDays / 30)
   if (diffDays < 365)
-    return `${Math.floor(diffDays / 30)} months ago`
-  return `${Math.floor(diffDays / 365)} years ago`
+    return `${months} month${months === 1 ? '' : 's'} ago`
+  const years = Math.floor(diffDays / 365)
+  return `${years} year${years === 1 ? '' : 's'} ago`
 }
 
-function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, hasGithub }: SkillOptions & { repoUrl?: string }): string {
+function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, hasIssues, hasDiscussions }: SkillOptions & { repoUrl?: string }): string {
   const lines: string[] = [`# ${name}`]
 
   if (description)
@@ -84,8 +96,10 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
     lines.push(`**Tags:** ${tags}`)
   }
 
-  if (hasGithub)
-    lines.push(`**GitHub:** \`./.skilld/github/\``)
+  if (hasIssues)
+    lines.push(`**Issues:** \`./.skilld/issues/\``)
+  if (hasDiscussions)
+    lines.push(`**Discussions:** \`./.skilld/discussions/\``)
 
   return lines.join('\n')
 }
@@ -112,41 +126,84 @@ function expandPackageName(name: string): string[] {
   return [...variants]
 }
 
-function generateFrontmatter({ name, version, globs, description: pkgDescription }: SkillOptions): string {
+function generateFrontmatter({ name, version, description: pkgDescription, globs, body, generatedBy, dirName, packages }: SkillOptions): string {
   const patterns = globs ?? FILE_PATTERN_MAP[name]
-  const keywords = expandPackageName(name)
-  const fileHint = patterns?.length ? ` importing from "${name}" or working with ${patterns.join(', ')} files` : ` importing from "${name}"`
-  const keywordHint = keywords.length ? ` or user mentions ${keywords.join(', ')}` : ''
+  const globHint = patterns?.length ? ` or working with ${patterns.join(', ')} files` : ''
+  const descSuffix = pkgDescription ? ` (${pkgDescription.replace(/\.?\s*$/, '')})` : ''
 
-  const lead = pkgDescription
-    ? `Expert knowledge for ${name} (${pkgDescription.replace(/\.$/, '')}).`
-    : `Expert knowledge for ${name}.`
-  const description = `${lead} Use when${fileHint}${keywordHint}.`
+  let desc: string
+  if (packages && packages.length > 1) {
+    // Multi-package description: list all imports and keywords
+    const importList = packages.map(p => `"${p.name}"`).join(', ')
+    const allKeywords = new Set<string>()
+    for (const pkg of packages) {
+      allKeywords.add(pkg.name)
+      for (const kw of expandPackageName(pkg.name))
+        allKeywords.add(kw)
+    }
+    const keywordList = [...allKeywords].join(', ')
+    desc = `Using code importing from ${importList}${globHint}. Researching or debugging ${keywordList}.${descSuffix}`
+  }
+  else {
+    const keywords = expandPackageName(name)
+    const nameList = [name, ...keywords].join(', ')
+    desc = `Using code importing from "${name}"${globHint}. Researching or debugging ${nameList}.${descSuffix}`
+  }
 
   const lines = [
     '---',
-    `name: ${sanitizeName(name)}-skilld`,
-    `description: ${description}`,
+    `name: ${dirName ?? sanitizeName(name)}-skilld`,
+    `description: ${yamlEscape(desc)}`,
   ]
   if (patterns?.length)
     lines.push(`globs: ${JSON.stringify(patterns)}`)
   if (version)
-    lines.push(`version: "${version}"`)
+    lines.push(`version: ${yamlEscape(version)}`)
+  if (body && generatedBy)
+    lines.push(`generated_by: ${yamlEscape(generatedBy)}`)
   lines.push('---', '', '')
   return lines.join('\n')
 }
 
-function generateReferencesBlock({ name, hasGithub, hasReleases, docsType = 'docs', hasShippedDocs = false, pkgFiles = [] }: SkillOptions): string {
+function generateSearchBlock(name: string, hasIssues?: boolean, hasReleases?: boolean): string {
+  const examples = [
+    `npx skilld search "query" -p ${name}`,
+  ]
+  if (hasIssues)
+    examples.push(`npx skilld search "issues:error handling" -p ${name}`)
+  if (hasReleases)
+    examples.push(`npx skilld search "releases:deprecated" -p ${name}`)
+
+  return `## Search
+
+Use \`npx skilld search\` instead of grepping \`.skilld/\` directories — hybrid semantic + keyword search across all indexed docs, issues, and releases.
+
+\`\`\`bash
+${examples.join('\n')}
+\`\`\`
+
+Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.`
+}
+
+function generateReferencesBlock({ name, hasIssues, hasDiscussions, hasReleases, docsType = 'docs', hasShippedDocs = false, pkgFiles = [], packages }: SkillOptions): string {
   const lines: string[] = [
-    '## References',
+    generateSearchBlock(name, hasIssues, hasReleases),
     '',
-    `IMPORTANT: Search all references (semantic and keyword) using \`skilld search "<query>" -p ${name}\`.`,
+    '## References',
     '',
   ]
 
   // Package with inline file list
   const fileList = pkgFiles.length ? ` — ${pkgFiles.map(f => `\`${f}\``).join(', ')}` : ''
   lines.push(`**Package:** \`./.skilld/pkg/\`${fileList}`)
+
+  // Named package symlinks for multi-package skills
+  if (packages && packages.length > 1) {
+    for (const pkg of packages) {
+      const shortName = pkg.name.split('/').pop()!.toLowerCase()
+      lines.push(`**Package (${pkg.name}):** \`./.skilld/pkg-${shortName}/\``)
+    }
+  }
 
   // Docs (only if separate from pkg)
   if (hasShippedDocs) {
@@ -159,8 +216,10 @@ function generateReferencesBlock({ name, hasGithub, hasReleases, docsType = 'doc
     lines.push(`**Docs:** \`./.skilld/docs/\``)
   }
 
-  if (hasGithub)
-    lines.push(`**GitHub:** \`./.skilld/github/\``)
+  if (hasIssues)
+    lines.push(`**Issues:** \`./.skilld/issues/\``)
+  if (hasDiscussions)
+    lines.push(`**Discussions:** \`./.skilld/discussions/\``)
 
   if (hasReleases)
     lines.push(`**Releases:** \`./.skilld/releases/\``)

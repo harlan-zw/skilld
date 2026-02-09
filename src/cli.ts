@@ -1,16 +1,17 @@
 #!/usr/bin/env node
-import type { AgentType } from './agent'
+import type { AgentType, OptimizeModel } from './agent'
 import type { PackageUsage } from './agent/detect-imports'
 import type { ProjectState } from './core'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { join, resolve } from 'node:path'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
+import { join, resolve } from 'pathe'
 import { agents, detectImportedPackages, detectInstalledAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent'
-import { configCommand, installCommand, removeCommand, runWizard, searchCommand, statusCommand, syncCommand, uninstallCommand } from './commands'
-import { getProjectState, hasConfig, isOutdated, readConfig } from './core'
+import { cacheCleanCommand, configCommand, installCommand, interactiveSearch, listCommand, removeCommand, runWizard, searchCommand, statusCommand, syncCommand, uninstallCommand } from './commands'
+import { getProjectState, hasConfig, isOutdated, readConfig, updateConfig } from './core'
+import { timedSpinner } from './core/formatting'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources'
 
 // Suppress node:sqlite ExperimentalWarning (loaded lazily by retriv)
@@ -262,6 +263,32 @@ function resolveAgent(agentFlag?: string): AgentType | null {
     ?? null
 }
 
+/** Prompt user to pick an agent when auto-detection fails */
+async function promptForAgent(): Promise<AgentType | null> {
+  const installed = detectInstalledAgents()
+  const options = (installed.length ? installed : Object.keys(agents) as AgentType[])
+    .map(id => ({ label: agents[id].displayName, value: id, hint: agents[id].skillsDir }))
+
+  const hint = installed.length
+    ? `Detected ${installed.map(t => agents[t].displayName).join(', ')} but couldn't determine which to use`
+    : 'No agents auto-detected'
+
+  p.log.warn(`Could not detect which coding agent to install skills for.\n  ${hint}`)
+
+  const choice = await p.select({
+    message: 'Which coding agent should skills be installed for?',
+    options,
+  })
+
+  if (p.isCancel(choice))
+    return null
+
+  // Save as default so they don't get asked again
+  updateConfig({ agent: choice })
+  p.log.success(`Default agent set to ${agents[choice].displayName}`)
+  return choice
+}
+
 // ── Shared args reused by subcommands ──
 
 const sharedArgs = {
@@ -276,6 +303,11 @@ const sharedArgs = {
     alias: 'a',
     description: 'Agent where skills are installed (claude-code, cursor, windsurf, etc.)',
   },
+  model: {
+    type: 'string' as const,
+    alias: 'm',
+    description: 'LLM model for skill generation (sonnet, haiku, opus, gemini-2.5-pro, etc.)',
+  },
   yes: {
     type: 'boolean' as const,
     alias: 'y',
@@ -288,40 +320,48 @@ const sharedArgs = {
     description: 'Ignore all caches, re-fetch docs and regenerate',
     default: false,
   },
+  debug: {
+    type: 'boolean' as const,
+    description: 'Save raw LLM output to logs/ for each section',
+    default: false,
+  },
 }
 
 // ── Subcommands ──
 
-const SUBCOMMAND_NAMES = ['add', 'update', 'status', 'config', 'remove', 'install', 'uninstall', 'search']
+const SUBCOMMAND_NAMES = ['add', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache']
 
 const addCommand = defineCommand({
   meta: { name: 'add', description: 'Add skills for package(s)' },
   args: {
     package: {
       type: 'positional',
-      description: 'Package(s) to sync, comma-separated (e.g., vue,nuxt,pinia)',
+      description: 'Package(s) to sync (e.g., vue nuxt pinia or vue,nuxt,pinia)',
       required: true,
     },
     ...sharedArgs,
   },
   async run({ args }) {
     const cwd = process.cwd()
-    const agent = resolveAgent(args.agent)
+    let agent = resolveAgent(args.agent)
     if (!agent) {
-      p.log.warn('Could not detect agent. Use --agent <name>')
-      return
+      agent = await promptForAgent()
+      if (!agent)
+        return
     }
 
     const state = await getProjectState(cwd)
     p.intro(introLine({ state }))
 
-    const packages = args.package.split(',').map(s => s.trim()).filter(Boolean)
+    const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(',')).map(s => s.trim()).filter(Boolean))]
     return syncCommand(state, {
       packages,
       global: args.global,
       agent,
+      model: args.model as OptimizeModel | undefined,
       yes: args.yes,
       force: args.force,
+      debug: args.debug,
     })
   },
 })
@@ -331,17 +371,18 @@ const updateSubCommand = defineCommand({
   args: {
     package: {
       type: 'positional',
-      description: 'Package(s) to update, comma-separated. Without args, syncs all outdated.',
+      description: 'Package(s) to update (space or comma-separated). Without args, syncs all outdated.',
       required: false,
     },
     ...sharedArgs,
   },
   async run({ args }) {
     const cwd = process.cwd()
-    const agent = resolveAgent(args.agent)
+    let agent = resolveAgent(args.agent)
     if (!agent) {
-      p.log.warn('Could not detect agent. Use --agent <name>')
-      return
+      agent = await promptForAgent()
+      if (!agent)
+        return
     }
 
     const state = await getProjectState(cwd)
@@ -351,13 +392,15 @@ const updateSubCommand = defineCommand({
 
     // Specific packages
     if (args.package) {
-      const packages = args.package.split(',').map(s => s.trim()).filter(Boolean)
+      const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(',')).map(s => s.trim()).filter(Boolean))]
       return syncCommand(state, {
         packages,
         global: args.global,
         agent,
+        model: args.model as OptimizeModel | undefined,
         yes: args.yes,
         force: args.force,
+        debug: args.debug,
       })
     }
 
@@ -372,19 +415,36 @@ const updateSubCommand = defineCommand({
       packages,
       global: args.global,
       agent,
+      model: args.model as OptimizeModel | undefined,
       yes: args.yes,
       force: args.force,
+      debug: args.debug,
     })
   },
 })
 
-const statusSubCommand = defineCommand({
-  meta: { name: 'status', description: 'Show skill status' },
+const infoSubCommand = defineCommand({
+  meta: { name: 'info', description: 'Show skill info and config' },
   args: {
     global: sharedArgs.global,
   },
   run({ args }) {
     return statusCommand({ global: args.global })
+  },
+})
+
+const listSubCommand = defineCommand({
+  meta: { name: 'list', description: 'List installed skills' },
+  args: {
+    global: sharedArgs.global,
+    json: {
+      type: 'boolean' as const,
+      description: 'Output as JSON',
+      default: false,
+    },
+  },
+  run({ args }) {
+    return listCommand({ global: args.global, json: args.json })
   },
 })
 
@@ -408,10 +468,11 @@ const removeSubCommand = defineCommand({
   },
   async run({ args }) {
     const cwd = process.cwd()
-    const agent = resolveAgent(args.agent)
+    let agent = resolveAgent(args.agent)
     if (!agent) {
-      p.log.warn('Could not detect agent. Use --agent <name>')
-      return
+      agent = await promptForAgent()
+      if (!agent)
+        return
     }
 
     const state = await getProjectState(cwd)
@@ -436,10 +497,11 @@ const installSubCommand = defineCommand({
     agent: sharedArgs.agent,
   },
   async run({ args }) {
-    const agent = resolveAgent(args.agent)
+    let agent = resolveAgent(args.agent)
     if (!agent) {
-      p.log.warn('Could not detect agent. Use --agent <name>')
-      return
+      agent = await promptForAgent()
+      if (!agent)
+        return
     }
 
     p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m install`)
@@ -462,13 +524,28 @@ const uninstallSubCommand = defineCommand({
   },
 })
 
+const cacheSubCommand = defineCommand({
+  meta: { name: 'cache', description: 'Cache management' },
+  args: {
+    clean: {
+      type: 'boolean',
+      description: 'Remove expired LLM cache entries',
+      default: true,
+    },
+  },
+  async run() {
+    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m cache clean`)
+    await cacheCleanCommand()
+  },
+})
+
 const searchSubCommand = defineCommand({
   meta: { name: 'search', description: 'Search indexed docs' },
   args: {
     query: {
       type: 'positional',
-      description: 'Search query (e.g., "useFetch options")',
-      required: true,
+      description: 'Search query (e.g., "useFetch options"). Omit for interactive mode.',
+      required: false,
     },
     package: {
       type: 'string',
@@ -477,7 +554,9 @@ const searchSubCommand = defineCommand({
     },
   },
   async run({ args }) {
-    return searchCommand(args.query, args.package || undefined)
+    if (args.query)
+      return searchCommand(args.query, args.package || undefined)
+    return interactiveSearch(args.package || undefined)
   },
 })
 
@@ -505,12 +584,14 @@ const main = defineCommand({
   subCommands: {
     add: addCommand,
     update: updateSubCommand,
-    status: statusSubCommand,
+    info: infoSubCommand,
+    list: listSubCommand,
     config: configSubCommand,
     remove: removeSubCommand,
     install: installSubCommand,
     uninstall: uninstallSubCommand,
     search: searchSubCommand,
+    cache: cacheSubCommand,
   },
   async run({ args }) {
     // Guard: citty always calls parent run() after subcommand dispatch.
@@ -539,12 +620,12 @@ const main = defineCommand({
     }
 
     // Bare `skilld` — interactive menu
-    const currentAgent = resolveAgent(args.agent)
+    let currentAgent = resolveAgent(args.agent)
 
     if (!currentAgent) {
-      p.log.warn('Could not detect agent. Use --agent <name> or `skilld config`')
-      p.log.info(`Supported: ${Object.keys(agents).join(', ')}`)
-      return
+      currentAgent = await promptForAgent()
+      if (!currentAgent)
+        return
     }
 
     // Animate brand while bootstrapping + check for updates
@@ -658,23 +739,24 @@ const main = defineCommand({
       else {
         let usages: PackageUsage[]
         if (source === 'imports') {
-          const spinner = p.spinner()
+          const spinner = timedSpinner()
           spinner.start('Scanning imports...')
           const result = await detectImportedPackages(cwd)
-          spinner.stop(`Found ${result.packages.length} imported packages`)
 
           if (result.packages.length === 0) {
-            p.log.warn('No imports found, falling back to package.json')
+            spinner.stop('No imports found, falling back to package.json')
             usages = [...state.deps.keys()].map(name => ({ name, count: 0 }))
           }
           else {
-            // Filter to packages in deps (presets pass through even if not in deps)
             const depSet = new Set(state.deps.keys())
             usages = result.packages.filter(pkg => depSet.has(pkg.name) || pkg.source === 'preset')
 
             if (usages.length === 0) {
-              p.log.warn('No matching dependencies, using all imports')
+              spinner.stop(`Found ${result.packages.length} imported packages but none match dependencies`)
               usages = result.packages
+            }
+            else {
+              spinner.stop(`Found ${usages.length} imported packages`)
             }
           }
         }
@@ -722,7 +804,7 @@ const main = defineCommand({
     // Menu loop — Escape in sub-actions returns to menu
 
     while (true) {
-      type ActionValue = 'install' | 'update' | 'remove' | 'status' | 'config'
+      type ActionValue = 'install' | 'update' | 'remove' | 'search' | 'info' | 'config'
       const options: Array<{ label: string, value: ActionValue, hint?: string }> = []
 
       options.push({ label: 'Add new skills', value: 'install' })
@@ -731,7 +813,8 @@ const main = defineCommand({
       }
       options.push(
         { label: 'Remove skills', value: 'remove' },
-        { label: 'Status', value: 'status' },
+        { label: 'Search docs', value: 'search' },
+        { label: 'Info', value: 'info' },
         { label: 'Configure', value: 'config' },
       )
 
@@ -782,13 +865,12 @@ const main = defineCommand({
           else {
             let usages: PackageUsage[]
             if (source === 'imports') {
-              const spinner = p.spinner()
+              const spinner = timedSpinner()
               spinner.start('Scanning imports...')
               const result = await detectImportedPackages(cwd)
-              spinner.stop(`Found ${result.packages.length} imported packages`)
 
               if (result.packages.length === 0) {
-                p.log.warn('No imports found, falling back to package.json')
+                spinner.stop('No imports found, falling back to package.json')
                 usages = uninstalledDeps.map(name => ({ name, count: 0 }))
               }
               else {
@@ -798,8 +880,11 @@ const main = defineCommand({
                   .filter(pkg => !installedNames.has(pkg.name))
 
                 if (usages.length === 0) {
-                  p.log.warn('All detected imports already have skills')
+                  spinner.stop('All detected imports already have skills')
                   continue
+                }
+                else {
+                  spinner.stop(`Found ${usages.length} imported packages`)
                 }
               }
             }
@@ -865,7 +950,11 @@ const main = defineCommand({
             yes: false,
           })
           continue
-        case 'status':
+        case 'search': {
+          await interactiveSearch()
+          continue
+        }
+        case 'info':
           await statusCommand({ global: false })
           continue
         case 'config':

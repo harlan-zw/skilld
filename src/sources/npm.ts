@@ -3,36 +3,47 @@
  */
 
 import type { LocalDependency, NpmPackageInfo, ResolveAttempt, ResolvedPackage, ResolveResult } from './types'
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs'
-import { join, resolve } from 'node:path'
 import { Writable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
 import { resolvePathSync } from 'mlly'
+import { basename, dirname, join, resolve } from 'pathe'
 import { getCacheDir } from '../cache/version'
-import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo } from './github'
-import { fetchLlmsUrl } from './llms'
-import { isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl } from './utils'
+import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo, validateGitDocsWithLlms } from './github'
+import { fetchLlmsTxt, fetchLlmsUrl } from './llms'
+import { $fetch, isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl } from './utils'
+
+/**
+ * Search npm registry for packages matching a query.
+ * Used as a fallback when direct package lookup fails.
+ */
+export async function searchNpmPackages(query: string, size = 5): Promise<Array<{ name: string, description?: string, version: string }>> {
+  const data = await $fetch<{
+    objects: Array<{ package: { name: string, description?: string, version: string } }>
+  }>(`https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(query)}&size=${size}`).catch(() => null)
+
+  if (!data?.objects?.length)
+    return []
+
+  return data.objects.map(o => ({
+    name: o.package.name,
+    description: o.package.description,
+    version: o.package.version,
+  }))
+}
 
 /**
  * Fetch package info from npm registry
  */
 export async function fetchNpmPackage(packageName: string): Promise<NpmPackageInfo | null> {
   // Try unpkg first (faster, CDN)
-  let res = await fetch(`https://unpkg.com/${packageName}/package.json`, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
+  const data = await $fetch<NpmPackageInfo>(`https://unpkg.com/${packageName}/package.json`).catch(() => null)
+  if (data)
+    return data
 
   // Fallback to npm registry
-  if (!res?.ok) {
-    res = await fetch(`https://registry.npmjs.org/${packageName}/latest`, {
-      headers: { 'User-Agent': 'skilld/1.0' },
-    }).catch(() => null)
-  }
-
-  if (!res?.ok)
-    return null
-  return res.json()
+  return $fetch<NpmPackageInfo>(`https://registry.npmjs.org/${packageName}/latest`).catch(() => null)
 }
 
 export interface DistTagInfo {
@@ -49,17 +60,13 @@ export interface NpmRegistryMeta {
  * Fetch release date and dist-tags from npm registry
  */
 export async function fetchNpmRegistryMeta(packageName: string, version: string): Promise<NpmRegistryMeta> {
-  const res = await fetch(`https://registry.npmjs.org/${packageName}`, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
-
-  if (!res?.ok)
-    return {}
-
-  const data = await res.json() as {
+  const data = await $fetch<{
     'time'?: Record<string, string>
     'dist-tags'?: Record<string, string>
-  }
+  }>(`https://registry.npmjs.org/${packageName}`).catch(() => null)
+
+  if (!data)
+    return {}
 
   // Enrich dist-tags with release dates
   const distTags: Record<string, DistTagInfo> | undefined = data['dist-tags']
@@ -145,12 +152,20 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
     distTags: registryMeta.distTags,
   }
 
+  // Track allFiles from heuristic git doc discovery for llms.txt validation
+  let gitDocsAllFiles: string[] | undefined
+
   // Extract repo URL (handle both object and shorthand string formats)
   let subdir: string | undefined
   let rawRepoUrl: string | undefined
   if (typeof pkg.repository === 'object' && pkg.repository?.url) {
     rawRepoUrl = pkg.repository.url
-    result.repoUrl = normalizeRepoUrl(rawRepoUrl)
+    const normalized = normalizeRepoUrl(rawRepoUrl)
+    // Handle shorthand "owner/repo" in repository.url field (e.g. cac)
+    if (!normalized.includes('://') && normalized.includes('/') && !normalized.includes(':'))
+      result.repoUrl = `https://github.com/${normalized}`
+    else
+      result.repoUrl = normalized
     subdir = pkg.repository.directory
   }
   else if (typeof pkg.repository === 'string') {
@@ -186,6 +201,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
         if (gitDocs) {
           result.gitDocsUrl = gitDocs.baseUrl
           result.gitRef = gitDocs.ref
+          gitDocsAllFiles = gitDocs.allFiles
           attempts.push({
             source: 'github-docs',
             url: gitDocs.baseUrl,
@@ -270,6 +286,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
           if (gitDocs) {
             result.gitDocsUrl = gitDocs.baseUrl
             result.gitRef = gitDocs.ref
+            gitDocsAllFiles = gitDocs.allFiles
             attempts.push({
               source: 'github-docs',
               url: gitDocs.baseUrl,
@@ -320,6 +337,24 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
         status: 'not-found',
         message: 'No llms.txt at docs URL',
       })
+    }
+  }
+
+  // Validate heuristic git docs against llms.txt links
+  if (result.gitDocsUrl && result.llmsUrl && gitDocsAllFiles) {
+    const llmsContent = await fetchLlmsTxt(result.llmsUrl)
+    if (llmsContent && llmsContent.links.length > 0) {
+      const validation = validateGitDocsWithLlms(llmsContent.links, gitDocsAllFiles)
+      if (!validation.isValid) {
+        attempts.push({
+          source: 'github-docs',
+          url: result.gitDocsUrl,
+          status: 'not-found',
+          message: `Heuristic git docs don't match llms.txt links (${Math.round(validation.matchRatio * 100)}% match), preferring llms.txt`,
+        })
+        result.gitDocsUrl = undefined
+        result.gitRef = undefined
+      }
     }
   }
 
@@ -396,6 +431,11 @@ export function parseVersionSpecifier(
   if (/^[\^~>=<\d]/.test(version))
     return { name, version: version.replace(/^[\^~>=<]/, '') }
 
+  // catalog: and workspace: specifiers - include with wildcard version
+  // so the dep isn't silently dropped from state.deps
+  if (version.startsWith('catalog:') || version.startsWith('workspace:'))
+    return { name, version: '*' }
+
   return null
 }
 
@@ -410,6 +450,21 @@ export function resolveInstalledVersion(name: string, cwd: string): string | nul
     return pkg.version || null
   }
   catch {
+    // Packages with `exports` that don't expose ./package.json
+    // Resolve the entry point, then walk up to find package.json
+    try {
+      const entry = resolvePathSync(name, { url: cwd })
+      let dir = dirname(entry)
+      while (dir && basename(dir) !== 'node_modules') {
+        const pkgPath = join(dir, 'package.json')
+        if (existsSync(pkgPath)) {
+          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+          return pkg.version || null
+        }
+        dir = dirname(dir)
+      }
+    }
+    catch {}
     return null
   }
 }
@@ -546,14 +601,11 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
     return pkgDir
 
   // Fetch version metadata to get tarball URL
-  const res = await fetch(`https://registry.npmjs.org/${name}/${version}`, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
-
-  if (!res?.ok)
+  const data = await $fetch<{ dist?: { tarball?: string } }>(
+    `https://registry.npmjs.org/${name}/${version}`,
+  ).catch(() => null)
+  if (!data)
     return null
-
-  const data = await res.json() as { dist?: { tarball?: string } }
   const tarballUrl = data.dist?.tarball
   if (!tarballUrl)
     return null
@@ -598,10 +650,8 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
   })
 
   // Extract tarball — npm tarballs have a "package/" prefix
-  try {
-    execSync(`tar xzf "${tmpTarball}" --strip-components=1 -C "${pkgDir}"`, { stdio: 'ignore' })
-  }
-  catch {
+  const { status } = spawnSync('tar', ['xzf', tmpTarball, '--strip-components=1', '-C', pkgDir], { stdio: 'ignore' })
+  if (status !== 0) {
     rmSync(pkgDir, { recursive: true, force: true })
     rmSync(tmpTarball, { force: true })
     return null
@@ -615,13 +665,10 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
  * Fetch just the latest version string from npm (lightweight)
  */
 export async function fetchLatestVersion(packageName: string): Promise<string | null> {
-  const res = await fetch(`https://unpkg.com/${packageName}/package.json`, {
-    headers: { 'User-Agent': 'skilld/1.0' },
-  }).catch(() => null)
-  if (!res?.ok)
-    return null
-  const data = await res.json() as { version?: string }
-  return data.version || null
+  const data = await $fetch<{ version?: string }>(
+    `https://unpkg.com/${packageName}/package.json`,
+  ).catch(() => null)
+  return data?.version || null
 }
 
 /**

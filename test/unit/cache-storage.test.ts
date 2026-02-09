@@ -6,6 +6,7 @@ vi.mock('node:fs', async () => {
   return {
     ...actual,
     existsSync: vi.fn(),
+    lstatSync: vi.fn(),
     mkdirSync: vi.fn(),
     writeFileSync: vi.fn(),
     readFileSync: vi.fn(),
@@ -52,7 +53,7 @@ describe('cache/storage', () => {
 
       expect(mkdirSync).toHaveBeenCalledWith(
         expect.stringContaining('references'),
-        { recursive: true },
+        { recursive: true, mode: 0o700 },
       )
     })
   })
@@ -75,9 +76,12 @@ describe('cache/storage', () => {
 
   describe('linkReferences', () => {
     it('removes existing link before creating new one', async () => {
-      const { existsSync, unlinkSync, symlinkSync } = await import('node:fs')
+      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
       const { linkReferences } = await import('../../src/cache/storage')
+      // cachedDocsPath exists
       vi.mocked(existsSync).mockReturnValue(true)
+      // lstatSync returns a symlink stat for existing link
+      vi.mocked(lstatSync).mockReturnValue({ isSymbolicLink: () => true, isFile: () => false } as any)
 
       linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
 
@@ -90,11 +94,14 @@ describe('cache/storage', () => {
     })
 
     it('skips unlink if no existing link', async () => {
-      const { existsSync, unlinkSync, symlinkSync } = await import('node:fs')
+      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
       const { linkReferences } = await import('../../src/cache/storage')
-      // First call: docsLinkPath doesn't exist (skip unlink)
-      // Second call: cachedDocsPath exists (create symlink)
-      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      // cachedDocsPath exists
+      vi.mocked(existsSync).mockReturnValue(true)
+      // lstatSync throws ENOENT (no existing link)
+      vi.mocked(lstatSync).mockImplementation(() => {
+        throw new Error('ENOENT')
+      })
 
       linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
 

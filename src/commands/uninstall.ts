@@ -1,7 +1,7 @@
 import type { AgentType } from '../agent'
 import { existsSync, readdirSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import * as p from '@clack/prompts'
+import { join } from 'pathe'
 import { agents } from '../agent'
 import { CACHE_DIR } from '../cache'
 import { getRegisteredProjects, unregisterProject } from '../core/config'

@@ -1,12 +1,32 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join } from 'pathe'
+import { yamlEscape, yamlParseKV } from './yaml'
 
 export interface SkillInfo {
   packageName?: string
   version?: string
+  /** All tracked packages as comma-separated "name@version" pairs (multi-package skills) */
+  packages?: string
+  repo?: string
   source?: string
   syncedAt?: string
   generator?: string
+}
+
+export function parsePackages(packages?: string): Array<{ name: string, version: string }> {
+  if (!packages)
+    return []
+  return packages.split(',').map((s) => {
+    const trimmed = s.trim()
+    const atIdx = trimmed.lastIndexOf('@')
+    if (atIdx <= 0)
+      return { name: trimmed, version: '' }
+    return { name: trimmed.slice(0, atIdx), version: trimmed.slice(atIdx + 1) }
+  }).filter(p => p.name)
+}
+
+export function serializePackages(pkgs: Array<{ name: string, version: string }>): string {
+  return pkgs.map(p => `${p.name}@${p.version}`).join(', ')
 }
 
 export interface SkilldLock {
@@ -22,14 +42,19 @@ export function parseSkillFrontmatter(skillPath: string): SkillInfo | null {
     return null
 
   const info: SkillInfo = {}
-  const lines = match[1].split('\n')
-  for (const line of lines) {
-    const [key, ...rest] = line.split(':')
-    const value = rest.join(':').trim().replace(/^["']|["']$/g, '')
+  for (const line of match[1].split('\n')) {
+    const kv = yamlParseKV(line)
+    if (!kv)
+      continue
+    const [key, value] = kv
     if (key === 'packageName')
       info.packageName = value
     if (key === 'version')
       info.version = value
+    if (key === 'packages')
+      info.packages = value
+    if (key === 'repo')
+      info.repo = value
     if (key === 'source')
       info.source = value
     if (key === 'syncedAt')
@@ -57,13 +82,34 @@ export function readLock(skillsDir: string): SkilldLock | null {
       continue
     }
     if (currentSkill && line.startsWith('    ')) {
-      const [key, ...rest] = line.trim().split(':')
-      const value = rest.join(':').trim().replace(/^["']|["']$/g, '')
-      if (key && value)
-        (skills[currentSkill] as any)[key] = value
+      const kv = yamlParseKV(line)
+      if (kv)
+        (skills[currentSkill] as any)[kv[0]] = kv[1]
     }
   }
   return { skills }
+}
+
+function serializeLock(lock: SkilldLock): string {
+  let yaml = 'skills:\n'
+  for (const [name, skill] of Object.entries(lock.skills)) {
+    yaml += `  ${name}:\n`
+    if (skill.packageName)
+      yaml += `    packageName: ${yamlEscape(skill.packageName)}\n`
+    if (skill.version)
+      yaml += `    version: ${yamlEscape(skill.version)}\n`
+    if (skill.packages)
+      yaml += `    packages: ${yamlEscape(skill.packages)}\n`
+    if (skill.repo)
+      yaml += `    repo: ${yamlEscape(skill.repo)}\n`
+    if (skill.source)
+      yaml += `    source: ${yamlEscape(skill.source)}\n`
+    if (skill.syncedAt)
+      yaml += `    syncedAt: ${yamlEscape(skill.syncedAt)}\n`
+    if (skill.generator)
+      yaml += `    generator: ${yamlEscape(skill.generator)}\n`
+  }
+  return yaml
 }
 
 export function writeLock(skillsDir: string, skillName: string, info: SkillInfo): void {
@@ -72,23 +118,38 @@ export function writeLock(skillsDir: string, skillName: string, info: SkillInfo)
   if (existsSync(lockPath)) {
     lock = readLock(skillsDir) || { skills: {} }
   }
-  lock.skills[skillName] = info
 
-  let yaml = 'skills:\n'
-  for (const [name, skill] of Object.entries(lock.skills)) {
-    yaml += `  ${name}:\n`
-    if (skill.packageName)
-      yaml += `    packageName: "${skill.packageName}"\n`
-    if (skill.version)
-      yaml += `    version: "${skill.version}"\n`
-    if (skill.source)
-      yaml += `    source: "${skill.source}"\n`
-    if (skill.syncedAt)
-      yaml += `    syncedAt: "${skill.syncedAt}"\n`
-    if (skill.generator)
-      yaml += `    generator: "${skill.generator}"\n`
+  const existing = lock.skills[skillName]
+  if (existing && info.packageName) {
+    // Merge packages list
+    const existingPkgs = parsePackages(existing.packages)
+    // Also include existing primary if not yet in packages list
+    if (existing.packageName && !existingPkgs.some(p => p.name === existing.packageName)) {
+      existingPkgs.unshift({ name: existing.packageName, version: existing.version || '' })
+    }
+    // Add/update new package
+    const idx = existingPkgs.findIndex(p => p.name === info.packageName)
+    if (idx >= 0) {
+      existingPkgs[idx]!.version = info.version || ''
+    }
+    else {
+      existingPkgs.push({ name: info.packageName, version: info.version || '' })
+    }
+    info.packages = serializePackages(existingPkgs)
+    // Keep primary as first package
+    info.packageName = existingPkgs[0]!.name
+    info.version = existingPkgs[0]!.version
+    // Preserve fields from existing entry that aren't in new info
+    if (!info.repo && existing.repo)
+      info.repo = existing.repo
+    if (!info.source && existing.source)
+      info.source = existing.source
+    if (!info.generator && existing.generator)
+      info.generator = existing.generator
   }
-  writeFileSync(lockPath, yaml)
+
+  lock.skills[skillName] = info
+  writeFileSync(lockPath, serializeLock(lock))
 }
 
 export function removeLockEntry(skillsDir: string, skillName: string): void {
@@ -100,24 +161,9 @@ export function removeLockEntry(skillsDir: string, skillName: string): void {
   delete lock.skills[skillName]
 
   if (Object.keys(lock.skills).length === 0) {
-    // Remove empty lock file
     unlinkSync(lockPath)
     return
   }
 
-  let yaml = 'skills:\n'
-  for (const [name, skill] of Object.entries(lock.skills)) {
-    yaml += `  ${name}:\n`
-    if (skill.packageName)
-      yaml += `    packageName: "${skill.packageName}"\n`
-    if (skill.version)
-      yaml += `    version: "${skill.version}"\n`
-    if (skill.source)
-      yaml += `    source: "${skill.source}"\n`
-    if (skill.syncedAt)
-      yaml += `    syncedAt: "${skill.syncedAt}"\n`
-    if (skill.generator)
-      yaml += `    generator: "${skill.generator}"\n`
-  }
-  writeFileSync(lockPath, yaml)
+  writeFileSync(lockPath, serializeLock(lock))
 }

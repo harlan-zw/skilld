@@ -177,7 +177,7 @@ export const PACKAGES: PackageSpec[] = [
     ],
     minCacheDocs: 50,
     expectGlobs: ['*.vue'],
-    expectDescriptionContains: '*.vue',
+    expectDescriptionContains: '"vue"',
     searchQuery: { query: 'reactivity', minHits: 1 },
   },
 
@@ -391,20 +391,19 @@ export const PACKAGES: PackageSpec[] = [
   },
 
   // ── drizzle-orm ───────────────────────────────────────────────────
-  // TypeScript ORM — git docs has a few docs/ files (custom-types, joins).
+  // TypeScript ORM — git docs too shallow (<5 files), falls through to llms.txt.
   {
     name: 'drizzle-orm',
     preset: 'cross-framework',
     expectRepoUrl: 'github.com/drizzle-team/drizzle-orm',
     expectDocsUrl: 'https://orm.drizzle.team',
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
-    expectDocsType: 'docs',
+    expectDocsType: 'llms.txt',
     expectCacheFiles: [
-      'docs/joins.md',
+      'llms.txt',
     ],
-    minCacheDocs: 3,
+    minCacheDocs: 1,
     expectDescriptionContains: '"drizzle-orm"',
-    searchQuery: { query: 'schema', minHits: 1 },
   },
 
   // ── @trpc/server ──────────────────────────────────────────────────

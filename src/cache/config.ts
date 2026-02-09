@@ -3,7 +3,7 @@
  */
 
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
 import { getCacheKey } from './version'
 
 /** Global cache directory */

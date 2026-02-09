@@ -5,9 +5,10 @@
  */
 
 import type { ResolveAttempt, ResolvedPackage } from '../../src/sources'
-import { existsSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
-import { FILE_PATTERN_MAP, sanitizeName } from '../../src/agent'
+import { existsSync, readdirSync, statSync } from 'node:fs'
+import pLimit from 'p-limit'
+import { join } from 'pathe'
+import { computeSkillDirName, FILE_PATTERN_MAP } from '../../src/agent'
 import {
   ensureCacheDir,
   getCacheDir,
@@ -15,12 +16,13 @@ import {
   isCached,
   writeToCache,
 } from '../../src/cache'
-import { createIndex } from '../../src/retriv'
+import { createIndexDirect } from '../../src/retriv'
 import {
   downloadLlmsDocs,
   fetchGitDocs,
   fetchLlmsTxt,
   fetchReadmeContent,
+  isShallowGitDocs,
   normalizeLlmsLinks,
   parseGitHubUrl,
 
@@ -75,6 +77,16 @@ export function parseFrontmatter(content: string): Record<string, string> {
   return result
 }
 
+// Serialize indexing: concurrent ONNX model loads cause silent failures
+const indexLimit = pLimit(1)
+
+/** Empty search.db (schema only, no docs) is exactly 61440 bytes */
+export function hasValidSearchDb(dbPath: string): boolean {
+  if (!existsSync(dbPath))
+    return false
+  return statSync(dbPath).size > 61440
+}
+
 // ── Pipeline ────────────────────────────────────────────────────────
 
 /**
@@ -114,9 +126,11 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
     if (cachedDocFiles.some(f =>
       (f.startsWith('docs/') || f.startsWith('src/') || f.includes('/docs/'))
       && !f.includes('README'),
-    )) {
-      docsType = 'docs'
-    }
+    )) { docsType = 'docs' }
+
+    // Search index for cached docs was built during the original sync run.
+    // Don't rebuild here — too slow for large doc sets (nuxt 708, astro 394).
+    // Search tests use skip guards when no valid index exists.
   }
   else {
     const cachedDocs: Array<{ path: string, content: string }> = []
@@ -147,8 +161,32 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
               }
             }
           }
-          if (cachedDocs.length > 0)
-            docsType = 'docs'
+          if (cachedDocs.length > 0) {
+            // Shallow git-docs: if < threshold and llms.txt exists, discard and fall through
+            if (isShallowGitDocs(cachedDocs.length) && resolved.llmsUrl) {
+              cachedDocs.length = 0
+              docsToIndex.length = 0
+            }
+            else {
+              docsType = 'docs'
+
+              // Always cache llms.txt alongside good git-docs as supplementary reference
+              if (resolved.llmsUrl) {
+                const llmsContent = await fetchLlmsTxt(resolved.llmsUrl)
+                if (llmsContent) {
+                  const baseUrl = resolved.docsUrl || new URL(resolved.llmsUrl).origin
+                  cachedDocs.push({ path: 'llms.txt', content: normalizeLlmsLinks(llmsContent.raw, baseUrl) })
+                  if (llmsContent.links.length > 0) {
+                    const docs = await downloadLlmsDocs(llmsContent, baseUrl)
+                    for (const doc of docs) {
+                      const localPath = doc.url.startsWith('/') ? doc.url.slice(1) : doc.url
+                      cachedDocs.push({ path: `llms-docs/${localPath}`, content: doc.content })
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -188,8 +226,12 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
     }
 
     const dbPath = getPackageDbPath(name, version)
-    if (docsToIndex.length > 0 && !existsSync(dbPath)) {
-      await createIndex(docsToIndex, { dbPath })
+    if (docsToIndex.length > 0 && !hasValidSearchDb(dbPath)) {
+      await indexLimit(async () => {
+        if (hasValidSearchDb(dbPath))
+          return
+        await createIndexDirect(docsToIndex, { dbPath })
+      })
     }
 
     const cacheDir = getCacheDir(name, version)
@@ -198,14 +240,13 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
   }
 
   // Generate SKILL.md frontmatter (pure, same as sync command)
+  const skillDirName = computeSkillDirName(name, resolved.repoUrl)
   const patterns = FILE_PATTERN_MAP[name]
-  const description = patterns?.length
-    ? `Load skill when working with ${patterns.join(', ')} files or importing from "${name}".`
-    : `Load skill when using anything from the package "${name}".`
+  const description = `Using code importing from "${name}". Researching or debugging ${name}.`
 
   const fmLines = [
     '---',
-    `name: ${sanitizeName(name)}-skilld`,
+    `name: ${skillDirName}-skilld`,
     `description: ${description}`,
   ]
   if (patterns?.length)

@@ -2,33 +2,29 @@
  * Shared utilities for doc resolution
  */
 
-const USER_AGENT = 'skilld/1.0'
+import { ofetch } from 'ofetch'
+
+export const $fetch = ofetch.create({
+  retry: 3,
+  retryDelay: 500,
+  timeout: 15_000,
+  headers: { 'User-Agent': 'skilld/1.0' },
+})
 
 /**
  * Fetch text content from URL
  */
 export async function fetchText(url: string): Promise<string | null> {
-  const res = await fetch(url, {
-    headers: { 'User-Agent': USER_AGENT },
-  }).catch(() => null)
-
-  if (!res?.ok)
-    return null
-  return res.text()
+  return $fetch(url, { responseType: 'text' }).catch(() => null)
 }
 
 /**
  * Verify URL exists and is not HTML (likely 404 page)
  */
 export async function verifyUrl(url: string): Promise<boolean> {
-  const res = await fetch(url, {
-    method: 'HEAD',
-    headers: { 'User-Agent': USER_AGENT },
-  }).catch(() => null)
-
-  if (!res?.ok)
+  const res = await $fetch.raw(url, { method: 'HEAD' }).catch(() => null)
+  if (!res)
     return false
-
   const contentType = res.headers.get('content-type') || ''
   return !contentType.includes('text/html')
 }
@@ -89,6 +85,8 @@ export function normalizeRepoUrl(url: string): string {
     .replace(/\.git$/, '')
     .replace(/^git:\/\//, 'https://')
     .replace(/^ssh:\/\/git@github\.com/, 'https://github.com')
+    // SSH format: git@github.com:owner/repo
+    .replace(/^git@github\.com:/, 'https://github.com/')
 }
 
 /**

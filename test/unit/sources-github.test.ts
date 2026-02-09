@@ -1,14 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchGitDocs, fetchGitHubRepoMeta, fetchGitSource, fetchReadmeContent } from '../../src/sources/github'
+
+// Mock ofetch — simulates ofetch behavior using mockFetch
+const mockFetch = vi.fn()
+
+function createMockFetch() {
+  async function $fetch(url: string, opts?: any): Promise<any> {
+    const mockRes = await mockFetch(url, opts)
+    if (!mockRes?.ok)
+      throw new Error('fetch failed')
+    if (opts?.responseType === 'text')
+      return mockRes.text()
+    return mockRes.json()
+  }
+  $fetch.raw = async (url: string, opts?: any) => {
+    return mockFetch(url, opts)
+  }
+  return $fetch
+}
+
+vi.mock('ofetch', () => ({
+  ofetch: { create: () => createMockFetch() },
+}))
+
+// Must import after vi.mock
+const { fetchGitDocs, fetchGitHubRepoMeta, fetchGitSource, fetchReadmeContent, isShallowGitDocs, MIN_GIT_DOCS, validateGitDocsWithLlms } = await import('../../src/sources/github')
 
 // Mock gh CLI as unavailable by default so tests exercise fetch path
 vi.mock('../../src/sources/issues', () => ({
   isGhAvailable: () => false,
 }))
-
-// Mock global fetch
-const mockFetch = vi.fn()
-vi.stubGlobal('fetch', mockFetch)
 
 describe('sources/github', () => {
   beforeEach(() => {
@@ -31,7 +51,7 @@ describe('sources/github', () => {
       expect(result).toEqual({ homepage: 'https://vuejs.org' })
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.github.com/repos/vuejs/vue',
-        expect.objectContaining({ headers: { 'User-Agent': 'skilld/1.0' } }),
+        undefined,
       )
     })
 
@@ -119,6 +139,24 @@ describe('sources/github', () => {
         'apps/my-docs/src/content/docs/guides/setup.md',
         'apps/my-docs/src/content/docs/guides/config.mdx',
       ])
+      // allFiles should be set when discoverDocFiles heuristic was used
+      expect(result!.allFiles).toBeDefined()
+      expect(result!.allFiles!.length).toBeGreaterThan(0)
+    })
+
+    it('does not set allFiles when standard docs/ prefix matched', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({
+        meta: { sha: 'abc' },
+        files: [
+          { path: 'docs/intro.md', mode: '100644', sha: 'a', size: 100 },
+          { path: 'docs/api.mdx', mode: '100644', sha: 'b', size: 200 },
+        ],
+      }) })
+
+      const result = await fetchGitDocs('owner', 'repo', '2.0.0')
+
+      expect(result).not.toBeNull()
+      expect(result!.allFiles).toBeUndefined()
     })
 
     it('returns null when no doc-like paths found', async () => {
@@ -226,6 +264,135 @@ describe('sources/github', () => {
 
       const result = await fetchReadmeContent('ungh://owner/repo')
       expect(result).toBeNull()
+    })
+  })
+
+  describe('validateGitDocsWithLlms', () => {
+    it('returns valid when links match repo files', () => {
+      const links = [
+        { title: 'Guide', url: '/docs/guide/intro.md' },
+        { title: 'API', url: '/docs/api/core.md' },
+        { title: 'Config', url: '/docs/config.md' },
+      ]
+      const repoFiles = [
+        'website/content/docs/guide/intro.md',
+        'website/content/docs/api/core.md',
+        'website/content/docs/config.md',
+        'src/index.ts',
+      ]
+
+      const result = validateGitDocsWithLlms(links, repoFiles)
+      expect(result.isValid).toBe(true)
+      expect(result.matchRatio).toBe(1)
+    })
+
+    it('returns invalid when links do not match repo files', () => {
+      const links = [
+        { title: 'Parser Guide', url: '/docs/guide/parser.md' },
+        { title: 'Parser API', url: '/docs/api/parser.md' },
+        { title: 'Config', url: '/docs/config.md' },
+      ]
+      const repoFiles = [
+        'website/content/docs/guide/minifier.md',
+        'website/content/docs/api/minifier.md',
+        'website/content/docs/minifier-config.md',
+        'src/index.ts',
+      ]
+
+      const result = validateGitDocsWithLlms(links, repoFiles)
+      expect(result.isValid).toBe(false)
+      expect(result.matchRatio).toBe(0)
+    })
+
+    it('handles absolute URL links by stripping to pathname', () => {
+      const links = [
+        { title: 'Guide', url: 'https://oxc.rs/docs/guide/intro.md' },
+        { title: 'API', url: 'https://oxc.rs/docs/api/core.md' },
+      ]
+      const repoFiles = [
+        'website/docs/guide/intro.md',
+        'website/docs/api/core.md',
+      ]
+
+      const result = validateGitDocsWithLlms(links, repoFiles)
+      expect(result.isValid).toBe(true)
+      expect(result.matchRatio).toBe(1)
+    })
+
+    it('uses extensionless suffix matching across .md and .mdx', () => {
+      const links = [
+        { title: 'Guide', url: '/guide/intro.md' },
+        { title: 'Setup', url: '/guide/setup.md' },
+      ]
+      const repoFiles = [
+        'apps/docs/src/content/guide/intro.mdx',
+        'apps/docs/src/content/guide/setup.mdx',
+      ]
+
+      const result = validateGitDocsWithLlms(links, repoFiles)
+      expect(result.isValid).toBe(true)
+      expect(result.matchRatio).toBe(1)
+    })
+
+    it('calculates correct ratio for partial matches', () => {
+      const links = [
+        { title: 'A', url: '/docs/a.md' },
+        { title: 'B', url: '/docs/b.md' },
+        { title: 'C', url: '/docs/c.md' },
+        { title: 'D', url: '/docs/d.md' },
+        { title: 'E', url: '/docs/e.md' },
+      ]
+      const repoFiles = [
+        'content/docs/a.md',
+        'content/docs/b.md',
+        'content/docs/x.md',
+        'content/docs/y.md',
+      ]
+
+      const result = validateGitDocsWithLlms(links, repoFiles)
+      expect(result.matchRatio).toBe(0.4) // 2/5
+      expect(result.isValid).toBe(true) // >= 0.3
+    })
+
+    it('returns valid for empty links array', () => {
+      const result = validateGitDocsWithLlms([], ['some/file.md'])
+      expect(result.isValid).toBe(true)
+      expect(result.matchRatio).toBe(1)
+    })
+
+    it('samples at most 10 links', () => {
+      const links = Array.from({ length: 20 }, (_, i) => ({
+        title: `Doc ${i}`,
+        url: `/docs/page-${i}.md`,
+      }))
+      // Only first 10 links are checked, match first 3
+      const repoFiles = Array.from({ length: 3 }, (_, i) => `content/docs/page-${i}.md`)
+
+      const result = validateGitDocsWithLlms(links, repoFiles)
+      expect(result.matchRatio).toBe(0.3) // 3/10
+      expect(result.isValid).toBe(true) // exactly 0.3
+    })
+  })
+
+  describe('isShallowGitDocs', () => {
+    it('returns true for 1-4 files (below MIN_GIT_DOCS)', () => {
+      expect(isShallowGitDocs(1)).toBe(true)
+      expect(isShallowGitDocs(2)).toBe(true)
+      expect(isShallowGitDocs(4)).toBe(true)
+    })
+
+    it('returns false for 0 files', () => {
+      expect(isShallowGitDocs(0)).toBe(false)
+    })
+
+    it('returns false for >= MIN_GIT_DOCS files', () => {
+      expect(isShallowGitDocs(MIN_GIT_DOCS)).toBe(false)
+      expect(isShallowGitDocs(10)).toBe(false)
+      expect(isShallowGitDocs(100)).toBe(false)
+    })
+
+    it('has MIN_GIT_DOCS = 5', () => {
+      expect(MIN_GIT_DOCS).toBe(5)
     })
   })
 })

@@ -9,11 +9,11 @@
  *   .claude/skills/<skill>/SKILL.md -> regenerated from package.json + cache state
  */
 
-import type { AgentType, SkillSection } from '../agent'
+import type { AgentType, CustomPrompt, SkillSection } from '../agent'
 import type { SkillInfo } from '../core/lockfile'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
 import * as p from '@clack/prompts'
+import { join } from 'pathe'
 import { agents, getModelLabel, optimizeDocs } from '../agent'
 import { generateSkillMd } from '../agent/prompts/skill'
 import {
@@ -24,25 +24,29 @@ import {
   getPkgKeyFiles,
   getShippedSkills,
   isCached,
+  linkPkgNamed,
   linkShippedSkill,
   listReferenceFiles,
   resolvePkgDir,
   writeToCache,
 } from '../cache'
 import { readConfig } from '../core/config'
-import { readLock } from '../core/lockfile'
+import { timedSpinner } from '../core/formatting'
+import { parsePackages, readLock } from '../core/lockfile'
 import { createIndex } from '../retriv'
 import {
+  $fetch,
   downloadLlmsDocs,
   fetchGitDocs,
   fetchLlmsTxt,
   fetchReadmeContent,
+  isShallowGitDocs,
   normalizeLlmsLinks,
   parseGitHubUrl,
   resolveEntryFiles,
   resolvePackageDocs,
 } from '../sources'
-import { cleanSkillMd, selectModel, selectSkillSections } from './sync'
+import { selectLlmConfig } from './sync'
 
 export interface InstallOptions {
   global: boolean
@@ -105,7 +109,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   ensureCacheDir()
 
   const allSkillNames = skills.map(([, info]) => info.packageName || '').filter(Boolean)
-  const regenerated: Array<{ name: string, pkgName: string, version: string, skillDir: string }> = []
+  const regenerated: Array<{ name: string, pkgName: string, version: string, skillDir: string, packages?: string }> = []
 
   for (const { name, info } of toRestore) {
     const version = info.version!
@@ -128,7 +132,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     const skillDir = join(skillsDir, name)
     const referencesPath = join(skillDir, '.skilld')
     const globalCachePath = getCacheDir(pkgName, version)
-    const spin = p.spinner()
+    const spin = timedSpinner()
 
     // Check if already in global cache - just create symlinks
     if (isCached(pkgName, version)) {
@@ -136,6 +140,9 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       mkdirSync(skillDir, { recursive: true })
       mkdirSync(referencesPath, { recursive: true })
       linkPkgSymlink(referencesPath, pkgName, cwd, version)
+      // Restore named symlinks for all tracked packages
+      for (const pkg of parsePackages(info.packages))
+        linkPkgNamed(skillDir, pkg.name, cwd, pkg.version)
       // Only link external docs if package doesn't ship its own and has more than just README
       if (!pkgHasShippedDocs(pkgName, cwd, version) && !isReadmeOnly(globalCachePath)) {
         const docsLink = join(referencesPath, 'docs')
@@ -145,21 +152,33 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         if (existsSync(cachedDocs))
           symlinkSync(cachedDocs, docsLink, 'junction')
       }
-      // Link github data and releases
-      const githubLink = join(referencesPath, 'github')
-      const cachedGithub = join(globalCachePath, 'github')
-      if (existsSync(githubLink))
-        unlinkSync(githubLink)
-      if (existsSync(cachedGithub))
-        symlinkSync(cachedGithub, githubLink, 'junction')
+      // Link issues, discussions, and releases
+      const issuesLink = join(referencesPath, 'issues')
+      const cachedIssues = join(globalCachePath, 'issues')
+      if (existsSync(issuesLink))
+        unlinkSync(issuesLink)
+      if (existsSync(cachedIssues))
+        symlinkSync(cachedIssues, issuesLink, 'junction')
+      const discussionsLink = join(referencesPath, 'discussions')
+      const cachedDiscussions = join(globalCachePath, 'discussions')
+      if (existsSync(discussionsLink))
+        unlinkSync(discussionsLink)
+      if (existsSync(cachedDiscussions))
+        symlinkSync(cachedDiscussions, discussionsLink, 'junction')
       const releasesLink = join(referencesPath, 'releases')
       const cachedReleases = join(globalCachePath, 'releases')
       if (existsSync(releasesLink))
         unlinkSync(releasesLink)
       if (existsSync(cachedReleases))
         symlinkSync(cachedReleases, releasesLink, 'junction')
-      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source))
-        regenerated.push({ name, pkgName, version, skillDir })
+      const sectionsLink = join(referencesPath, 'sections')
+      const cachedSections = join(globalCachePath, 'sections')
+      if (existsSync(sectionsLink))
+        unlinkSync(sectionsLink)
+      if (existsSync(cachedSections))
+        symlinkSync(cachedSections, sectionsLink, 'junction')
+      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source, info.packages))
+        regenerated.push({ name, pkgName, version, skillDir, packages: info.packages })
       spin.stop(`Linked ${name}`)
       continue
     }
@@ -189,10 +208,10 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
             const results = await Promise.all(
               batch.map(async (file) => {
                 const url = `${gitDocs.baseUrl}/${file}`
-                const res = await fetch(url, { headers: { 'User-Agent': 'skilld/1.0' } }).catch(() => null)
-                if (!res?.ok)
+                const content = await $fetch(url, { responseType: 'text' }).catch(() => null)
+                if (!content)
                   return null
-                return { file, content: await res.text() }
+                return { file, content }
               }),
             )
             for (const r of results) {
@@ -200,6 +219,27 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
                 const cachePath = gitDocs.docsPrefix ? r.file.replace(gitDocs.docsPrefix, '') : r.file
                 cachedDocs.push({ path: cachePath, content: r.content })
                 docsToIndex.push({ id: cachePath, content: r.content, metadata: { package: pkgName, source: cachePath, type: 'doc' } })
+              }
+            }
+          }
+
+          // Shallow git-docs: if < threshold and llms.txt exists, discard and fall through
+          if (isShallowGitDocs(cachedDocs.length) && resolved.llmsUrl) {
+            cachedDocs.length = 0
+            docsToIndex.length = 0
+          }
+          else if (cachedDocs.length > 0 && resolved.llmsUrl) {
+            // Always cache llms.txt alongside good git-docs as supplementary reference
+            const llmsContent = await fetchLlmsTxt(resolved.llmsUrl)
+            if (llmsContent) {
+              const baseUrl = resolved.docsUrl || new URL(resolved.llmsUrl).origin
+              cachedDocs.push({ path: 'llms.txt', content: normalizeLlmsLinks(llmsContent.raw) })
+              if (llmsContent.links.length > 0) {
+                const docs = await downloadLlmsDocs(llmsContent, baseUrl)
+                for (const doc of docs) {
+                  const localPath = doc.url.startsWith('/') ? doc.url.slice(1) : doc.url
+                  cachedDocs.push({ path: join('llms-docs', ...localPath.split('/')), content: doc.content })
+                }
               }
             }
           }
@@ -239,6 +279,9 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 
       mkdirSync(referencesPath, { recursive: true })
       linkPkgSymlink(referencesPath, pkgName, cwd, version)
+      // Restore named symlinks for all tracked packages
+      for (const pkg of parsePackages(info.packages))
+        linkPkgNamed(skillDir, pkg.name, cwd, pkg.version)
       // Link fetched docs unless it's just a README (already in pkg/)
       if (!isReadmeOnly(globalCachePath)) {
         const docsLink = join(referencesPath, 'docs')
@@ -264,8 +307,8 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         })), { dbPath: getPackageDbPath(pkgName, version) })
       }
 
-      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source))
-        regenerated.push({ name, pkgName, version, skillDir })
+      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source, info.packages))
+        regenerated.push({ name, pkgName, version, skillDir, packages: info.packages })
       spin.stop(`Downloaded and linked ${name}`)
     }
     else {
@@ -276,17 +319,17 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   // Offer LLM enhancement for regenerated SKILL.md files
   if (regenerated.length > 0 && !readConfig().skipLlm) {
     const names = regenerated.map(r => r.name).join(', ')
-    const { sections, customPrompt, cancelled } = await selectSkillSections(`Enhance SKILL.md for ${names}`)
-    if (!cancelled && sections.length > 0) {
-      const model = await selectModel(false)
-      if (model) {
-        p.log.step(getModelLabel(model))
-        for (const { pkgName, version, skillDir } of regenerated) {
-          await enhanceRegenerated(pkgName, version, skillDir, model, sections, customPrompt)
-        }
+    const llmConfig = await selectLlmConfig(undefined, `Enhance SKILL.md for ${names}`)
+    if (llmConfig) {
+      p.log.step(getModelLabel(llmConfig.model))
+      for (const { pkgName, version, skillDir, packages: pkgPackages } of regenerated) {
+        await enhanceRegenerated(pkgName, version, skillDir, llmConfig.model, llmConfig.sections, llmConfig.customPrompt, pkgPackages)
       }
     }
   }
+
+  const { shutdownWorker } = await import('../retriv/pool')
+  await shutdownWorker()
 
   p.outro('Install complete')
 }
@@ -356,14 +399,17 @@ async function enhanceRegenerated(
   skillDir: string,
   model: Parameters<typeof optimizeDocs>[0]['model'],
   sections: SkillSection[],
-  customPrompt?: string,
+  customPrompt?: CustomPrompt,
+  packages?: string,
 ): Promise<void> {
-  const llmSpin = p.spinner()
+  const llmSpin = timedSpinner()
   llmSpin.start(`Agent exploring ${pkgName}`)
 
   const docFiles = listReferenceFiles(skillDir)
   const globalCachePath = getCacheDir(pkgName, version)
-  const hasGithub = existsSync(join(globalCachePath, 'github'))
+  const hasIssues = existsSync(join(globalCachePath, 'issues'))
+  const hasDiscussions = existsSync(join(globalCachePath, 'discussions'))
+  const hasGithub = hasIssues || hasDiscussions
   const hasReleases = existsSync(join(globalCachePath, 'releases'))
 
   const { optimized, wasOptimized } = await optimizeDocs({
@@ -376,17 +422,17 @@ async function enhanceRegenerated(
     docFiles,
     sections,
     customPrompt,
-    onProgress: ({ type, chunk }) => {
+    onProgress: ({ type, chunk, section }) => {
+      const prefix = section ? `[${section}] ` : ''
       if (type === 'reasoning' && chunk.startsWith('['))
-        llmSpin.message(chunk)
+        llmSpin.message(`${prefix}${chunk}`)
       else if (type === 'text')
-        llmSpin.message('Writing...')
+        llmSpin.message(`${prefix}Writing...`)
     },
   })
 
   if (wasOptimized) {
     llmSpin.stop('Generated best practices')
-    const body = cleanSkillMd(optimized)
     // Re-read local metadata for the enhanced version
     const cwd = process.cwd()
     const pkgPath = resolvePkgDir(pkgName, cwd, version)
@@ -407,18 +453,25 @@ async function enhanceRegenerated(
     else if (isReadmeOnly(globalCachePath))
       docsType = 'readme'
 
+    // Derive dirName from the skill directory name
+    const dirName = skillDir.split('/').pop()
+
+    const allPackages = parsePackages(packages).map(p => ({ name: p.name }))
     const skillMd = generateSkillMd({
       name: pkgName,
       version,
       description,
       dependencies,
-      body,
+      body: optimized,
       relatedSkills: [],
-      hasGithub,
+      hasIssues,
+      hasDiscussions,
       hasReleases,
       docsType,
       hasShippedDocs: checkShippedDocs(pkgName, cwd, version),
       pkgFiles: getPkgKeyFiles(pkgName, cwd, version),
+      dirName,
+      packages: allPackages.length > 1 ? allPackages : undefined,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
@@ -435,6 +488,7 @@ function regenerateBaseSkillMd(
   cwd: string,
   allSkillNames: string[],
   source?: string,
+  packages?: string,
 ): boolean {
   const skillMdPath = join(skillDir, 'SKILL.md')
   if (existsSync(skillMdPath))
@@ -461,12 +515,19 @@ function regenerateBaseSkillMd(
   else if (isReadmeOnly(globalCachePath))
     docsType = 'readme'
 
-  // Check cache dirs for github/releases
-  const hasGithub = existsSync(join(globalCachePath, 'github'))
+  // Check cache dirs for issues/discussions/releases
+  const hasIssues = existsSync(join(globalCachePath, 'issues'))
+  const hasDiscussions = existsSync(join(globalCachePath, 'discussions'))
   const hasReleases = existsSync(join(globalCachePath, 'releases'))
 
   // Related skills from other lockfile entries
   const relatedSkills = allSkillNames.filter(n => n !== pkgName)
+
+  // Derive dirName from the skill directory name (lockfile key)
+  const dirName = skillDir.split('/').pop()
+
+  // Build multi-package list from lockfile packages field
+  const allPackages = parsePackages(packages).map(p => ({ name: p.name }))
 
   const content = generateSkillMd({
     name: pkgName,
@@ -474,11 +535,14 @@ function regenerateBaseSkillMd(
     description,
     dependencies,
     relatedSkills,
-    hasGithub,
+    hasIssues,
+    hasDiscussions,
     hasReleases,
     docsType,
     hasShippedDocs: checkShippedDocs(pkgName, cwd, version),
     pkgFiles: getPkgKeyFiles(pkgName, cwd, version),
+    dirName,
+    packages: allPackages.length > 1 ? allPackages : undefined,
   })
 
   mkdirSync(skillDir, { recursive: true })

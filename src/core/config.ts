@@ -1,7 +1,8 @@
 import type { OptimizeModel } from '../agent'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
+import { yamlEscape, yamlParseKV, yamlUnescape } from './yaml'
 
 export interface FeaturesConfig {
   search: boolean
@@ -53,7 +54,7 @@ export function readConfig(): SkilldConfig {
     }
     if (inBlock === 'projects') {
       if (line.startsWith('  - ')) {
-        projects.push(line.slice(4).trim().replace(/^["']|["']$/g, ''))
+        projects.push(yamlUnescape(line.slice(4)))
         continue
       }
       inBlock = null
@@ -68,8 +69,10 @@ export function readConfig(): SkilldConfig {
       }
       inBlock = null
     }
-    const [key, ...rest] = line.split(':')
-    const value = rest.join(':').trim().replace(/^["']|["']$/g, '')
+    const kv = yamlParseKV(line)
+    if (!kv)
+      continue
+    const [key, value] = kv
     if (key === 'model' && value)
       config.model = value as OptimizeModel
     if (key === 'agent' && value)
@@ -86,7 +89,7 @@ export function readConfig(): SkilldConfig {
 }
 
 export function writeConfig(config: SkilldConfig): void {
-  mkdirSync(CONFIG_DIR, { recursive: true })
+  mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 })
 
   let yaml = ''
   if (config.model)
@@ -104,11 +107,11 @@ export function writeConfig(config: SkilldConfig): void {
   if (config.projects?.length) {
     yaml += 'projects:\n'
     for (const p of config.projects) {
-      yaml += `  - ${p}\n`
+      yaml += `  - ${yamlEscape(p)}\n`
     }
   }
 
-  writeFileSync(CONFIG_PATH, yaml)
+  writeFileSync(CONFIG_PATH, yaml, { mode: 0o600 })
 }
 
 export function updateConfig(updates: Partial<SkilldConfig>): void {

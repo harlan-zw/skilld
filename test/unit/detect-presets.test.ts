@@ -1,5 +1,5 @@
-import { join } from 'node:path'
 import { parseSync } from 'oxc-parser'
+import { join } from 'pathe'
 import { describe, expect, it } from 'vitest'
 import { detectNuxtModules, extractModuleStrings } from '../../src/agent/detect-presets'
 

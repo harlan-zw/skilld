@@ -3,8 +3,8 @@
  * Only types — source code is too verbose.
  */
 import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { globby } from 'globby'
+import { join } from 'pathe'
 
 export interface EntryFile {
   path: string

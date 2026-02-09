@@ -3,6 +3,7 @@
  */
 
 import type { FetchedDoc, LlmsContent, LlmsLink } from './types'
+import pLimit from 'p-limit'
 import { fetchText, verifyUrl } from './utils'
 
 /**
@@ -51,28 +52,54 @@ export function parseMarkdownLinks(content: string): LlmsLink[] {
 /**
  * Download all .md files referenced in llms.txt
  */
+/** Reject non-https URLs and private/link-local IPs */
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:')
+      return false
+    const host = parsed.hostname
+    // Reject private/link-local/loopback
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1')
+      return false
+    if (host === '169.254.169.254') // cloud metadata
+      return false
+    if (/^(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host))
+      return false
+    if (host.startsWith('[')) // IPv6 link-local
+      return false
+    return true
+  }
+  catch { return false }
+}
+
 export async function downloadLlmsDocs(
   llmsContent: LlmsContent,
   baseUrl: string,
   onProgress?: (url: string, index: number, total: number) => void,
 ): Promise<FetchedDoc[]> {
-  const docs: FetchedDoc[] = []
+  const limit = pLimit(5)
+  let completed = 0
 
-  for (let i = 0; i < llmsContent.links.length; i++) {
-    const link = llmsContent.links[i]!
-    onProgress?.(link.url, i, llmsContent.links.length)
+  const results = await Promise.all(
+    llmsContent.links.map((link, i) => limit(async () => {
+      const url = link.url.startsWith('http')
+        ? link.url
+        : `${baseUrl.replace(/\/$/, '')}${link.url.startsWith('/') ? '' : '/'}${link.url}`
 
-    const url = link.url.startsWith('http')
-      ? link.url
-      : `${baseUrl.replace(/\/$/, '')}${link.url.startsWith('/') ? '' : '/'}${link.url}`
+      if (!isSafeUrl(url))
+        return null
 
-    const content = await fetchText(url)
-    if (content && content.length > 100) {
-      docs.push({ url: link.url, title: link.title, content })
-    }
-  }
+      onProgress?.(link.url, completed++, llmsContent.links.length)
 
-  return docs
+      const content = await fetchText(url)
+      if (content && content.length > 100)
+        return { url: link.url, title: link.title, content } as FetchedDoc
+      return null
+    })),
+  )
+
+  return results.filter((d): d is FetchedDoc => d !== null)
 }
 
 /**

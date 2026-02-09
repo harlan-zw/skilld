@@ -17,11 +17,13 @@ pnpm test -- test/cache.test.ts  # Single test file
 
 ```bash
 skilld                # Interactive menu
-skilld add vue,nuxt   # Add skills for packages
+skilld add vue nuxt   # Add skills for packages
 skilld update         # Update all outdated skills
 skilld update vue     # Update specific package
 skilld remove         # Remove installed skills
-skilld status         # Show skill status
+skilld list           # List installed skills (one per line)
+skilld list --json    # List as JSON
+skilld info           # Show config, agents, features, per-package detail
 skilld config         # Change settings
 skilld install        # Restore references from lockfile
 skilld uninstall      # Remove skilld data
@@ -58,19 +60,22 @@ Checks env vars (`CLAUDE_CODE`, `CURSOR_SESSION`) and project dirs (`.claude/`, 
 **Cache structure:**
 ```
 ~/.skilld/references/<pkg>@<version>/
-  docs/     # Fetched external docs
-  github/   # Issues, discussions, releases
-  pkg/      # Symlink → node_modules/<pkg>
+  docs/          # Fetched external docs
+  issues/        # Individual issue files (issue-123.md)
+  discussions/   # Individual discussion files (discussion-42.md)
+  pkg/           # Symlink → node_modules/<pkg>
 ```
 References are global/static; SKILL.md is per-project (different conventions). Cache key is exact `name@version`. Symlinks are created in `.claude/skills/<pkg>/.skilld/` (gitignored, recreated by `skilld install`).
 
 ## Conventions
 
 - **Functional only** — no classes, pure functions throughout
-- **Custom YAML** — config.yaml and skilld-lock.yaml use hand-rolled parsers (no yaml library)
+- **Custom YAML** — `src/core/yaml.ts` hand-rolled parser (no yaml library). `yamlEscape()` double-quotes values with special chars, `yamlParseKV()` splits on first colon. Used for config.yaml and skilld-lock.yaml
+- **Markdown sanitization** — `src/core/sanitize.ts` strips prompt injection vectors (zero-width chars, HTML comments, agent directive tags, external images/links, base64 blobs, directive patterns). Code-fence-aware via state machine
 - **Let errors propagate** — fetch errors return `null`, resolution tracks attempts in `ResolveAttempt[]`
 - **Parallelization** — `p-limit` for concurrency, batch downloads (20 at a time), `sync-parallel.ts` for multi-package
-- **Overrides** — `src/sources/overrides.ts` has hardcoded fixes for packages with broken npm metadata (vue, nuxt, etc.)
+- **Overrides** — `src/sources/overrides.ts` maps package names → `{ owner, repo, path, ref?, homepage? }` for packages with broken npm metadata
 - **Version comparison** — `isOutdated()` compares major.minor only, ignores patch
-- **Tests** — vitest with `globals: true`, tests live in `test/` dir (not colocated), fs mocked via `vi.mock('node:fs')`
+- **Tests** — vitest projects (unit + e2e), `globals: true`, tests in `test/unit/` and `test/e2e/`, fs mocked via `vi.mock('node:fs')`
 - **Build** — `obuild` bundles multiple entry points (cli, index, types, cache, retriv, agent, sources) as subpath exports
+- **CLI modes** — `--prepare` flag for pnpm hooks (sync outdated only, no LLM, silent), `--background` spawns detached process

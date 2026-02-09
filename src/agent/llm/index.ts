@@ -6,19 +6,21 @@
  * Gemini: turn-level streaming via -o stream-json
  */
 
-import type { SkillSection } from '../prompts'
+import type { CustomPrompt, SkillSection } from '../prompts'
 import type { AgentType } from '../types'
 import { exec, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join } from 'pathe'
+import { readCachedSection, writeSections } from '../../cache'
+import { sanitizeMarkdown } from '../../core/sanitize'
 import { detectInstalledAgents } from '../detect'
-import { buildSkillPrompt } from '../prompts'
+import { buildAllSectionPrompts, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts'
 import { agents } from '../registry'
 
-export { buildSkillPrompt } from '../prompts'
-export type { SkillSection } from '../prompts'
+export { buildAllSectionPrompts, buildSectionPrompt, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts'
+export type { CustomPrompt, SkillSection } from '../prompts'
 
 export type OptimizeModel
   = | 'opus'
@@ -45,6 +47,7 @@ export interface StreamProgress {
   type: 'reasoning' | 'text'
   text: string
   reasoning: string
+  section?: SkillSection
 }
 
 export interface OptimizeDocsOptions {
@@ -56,30 +59,45 @@ export interface OptimizeDocsOptions {
   hasReleases?: boolean
   hasChangelog?: string | false
   docFiles?: string[]
+  docsType?: 'llms.txt' | 'readme' | 'docs'
+  hasShippedDocs?: boolean
   onProgress?: (progress: StreamProgress) => void
   timeout?: number
   verbose?: boolean
+  debug?: boolean
   noCache?: boolean
   /** Which sections to generate */
   sections?: SkillSection[]
   /** Custom instructions from the user */
-  customPrompt?: string
+  customPrompt?: CustomPrompt
 }
 
 export interface OptimizeResult {
   optimized: string
   wasOptimized: boolean
   error?: string
+  warnings?: string[]
   reasoning?: string
   finishReason?: string
   usage?: { inputTokens: number, outputTokens: number, totalTokens: number }
+  cost?: number
+  debugLogsDir?: string
+}
+
+interface SectionResult {
+  section: SkillSection
+  content: string
+  wasOptimized: boolean
+  error?: string
+  warnings?: ValidationWarning[]
+  usage?: { input: number, output: number }
   cost?: number
 }
 
 const CACHE_DIR = join(homedir(), '.skilld', 'llm-cache')
 
 interface CliModelConfig {
-  cli: 'claude' | 'gemini'
+  cli: 'claude' | 'gemini' | 'codex'
   model: string
   name: string
   hint: string
@@ -97,6 +115,7 @@ const CLI_MODELS: Partial<Record<OptimizeModel, CliModelConfig>> = {
   'gemini-2.5-flash-lite': { cli: 'gemini', model: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash Lite', hint: 'Fastest', agentId: 'gemini-cli' },
   'gemini-3-pro': { cli: 'gemini', model: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', hint: 'Most capable', agentId: 'gemini-cli' },
   'gemini-3-flash': { cli: 'gemini', model: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', hint: 'Balanced', agentId: 'gemini-cli' },
+  'codex': { cli: 'codex', model: 'gpt-5-codex', name: 'Codex (GPT-5)', hint: 'OpenAI', agentId: 'codex' },
 }
 
 export function getModelName(id: OptimizeModel): string {
@@ -153,10 +172,17 @@ function resolveReferenceDirs(skillDir: string): string[] {
     .map(p => realpathSync(p))
 }
 
-function buildCliArgs(cli: 'claude' | 'gemini', model: string, skillDir: string): string[] {
+function buildCliArgs(cli: 'claude' | 'gemini' | 'codex', model: string, skillDir: string, _outputFile: string): string[] {
   const symlinkDirs = resolveReferenceDirs(skillDir)
 
   if (cli === 'claude') {
+    const skilldDir = join(skillDir, '.skilld')
+    const readDirs = [skillDir, ...symlinkDirs]
+    const allowedTools = [
+      ...readDirs.flatMap(d => [`Read(${d}/**)`, `Glob(${d}/**)`, `Grep(${d}/**)`]),
+      `Write(${skilldDir}/**)`,
+      `Bash(*skilld search*)`,
+    ].join(' ')
     return [
       '-p',
       '--model',
@@ -166,20 +192,36 @@ function buildCliArgs(cli: 'claude' | 'gemini', model: string, skillDir: string)
       '--verbose',
       '--include-partial-messages', // token-level streaming
       '--allowedTools',
-      'Read Glob Grep Write',
+      allowedTools,
       '--add-dir',
       skillDir,
       ...symlinkDirs.flatMap(d => ['--add-dir', d]),
-      '--dangerously-skip-permissions',
       '--no-session-persistence',
     ]
   }
+
+  if (cli === 'codex') {
+    // OpenAI Codex CLI — exec subcommand with JSON output
+    // Prompt passed via stdin with `-` sentinel
+    return [
+      'exec',
+      '--json',
+      '--model',
+      model,
+      '--full-auto',
+      ...symlinkDirs.flatMap(d => ['--add-dir', d]),
+      '-',
+    ]
+  }
+
+  // gemini
   return [
     '-o',
     'stream-json',
     '-m',
     model,
-    '-y', // auto-approve tools
+    '--allowed-tools',
+    'read_file,write_file,list_directory,glob_tool',
     '--include-directories',
     skillDir,
     ...symlinkDirs.flatMap(d => ['--include-directories', d]),
@@ -188,12 +230,19 @@ function buildCliArgs(cli: 'claude' | 'gemini', model: string, skillDir: string)
 
 // ── Cache ────────────────────────────────────────────────────────────
 
-function hashPrompt(prompt: string, model: OptimizeModel): string {
-  return createHash('sha256').update(`exec:${model}:${prompt}`).digest('hex').slice(0, 16)
+/** Strip absolute paths from prompt so the hash is project-independent */
+function normalizePromptForHash(prompt: string): string {
+  // Replace absolute skill dir paths with placeholder
+  // e.g. /home/user/project/.claude/skills/vue → <SKILL_DIR>
+  return prompt.replace(/\/[^\s`]*\.claude\/skills\/[^\s/`]+/g, '<SKILL_DIR>')
 }
 
-function getCached(prompt: string, model: OptimizeModel, maxAge = 7 * 24 * 60 * 60 * 1000): string | null {
-  const path = join(CACHE_DIR, `${hashPrompt(prompt, model)}.json`)
+function hashPrompt(prompt: string, model: OptimizeModel, section: SkillSection): string {
+  return createHash('sha256').update(`exec:${model}:${section}:${normalizePromptForHash(prompt)}`).digest('hex').slice(0, 16)
+}
+
+function getCached(prompt: string, model: OptimizeModel, section: SkillSection, maxAge = 7 * 24 * 60 * 60 * 1000): string | null {
+  const path = join(CACHE_DIR, `${hashPrompt(prompt, model, section)}.json`)
   if (!existsSync(path))
     return null
   try {
@@ -203,11 +252,12 @@ function getCached(prompt: string, model: OptimizeModel, maxAge = 7 * 24 * 60 * 
   catch { return null }
 }
 
-function setCache(prompt: string, model: OptimizeModel, text: string): void {
-  mkdirSync(CACHE_DIR, { recursive: true })
+function setCache(prompt: string, model: OptimizeModel, section: SkillSection, text: string): void {
+  mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 })
   writeFileSync(
-    join(CACHE_DIR, `${hashPrompt(prompt, model)}.json`),
-    JSON.stringify({ text, model, timestamp: Date.now() }),
+    join(CACHE_DIR, `${hashPrompt(prompt, model, section)}.json`),
+    JSON.stringify({ text, model, section, timestamp: Date.now() }),
+    { mode: 0o600 },
   )
 }
 
@@ -222,6 +272,8 @@ interface ParsedEvent {
   toolName?: string
   /** Tool input hint (file path, query, etc) */
   toolHint?: string
+  /** Content from a Write tool call (fallback if Write is denied) */
+  writeContent?: string
   /** Stream finished */
   done?: boolean
   /** Token usage */
@@ -278,7 +330,9 @@ function parseClaudeLine(line: string): ParsedEvent {
           const input = t.input || {}
           return input.file_path || input.path || input.pattern || input.query || input.command || ''
         }).filter(Boolean).join(', ')
-        return { toolName: names.join(', '), toolHint: hint || undefined }
+        // Capture Write content as fallback if permission is denied
+        const writeTool = tools.find((t: any) => t.name === 'Write' && t.input?.content)
+        return { toolName: names.join(', '), toolHint: hint || undefined, writeContent: writeTool?.input?.content }
       }
 
       // Text content (fallback for non-partial mode)
@@ -320,7 +374,7 @@ function parseGeminiLine(line: string): ParsedEvent {
 
     // Tool invocation
     if (obj.type === 'tool_use' || obj.type === 'tool_call') {
-      return { toolName: obj.name || obj.tool || 'tool' }
+      return { toolName: obj.tool_name || obj.name || obj.tool || 'tool' }
     }
 
     // Final result
@@ -337,38 +391,95 @@ function parseGeminiLine(line: string): ParsedEvent {
   return {}
 }
 
-// ── Main ─────────────────────────────────────────────────────────────
+/**
+ * Parse codex CLI exec --json output
+ *
+ * Real event types observed:
+ * - thread.started → session start (thread_id)
+ * - turn.started / turn.completed → turn lifecycle + usage
+ * - item.started → command_execution in progress
+ * - item.completed → agent_message (text), reasoning, command_execution (result)
+ * - error / turn.failed → errors
+ */
+function parseCodexLine(line: string): ParsedEvent {
+  try {
+    const obj = JSON.parse(line)
 
-export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
-  const { packageName, skillDir, model = 'sonnet', version, hasGithub, docFiles, onProgress, timeout = 180000, noCache, sections, customPrompt } = opts
-  const prompt = buildSkillPrompt({ packageName, skillDir, version, hasGithub, docFiles, sections, customPrompt })
+    if (obj.type === 'item.completed' && obj.item) {
+      const item = obj.item
+      // Agent message — the main text output
+      if (item.type === 'agent_message' && item.text)
+        return { fullText: item.text }
+      // Command execution completed — log as tool progress, NOT writeContent
+      // (aggregated_output is bash stdout, not the section content to write)
+      if (item.type === 'command_execution' && item.aggregated_output)
+        return { toolName: 'Bash', toolHint: `(${item.aggregated_output.length} chars output)` }
+    }
 
-  // Cache check
-  if (!noCache) {
-    const cached = getCached(prompt, model)
-    if (cached) {
-      onProgress?.({ chunk: '[cached]', type: 'text', text: cached, reasoning: '' })
-      return { optimized: cached, wasOptimized: true, finishReason: 'cached' }
+    // Command starting — show progress
+    if (obj.type === 'item.started' && obj.item?.type === 'command_execution') {
+      return { toolName: 'Bash', toolHint: obj.item.command }
+    }
+
+    // Turn completed — usage stats
+    if (obj.type === 'turn.completed' && obj.usage) {
+      return {
+        done: true,
+        usage: {
+          input: obj.usage.input_tokens ?? 0,
+          output: obj.usage.output_tokens ?? 0,
+        },
+      }
+    }
+
+    // Error events
+    if (obj.type === 'turn.failed' || obj.type === 'error') {
+      return { done: true }
     }
   }
+  catch {}
+  return {}
+}
+
+// ── Per-section spawn ────────────────────────────────────────────────
+
+interface OptimizeSectionOptions {
+  section: SkillSection
+  prompt: string
+  outputFile: string
+  skillDir: string
+  model: OptimizeModel
+  packageName: string
+  onProgress?: (progress: StreamProgress) => void
+  timeout: number
+  debug?: boolean
+  preExistingFiles: Set<string>
+}
+
+/** Spawn a single CLI process for one section */
+function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
+  const { section, prompt, outputFile, skillDir, model, packageName, onProgress, timeout, debug, preExistingFiles } = opts
 
   const cliConfig = CLI_MODELS[model]
   if (!cliConfig) {
-    return { optimized: '', wasOptimized: false, error: `No CLI mapping for model: ${model}` }
+    return Promise.resolve({ section, content: '', wasOptimized: false, error: `No CLI mapping for model: ${model}` })
   }
 
   const { cli, model: cliModel } = cliConfig
-  const args = buildCliArgs(cli, cliModel, skillDir)
-  const parseLine = cli === 'claude' ? parseClaudeLine : parseGeminiLine
+  const args = buildCliArgs(cli, cliModel, skillDir, outputFile)
+  const parseLine = cli === 'claude' ? parseClaudeLine : cli === 'codex' ? parseCodexLine : parseGeminiLine
 
-  // Write prompt for debugging (inside .skilld/ to keep git clean)
   const skilldDir = join(skillDir, '.skilld')
-  mkdirSync(skilldDir, { recursive: true })
-  writeFileSync(join(skilldDir, 'PROMPT.md'), prompt)
+  const outputPath = join(skilldDir, outputFile)
 
-  const outputPath = join(skilldDir, '_SKILL.md')
+  // Remove stale output so we don't read a leftover from a previous run
+  if (existsSync(outputPath))
+    unlinkSync(outputPath)
 
-  return new Promise<OptimizeResult>((resolve) => {
+  // Write prompt for debugging
+  writeFileSync(join(skilldDir, `PROMPT_${section}.md`), prompt)
+
+  return new Promise<SectionResult>((resolve) => {
     const proc = spawn(cli, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout,
@@ -376,10 +487,13 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     })
 
     let buffer = ''
+    let accumulatedText = ''
+    let lastWriteContent = ''
     let usage: { input: number, output: number } | undefined
     let cost: number | undefined
+    const rawLines: string[] = []
 
-    onProgress?.({ chunk: '[starting...]', type: 'reasoning', text: '', reasoning: '' })
+    onProgress?.({ chunk: '[starting...]', type: 'reasoning', text: '', reasoning: '', section })
 
     proc.stdin.write(prompt)
     proc.stdin.end()
@@ -392,13 +506,23 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
       for (const line of lines) {
         if (!line.trim())
           continue
+        if (debug)
+          rawLines.push(line)
         const evt = parseLine(line)
+
+        if (evt.textDelta)
+          accumulatedText += evt.textDelta
+        if (evt.fullText)
+          accumulatedText = evt.fullText
+
+        if (evt.writeContent)
+          lastWriteContent = evt.writeContent
 
         if (evt.toolName) {
           const hint = evt.toolHint
             ? `[${evt.toolName}: ${shortenPath(evt.toolHint)}]`
             : `[${evt.toolName}]`
-          onProgress?.({ chunk: hint, type: 'reasoning', text: '', reasoning: hint })
+          onProgress?.({ chunk: hint, type: 'reasoning', text: '', reasoning: hint, section })
         }
 
         if (evt.usage)
@@ -417,43 +541,240 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
       // Drain remaining buffer for metadata
       if (buffer.trim()) {
         const evt = parseLine(buffer)
+        if (evt.textDelta)
+          accumulatedText += evt.textDelta
+        if (evt.fullText)
+          accumulatedText = evt.fullText
+        if (evt.writeContent)
+          lastWriteContent = evt.writeContent
         if (evt.usage)
           usage = evt.usage
         if (evt.cost != null)
           cost = evt.cost
       }
 
-      // Read agent output from _SKILL.md
-      const optimized = existsSync(outputPath)
-        ? readFileSync(outputPath, 'utf-8').trim()
-        : ''
+      // Remove unexpected files the LLM may have written (prompt injection defense)
+      // Only clean files not in the pre-existing snapshot and not our expected output
+      for (const entry of readdirSync(skilldDir)) {
+        if (entry !== outputFile && !preExistingFiles.has(entry)) {
+          // Allow other section output files and debug prompts
+          if (Object.values(SECTION_OUTPUT_FILES).includes(entry))
+            continue
+          if (entry.startsWith('PROMPT_') || entry === 'logs')
+            continue
+          try {
+            unlinkSync(join(skilldDir, entry))
+          }
+          catch {}
+        }
+      }
 
-      if (!optimized && code !== 0) {
-        resolve({ optimized: '', wasOptimized: false, error: stderr.trim() || `CLI exited with code ${code}` })
+      // Prefer file written by LLM, fall back to Write tool content (if denied), then accumulated stdout
+      const raw = (existsSync(outputPath) ? readFileSync(outputPath, 'utf-8') : lastWriteContent || accumulatedText).trim()
+
+      // Write debug logs: raw stream + raw text output
+      if (debug) {
+        const logsDir = join(skilldDir, 'logs')
+        mkdirSync(logsDir, { recursive: true })
+        const logName = section.toUpperCase().replace(/-/g, '_')
+        if (rawLines.length)
+          writeFileSync(join(logsDir, `${logName}.jsonl`), rawLines.join('\n'))
+        if (raw)
+          writeFileSync(join(logsDir, `${logName}.md`), raw)
+        if (stderr)
+          writeFileSync(join(logsDir, `${logName}.stderr.log`), stderr)
+      }
+
+      if (!raw && code !== 0) {
+        resolve({ section, content: '', wasOptimized: false, error: stderr.trim() || `CLI exited with code ${code}` })
         return
       }
 
-      if (!noCache && optimized) {
-        setCache(prompt, model, optimized)
+      // Clean the section output (strip markdown fences, frontmatter, sanitize)
+      const content = raw ? cleanSectionOutput(raw) : ''
+
+      if (content) {
+        // Write cleaned content back to the output file for debugging
+        writeFileSync(outputPath, content)
       }
 
-      const usageResult = usage
-        ? { inputTokens: usage.input, outputTokens: usage.output, totalTokens: usage.input + usage.output }
-        : undefined
+      const warnings = content ? validateSectionOutput(content, section, packageName) : undefined
 
       resolve({
-        optimized,
-        wasOptimized: !!optimized,
-        finishReason: code === 0 ? 'stop' : 'error',
-        usage: usageResult,
+        section,
+        content,
+        wasOptimized: !!content,
+        warnings: warnings?.length ? warnings : undefined,
+        usage,
         cost,
       })
     })
 
     proc.on('error', (err) => {
-      resolve({ optimized: '', wasOptimized: false, error: err.message })
+      resolve({ section, content: '', wasOptimized: false, error: err.message })
     })
   })
+}
+
+// ── Main orchestrator ────────────────────────────────────────────────
+
+export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
+  const { packageName, skillDir, model = 'sonnet', version, hasGithub, hasReleases, hasChangelog, docFiles, docsType, hasShippedDocs, onProgress, timeout = 180000, debug, noCache, sections, customPrompt } = opts
+
+  const selectedSections = sections ?? ['llm-gaps', 'best-practices', 'api'] as SkillSection[]
+
+  // Build all section prompts
+  const sectionPrompts = buildAllSectionPrompts({
+    packageName,
+    skillDir,
+    version,
+    hasIssues: hasGithub,
+    hasDiscussions: hasGithub,
+    hasReleases,
+    hasChangelog,
+    docFiles,
+    docsType,
+    hasShippedDocs,
+    customPrompt,
+    sections: selectedSections,
+  })
+
+  if (sectionPrompts.size === 0) {
+    return { optimized: '', wasOptimized: false, error: 'No valid sections to generate' }
+  }
+
+  const cliConfig = CLI_MODELS[model]
+  if (!cliConfig) {
+    return { optimized: '', wasOptimized: false, error: `No CLI mapping for model: ${model}` }
+  }
+
+  // Check per-section cache: references dir first (version-keyed), then LLM cache (prompt-hashed)
+  const cachedResults: SectionResult[] = []
+  const uncachedSections: Array<{ section: SkillSection, prompt: string }> = []
+
+  for (const [section, prompt] of sectionPrompts) {
+    if (!noCache) {
+      // Check global references dir (cross-project, version-keyed)
+      if (version) {
+        const outputFile = SECTION_OUTPUT_FILES[section]
+        const refCached = readCachedSection(packageName, version, outputFile)
+        if (refCached) {
+          onProgress?.({ chunk: `[${section}: cached]`, type: 'text', text: refCached, reasoning: '', section })
+          cachedResults.push({ section, content: refCached, wasOptimized: true })
+          continue
+        }
+      }
+
+      // Check LLM prompt-hash cache
+      const cached = getCached(prompt, model, section)
+      if (cached) {
+        onProgress?.({ chunk: `[${section}: cached]`, type: 'text', text: cached, reasoning: '', section })
+        cachedResults.push({ section, content: cached, wasOptimized: true })
+        continue
+      }
+    }
+    uncachedSections.push({ section, prompt })
+  }
+
+  // Prepare .skilld/ dir and snapshot before spawns
+  const skilldDir = join(skillDir, '.skilld')
+  mkdirSync(skilldDir, { recursive: true })
+  const preExistingFiles = new Set(readdirSync(skilldDir))
+
+  // Spawn uncached sections in parallel
+  const spawnResults = uncachedSections.length > 0
+    ? await Promise.allSettled(
+        uncachedSections.map(({ section, prompt }) => {
+          const outputFile = SECTION_OUTPUT_FILES[section]
+          return optimizeSection({
+            section,
+            prompt,
+            outputFile,
+            skillDir,
+            model,
+            packageName,
+            onProgress,
+            timeout,
+            debug,
+            preExistingFiles,
+          })
+        }),
+      )
+    : []
+
+  // Collect all results
+  const allResults: SectionResult[] = [...cachedResults]
+  let totalUsage: { input: number, output: number } | undefined
+  let totalCost = 0
+
+  for (let i = 0; i < spawnResults.length; i++) {
+    const r = spawnResults[i]!
+    const { section, prompt } = uncachedSections[i]!
+    if (r.status === 'fulfilled') {
+      const result = r.value
+      allResults.push(result)
+      // Cache successful results
+      if (result.wasOptimized && !noCache) {
+        setCache(prompt, model, section, result.content)
+      }
+      if (result.usage) {
+        totalUsage = totalUsage ?? { input: 0, output: 0 }
+        totalUsage.input += result.usage.input
+        totalUsage.output += result.usage.output
+      }
+      if (result.cost != null) {
+        totalCost += result.cost
+      }
+    }
+    else {
+      allResults.push({ section, content: '', wasOptimized: false, error: String(r.reason) })
+    }
+  }
+
+  // Write successful sections to global references dir for cross-project reuse
+  if (version) {
+    const sectionFiles = allResults
+      .filter(r => r.wasOptimized && r.content)
+      .map(r => ({ file: SECTION_OUTPUT_FILES[r.section], content: r.content }))
+    if (sectionFiles.length > 0) {
+      writeSections(packageName, version, sectionFiles)
+    }
+  }
+
+  // Merge results in SECTION_MERGE_ORDER
+  const mergedParts: string[] = []
+  for (const section of SECTION_MERGE_ORDER) {
+    const result = allResults.find(r => r.section === section)
+    if (result?.wasOptimized && result.content) {
+      mergedParts.push(result.content)
+    }
+  }
+
+  const optimized = mergedParts.join('\n\n')
+  const wasOptimized = mergedParts.length > 0
+
+  const usageResult = totalUsage
+    ? { inputTokens: totalUsage.input, outputTokens: totalUsage.output, totalTokens: totalUsage.input + totalUsage.output }
+    : undefined
+
+  // Collect errors and warnings from sections
+  const errors = allResults.filter(r => r.error).map(r => `${r.section}: ${r.error}`)
+  const warnings = allResults.flatMap(r => r.warnings ?? []).map(w => `${w.section}: ${w.warning}`)
+
+  const debugLogsDir = debug && uncachedSections.length > 0
+    ? join(skillDir, '.skilld', 'logs')
+    : undefined
+
+  return {
+    optimized,
+    wasOptimized,
+    error: errors.length > 0 ? errors.join('; ') : undefined,
+    warnings: warnings.length > 0 ? warnings : undefined,
+    finishReason: wasOptimized ? 'stop' : 'error',
+    usage: usageResult,
+    cost: totalCost || undefined,
+    debugLogsDir,
+  }
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -466,4 +787,78 @@ function shortenPath(p: string): string {
   // Keep just filename for other paths
   const parts = p.split('/')
   return parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : p
+}
+
+// ── Validation ───────────────────────────────────────────────────────
+
+/** Max lines per section — generous thresholds (2x prompt guidance) to flag only egregious overruns */
+const SECTION_MAX_LINES: Record<string, number> = {
+  'llm-gaps': 160,
+  'best-practices': 300,
+  'api': 160,
+  'custom': 160,
+}
+
+interface ValidationWarning {
+  section: string
+  warning: string
+}
+
+/** Validate a section's output against heuristic quality checks */
+function validateSectionOutput(content: string, section: SkillSection, packageName: string): ValidationWarning[] {
+  const warnings: ValidationWarning[] = []
+  const lines = content.split('\n').length
+  const maxLines = SECTION_MAX_LINES[section]
+
+  if (maxLines && lines > maxLines * 1.5) {
+    warnings.push({ section, warning: `Output ${lines} lines exceeds ${maxLines} max by >50%` })
+  }
+
+  if (lines < 3) {
+    warnings.push({ section, warning: `Output only ${lines} lines — likely too sparse` })
+  }
+
+  // Check that package name appears at least once (sanity check)
+  const simpleName = packageName.replace(/^@[^/]+\//, '')
+  if (!content.toLowerCase().includes(simpleName.toLowerCase())) {
+    warnings.push({ section, warning: `Package name "${simpleName}" not found in output` })
+  }
+
+  return warnings
+}
+
+/** Clean a single section's LLM output: strip markdown fences, frontmatter, sanitize */
+function cleanSectionOutput(content: string): string {
+  let cleaned = content
+    .replace(/^```markdown\n?/m, '')
+    .replace(/\n?```$/m, '')
+    .trim()
+
+  // Strip accidental frontmatter or leading horizontal rules
+  const fmMatch = cleaned.match(/^-{3,}\n/)
+  if (fmMatch) {
+    const afterOpen = fmMatch[0].length
+    const closeMatch = cleaned.slice(afterOpen).match(/\n-{3,}/)
+    if (closeMatch) {
+      cleaned = cleaned.slice(afterOpen + closeMatch.index! + closeMatch[0].length).trim()
+    }
+    else {
+      cleaned = cleaned.slice(afterOpen).trim()
+    }
+  }
+
+  // Strip raw code preamble before first section marker (defense against LLMs dumping source)
+  // Section markers: ## heading, ⚠️ warning, ✅ best practice
+  const firstMarker = cleaned.match(/^(##\s|⚠️|✅)/m)
+  if (firstMarker?.index && firstMarker.index > 0) {
+    const preamble = cleaned.slice(0, firstMarker.index)
+    // Only strip if preamble looks like code (contains function/const/export/return patterns)
+    if (/\b(function|const |let |var |export |return |import |async |class )\b/.test(preamble)) {
+      cleaned = cleaned.slice(firstMarker.index).trim()
+    }
+  }
+
+  cleaned = sanitizeMarkdown(cleaned)
+
+  return cleaned
 }

@@ -1,4 +1,5 @@
-export { buildSkillPrompt } from './prompt'
+export type { CustomPrompt } from './optional'
+export { buildAllSectionPrompts, buildSectionPrompt, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from './prompt'
 export type { BuildSkillPromptOptions, SkillSection } from './prompt'
 export { generateSkillMd } from './skill'
 export type { SkillOptions } from './skill'

@@ -1,9 +1,29 @@
 /**
  * GitHub discussions fetching via gh CLI GraphQL
+ * Prioritizes Q&A and Help categories, includes accepted answers
  */
 
-import { execSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { isGhAvailable } from './issues'
+
+/** Categories most useful for skill generation (in priority order) */
+const HIGH_VALUE_CATEGORIES = new Set([
+  'q&a',
+  'help',
+  'troubleshooting',
+  'support',
+])
+
+const LOW_VALUE_CATEGORIES = new Set([
+  'show and tell',
+  'ideas',
+  'polls',
+])
+
+export interface DiscussionComment {
+  body: string
+  author: string
+}
 
 export interface GitHubDiscussion {
   number: number
@@ -14,10 +34,13 @@ export interface GitHubDiscussion {
   url: string
   upvoteCount: number
   comments: number
+  answer?: string
+  topComments: DiscussionComment[]
 }
 
 /**
- * Fetch last N discussions from a GitHub repo using gh CLI GraphQL
+ * Fetch discussions from a GitHub repo using gh CLI GraphQL.
+ * Prioritizes Q&A and Help categories. Includes accepted answer body for answered discussions.
  */
 export async function fetchGitHubDiscussions(
   owner: string,
@@ -28,12 +51,16 @@ export async function fetchGitHubDiscussions(
     return []
 
   try {
-    const query = `query { repository(owner: "${owner}", name: "${repo}") { discussions(first: ${Math.min(limit * 2, 50)}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number title body category { name } createdAt url upvoteCount comments { totalCount } author { login } } } } }`
+    // Fetch more to compensate for filtering
+    const fetchCount = Math.min(limit * 3, 80)
+    const query = `query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { discussions(first: ${fetchCount}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number title body category { name } createdAt url upvoteCount comments(first: 3) { totalCount nodes { body author { login } } } answer { body } author { login } } } } }`
 
-    const result = execSync(
-      `gh api graphql -f query='${query}'`,
-      { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 },
-    )
+    const { stdout: result } = spawnSync('gh', ['api', 'graphql', '-f', `query=${query}`, '-f', `owner=${owner}`, '-f', `repo=${repo}`], {
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+    })
+    if (!result)
+      return []
 
     const data = JSON.parse(result)
     const nodes = data?.data?.repository?.discussions?.nodes
@@ -42,9 +69,12 @@ export async function fetchGitHubDiscussions(
 
     const BOT_USERS = new Set(['renovate[bot]', 'dependabot[bot]', 'renovate-bot', 'dependabot', 'github-actions[bot]'])
 
-    return nodes
+    const discussions = nodes
       .filter((d: any) => d.author && !BOT_USERS.has(d.author.login))
-      .slice(0, limit)
+      .filter((d: any) => {
+        const cat = (d.category?.name || '').toLowerCase()
+        return !LOW_VALUE_CATEGORIES.has(cat)
+      })
       .map((d: any) => ({
         number: d.number,
         title: d.title,
@@ -54,7 +84,22 @@ export async function fetchGitHubDiscussions(
         url: d.url,
         upvoteCount: d.upvoteCount || 0,
         comments: d.comments?.totalCount || 0,
+        answer: d.answer?.body || undefined,
+        topComments: (d.comments?.nodes || [])
+          .filter((c: any) => c.author && !BOT_USERS.has(c.author.login))
+          .map((c: any) => ({ body: c.body || '', author: c.author.login })),
       }))
+      // Prioritize high-value categories, then sort by engagement
+      .sort((a: GitHubDiscussion, b: GitHubDiscussion) => {
+        const aHigh = HIGH_VALUE_CATEGORIES.has(a.category.toLowerCase()) ? 1 : 0
+        const bHigh = HIGH_VALUE_CATEGORIES.has(b.category.toLowerCase()) ? 1 : 0
+        if (aHigh !== bHigh)
+          return bHigh - aHigh
+        return (b.upvoteCount + b.comments) - (a.upvoteCount + a.comments)
+      })
+      .slice(0, limit)
+
+    return discussions
   }
   catch {
     return []
@@ -62,34 +107,94 @@ export async function fetchGitHubDiscussions(
 }
 
 /**
- * Format discussions as markdown for agent consumption
+ * Format a single discussion as markdown with YAML frontmatter
  */
-export function formatDiscussionsAsMarkdown(discussions: GitHubDiscussion[]): string {
-  if (discussions.length === 0)
-    return ''
+export function formatDiscussionAsMarkdown(d: GitHubDiscussion): string {
+  const fm = [
+    '---',
+    `number: ${d.number}`,
+    `title: "${d.title.replace(/"/g, '\\"')}"`,
+    `category: ${d.category}`,
+    `created: ${d.createdAt.split('T')[0]}`,
+    `url: ${d.url}`,
+    `upvotes: ${d.upvoteCount}`,
+    `comments: ${d.comments}`,
+    `answered: ${!!d.answer}`,
+    '---',
+  ]
 
-  const lines = ['# Recent Discussions\n']
+  const bodyLimit = d.upvoteCount >= 5 ? 1500 : 800
+  const lines = [fm.join('\n'), '', `# ${d.title}`]
 
-  for (const d of discussions) {
-    const meta = [
-      d.category && `Category: ${d.category}`,
-      `Created: ${d.createdAt.split('T')[0]}`,
-      d.upvoteCount > 0 && `Upvotes: ${d.upvoteCount}`,
-      d.comments > 0 && `Comments: ${d.comments}`,
-    ].filter(Boolean).join(' | ')
+  if (d.body) {
+    const body = d.body.length > bodyLimit
+      ? `${d.body.slice(0, bodyLimit)}...`
+      : d.body
+    lines.push('', body)
+  }
 
-    lines.push(`## #${d.number}: ${d.title}`)
-    lines.push(meta)
-    lines.push(`URL: ${d.url}\n`)
-
-    if (d.body) {
-      const body = d.body.length > 500
-        ? `${d.body.slice(0, 500)}...`
-        : d.body
-      lines.push(body)
+  if (d.answer) {
+    const answerLimit = 1000
+    const answer = d.answer.length > answerLimit
+      ? `${d.answer.slice(0, answerLimit)}...`
+      : d.answer
+    lines.push('', '---', '', '## Accepted Answer', '', answer)
+  }
+  else if (d.topComments.length > 0) {
+    // No accepted answer — include top comments as context
+    lines.push('', '---', '', '## Top Comments')
+    for (const c of d.topComments) {
+      const commentBody = c.body.length > 600
+        ? `${c.body.slice(0, 600)}...`
+        : c.body
+      lines.push('', `**@${c.author}:**`, '', commentBody)
     }
-    lines.push('\n---\n')
   }
 
   return lines.join('\n')
+}
+
+/**
+ * Generate a summary index of all discussions for quick LLM scanning.
+ * Groups by category so the LLM can quickly find Q&A vs general discussions.
+ */
+export function generateDiscussionIndex(discussions: GitHubDiscussion[]): string {
+  const byCategory = new Map<string, GitHubDiscussion[]>()
+  for (const d of discussions) {
+    const cat = d.category || 'Uncategorized'
+    const list = byCategory.get(cat) || []
+    list.push(d)
+    byCategory.set(cat, list)
+  }
+
+  const answered = discussions.filter(d => d.answer).length
+
+  const fm = [
+    '---',
+    `total: ${discussions.length}`,
+    `answered: ${answered}`,
+    '---',
+  ]
+
+  const sections: string[] = [fm.join('\n'), '', '# Discussions Index', '']
+
+  // Sort categories: high-value first
+  const cats = [...byCategory.keys()].sort((a, b) => {
+    const aHigh = HIGH_VALUE_CATEGORIES.has(a.toLowerCase()) ? 0 : 1
+    const bHigh = HIGH_VALUE_CATEGORIES.has(b.toLowerCase()) ? 0 : 1
+    return aHigh - bHigh || a.localeCompare(b)
+  })
+
+  for (const cat of cats) {
+    const group = byCategory.get(cat)!
+    sections.push(`## ${cat} (${group.length})`, '')
+    for (const d of group) {
+      const upvotes = d.upvoteCount > 0 ? ` (+${d.upvoteCount})` : ''
+      const answered = d.answer ? ' [answered]' : ''
+      sections.push(`- [#${d.number}](./discussion-${d.number}.md): ${d.title}${upvotes}${answered}`)
+    }
+    sections.push('')
+  }
+
+  return sections.join('\n')
 }

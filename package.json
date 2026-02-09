@@ -2,7 +2,7 @@
   "name": "skilld",
   "type": "module",
   "version": "0.1.2",
-  "packageManager": "pnpm@10.28.2",
+  "packageManager": "pnpm@10.29.2",
   "description": "Generate AI agent skills from npm package documentation",
   "author": {
     "name": "Harlan Wilton",
@@ -41,7 +41,7 @@
     "skills"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=22.6.0"
   },
   "scripts": {
     "build": "obuild",
@@ -63,11 +63,14 @@
     "globby": "catalog:deps",
     "log-update": "catalog:deps",
     "mlly": "catalog:deps",
+    "ofetch": "catalog:",
     "oxc-parser": "catalog:deps",
     "p-limit": "catalog:deps",
+    "pathe": "catalog:",
     "retriv": "catalog:deps",
     "sqlite-vec": "catalog:deps",
-    "typescript": "catalog:deps"
+    "typescript": "catalog:deps",
+    "unagent": "catalog:"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",

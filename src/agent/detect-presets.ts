@@ -5,7 +5,7 @@
 
 import type { PackageUsage } from './detect-imports'
 import { readFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join } from 'pathe'
 
 const NUXT_CONFIG_FILES = ['nuxt.config.ts', 'nuxt.config.js', 'nuxt.config.mjs']
 const NUXT_ECOSYSTEM = ['vue', 'nitro', 'h3']
@@ -31,11 +31,7 @@ export function extractModuleStrings(node: any): string[] {
   // Found a Property with key "modules" and an ArrayExpression value
   if (node.type === 'Property' && !node.computed
     && (node.key?.type === 'Identifier' && node.key.name === 'modules')
-    && node.value?.type === 'ArrayExpression') {
-    return node.value.elements
-      .filter((el: any) => el?.type === 'Literal' && typeof el.value === 'string')
-      .map((el: any) => el.value as string)
-  }
+    && node.value?.type === 'ArrayExpression') { return node.value.elements.filter((el: any) => el?.type === 'Literal' && typeof el.value === 'string').map((el: any) => el.value as string) }
 
   // Recurse into arrays and object values
   const results: string[] = []

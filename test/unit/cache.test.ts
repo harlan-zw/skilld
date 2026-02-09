@@ -7,6 +7,7 @@ vi.mock('node:fs', async () => {
   return {
     ...actual,
     existsSync: vi.fn(),
+    lstatSync: vi.fn(),
     mkdirSync: vi.fn(),
     writeFileSync: vi.fn(),
     readFileSync: vi.fn(),
@@ -130,9 +131,10 @@ describe('cache', () => {
     })
 
     it('removes existing link before creating new one', async () => {
-      const { existsSync, unlinkSync, symlinkSync } = await import('node:fs')
+      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
       const { linkReferences } = await import('../../src/cache')
       vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(lstatSync).mockReturnValue({ isSymbolicLink: () => true, isFile: () => false } as any)
 
       linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
 
@@ -141,11 +143,12 @@ describe('cache', () => {
     })
 
     it('creates symlink without unlinking if no existing link', async () => {
-      const { existsSync, unlinkSync, symlinkSync } = await import('node:fs')
+      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
       const { linkReferences } = await import('../../src/cache')
-      // First call: docsLinkPath doesn't exist (skip unlink)
-      // Second call: cachedDocsPath exists (create symlink)
-      vi.mocked(existsSync).mockReturnValueOnce(false).mockReturnValueOnce(true)
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(lstatSync).mockImplementation(() => {
+        throw new Error('ENOENT')
+      })
 
       linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
 

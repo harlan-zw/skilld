@@ -17,7 +17,7 @@ Agents already know how most packages work from training data. Skills should foc
 skilld generates skills from the package's *actual* documentation using your existing agent. Works with any public npm package, no author opt-in needed.
 
 ```
-npm install vueuse → skilld vueuse → AI knows current vueuse API
+npm install vueuse → skilld add vueuse → AI knows current vueuse API
 ```
 
 Compatible with [skills-npm](https://github.com/antfu/skills-npm)—if a package ships a `skills/` directory, skilld uses it directly. Generation is the fallback.
@@ -38,6 +38,7 @@ Compatible with [skills-npm](https://github.com/antfu/skills-npm)—if a package
 - 🎯 **Best practices first** - Token-optimized output focused on non-obvious patterns and conventions, not generic knowledge
 - 🔗 **Context-aware** - Generation adapts to your preferences and accepts custom prompts
 - ✏️ **You own it** - Skills live in your project, easy to customize; sync new package versions with zero config
+- 🛡️ **Sanitized content** - All fetched markdown is sanitized against known injection patterns (zero-width chars, HTML injection, entity encoding, directive lines) before reaching your agent
 - 🚀 **Zero friction** - Works with any public npm package, no author opt-in; respects `llms.txt` and shipped `skills/` when available
 
 ## Installation
@@ -66,21 +67,25 @@ skilld fast-paths unchanged versions—only regenerates when minor/major version
 # Interactive mode — auto-discover from package.json
 skilld
 
-# Sync specific package(s)
-skilld vueuse
-skilld vue,nuxt,pinia
+# Add skills for specific package(s)
+skilld add vueuse
+skilld add vue nuxt pinia
+
+# Update outdated skills
+skilld update
+skilld update vue
 
 # Search docs across installed skills
-skilld nuxt -q "useFetch options"
+skilld search "useFetch options" -p nuxt
 
 # Target a specific agent
-skilld vueuse --agent cursor
+skilld add vueuse --agent cursor
 
 # Install globally to ~/.claude/skills
-skilld vueuse --global
+skilld add vueuse --global
 
 # Skip prompts
-skilld vueuse --yes
+skilld add vueuse --yes
 
 # Check skill status
 skilld status
@@ -94,7 +99,9 @@ skilld config
 | Command | Description |
 |---------|-------------|
 | `skilld` | Interactive wizard (first run) or status menu (existing skills) |
-| `skilld <pkg>` | Sync specific package(s), comma-separated |
+| `skilld add <pkg...>` | Add skills for package(s), space or comma-separated |
+| `skilld update [pkg]` | Update outdated skills (all or specific) |
+| `skilld search <query>` | Search indexed docs (`-p` to filter by package) |
 | `skilld status` | Show skill status across agents |
 | `skilld config` | Configure agent, model, preferences |
 | `skilld install` | Restore references from lockfile |
@@ -105,10 +112,10 @@ skilld config
 
 | Option | Alias | Default | Description |
 |--------|-------|---------|-------------|
-| `--query` | `-q` | | Search docs: `skilld nuxt -q "useFetch"` |
 | `--global` | `-g` | `false` | Install globally to `~/<agent>/skills` |
 | `--agent` | `-a` | auto-detect | Target specific agent (claude-code, cursor, etc.) |
 | `--yes` | `-y` | `false` | Skip prompts, use defaults |
+| `--force` | `-f` | `false` | Ignore all caches, re-fetch docs and regenerate |
 | `--prepare` | | `false` | Non-interactive sync for prepare hook (outdated only) |
 | `--background` | `-b` | `false` | Run `--prepare` in a detached background process |
 
@@ -132,12 +139,16 @@ Skills install to each detected agent's skill directory. References are cached g
 
 ```
 .claude/skills/vueuse/
-└── SKILL.md                    # Project-specific, adapts to your conventions
+├── SKILL.md                    # Project-specific, adapts to your conventions
+└── .skilld/                    # Gitignored, recreated by `skilld install`
+    ├── pkg -> node_modules/vueuse
+    └── docs -> ~/.skilld/references/vueuse@10.9.0/docs
 
 ~/.skilld/references/
 └── vueuse@10.9.0/              # Global cache, static docs
-    ├── chunks/
-    └── search.db
+    ├── docs/
+    ├── issues/
+    └── discussions/
 ```
 
 SKILL.md is regenerated per-project (different conventions), but references stay static (same package docs). Version frontmatter enables sync:
@@ -165,16 +176,6 @@ On first run, skilld launches a wizard to configure your agent and model, then l
 - **Manual entry** — comma-separated package names
 
 Skips `@types/*` and common dev tools (typescript, eslint, vitest, etc).
-
-## Roadmap
-
-- [ ] **Team sync** - SKILL.md files commit with version frontmatter; `skilld sync` hydrates references from global cache
-- [ ] **Community skills repo** - Pull pre-generated skills from `skilld-community/skills` before generating; `skilld --share` to submit PRs
-- [ ] **Migration docs** - Generate upgrade guides when re-running after major version bumps
-- [ ] **MCP server mode** - Expose search as tool for Claude Code real-time doc lookups
-- [ ] **Eval command** - Validate skill quality against known patterns and usage
-- [ ] **CI integration** - GitHub Action to auto-regenerate skills on dependency updates
-- [ ] **Smart presets** - Auto-detect recommended packages from project config (nuxt.config.ts → nuxt, vue, nitro, h3)
 
 ## Shipped Skills (skills-npm)
 

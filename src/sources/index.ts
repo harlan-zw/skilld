@@ -7,7 +7,8 @@ export type { GitHubDiscussion } from './discussions'
 
 export {
   fetchGitHubDiscussions,
-  formatDiscussionsAsMarkdown,
+  formatDiscussionAsMarkdown,
+  generateDiscussionIndex,
 } from './discussions'
 // Entries
 export type { EntryFile } from './entries'
@@ -21,13 +22,17 @@ export {
   fetchGitHubRepoMeta,
   fetchReadme,
   fetchReadmeContent,
+  isShallowGitDocs,
+  MIN_GIT_DOCS,
+  validateGitDocsWithLlms,
 } from './github'
 // Issues
 export type { GitHubIssue } from './issues'
 
 export {
   fetchGitHubIssues,
-  formatIssuesAsMarkdown,
+  formatIssueAsMarkdown,
+  generateIssueIndex,
   isGhAvailable,
 } from './issues'
 
@@ -56,6 +61,7 @@ export {
   resolveLocalPackageDocs,
   resolvePackageDocs,
   resolvePackageDocsWithAttempts,
+  searchNpmPackages,
 } from './npm'
 
 // Overrides
@@ -64,7 +70,7 @@ export { DOC_OVERRIDES, getDocOverride } from './overrides'
 
 // Releases
 export type { GitHubRelease } from './releases'
-export { fetchReleaseNotes } from './releases'
+export { fetchReleaseNotes, generateReleaseIndex } from './releases'
 // Types
 export type {
   FetchedDoc,
@@ -79,6 +85,7 @@ export type {
 
 // Utils
 export {
+  $fetch,
   extractBranchHint,
   fetchText,
   isGitHubRepoUrl,
