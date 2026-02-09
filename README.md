@@ -20,7 +20,7 @@ While these are great for generic skills, they aren't good for NPM skills:
 - Non-optimized context windows, prompt injection risks
 - Community-sourced skills leak personal opinions and biases. Maintainers are out of the loop, and may not even know about them.
 
-Skilld super-charges maintainers' efforts. They write us great docs, release notes and GitHub comments. We generate our own local skills optimized for our models and codebase from them.
+Skilld leverages maintainers existing effort. Maintainers write great docs for us, we generate our own local skills optimized for our models and codebase from them.
 
 <p align="center">
 <table>
