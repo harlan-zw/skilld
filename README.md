@@ -11,16 +11,16 @@
 Agents suck at following latest conventions beyond their [reliable knowledge cut-off](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison). They shoot themselves in the foot
 with new APIs and conventions, and they don't know what they don't know.
 
-Agent Skills help us solve this by distilling the most important patterns and conventions for a package into a single SKILL.md file. 
+Agent Skills help us solve this by distilling the most important patterns and conventions for a package into a single SKILL.md file.
 Getting skills for our packages either involves the maintainer (or ourselves) taking on the maintenance burden and surfacing them or using skill sharing
-sites like [shills.sh](https://shills.sh/).
+sites like [skills.sh](https://skills.sh/).
 
 While these are great for generic skills, they aren't good for NPM skills:
 - No version-awareness, high maintenance burden to keep up with new releases and deprecations
 - Non-optimized context windows, prompt injection risks
-- Community sourced skills leak personal opinions and biases. Maintainers are out of the loop, and may not even know about them.
+- Community-sourced skills leak personal opinions and biases. Maintainers are out of the loop, and may not even know about them.
 
-Skilld super-charges maintainers efforts. They write us great docs, release notes and GitHub comments. We generate our own local skills optimized for our models and code base from them.
+Skilld super-charges maintainers' efforts. They write us great docs, release notes and GitHub comments. We generate our own local skills optimized for our models and codebase from them.
 
 <p align="center">
 <table>
@@ -34,7 +34,7 @@ Skilld super-charges maintainers efforts. They write us great docs, release note
 
 ## Features
 
-- 🌍 **Any NPM Package**: Sources GitHub repo, doc soures, releases, issues, discussions and more
+- 🌍 **Any NPM Package**: Sources GitHub repo, doc sources, releases, issues, discussions and more
 - 🤖 **BYO Agent, or don't**: Generate SKILL.md for your key dependencies from sources (with or without an LLM)
 - 📚 **SKILL.md your way**: Optional `Best practices`, `LLM Gaps`, `Doc Map` sections; or write your own prompts
 - 🔍 **Token Optimized Search**: Semantic + token search with [retriv](https://github.com/harlan-zw/retriv)
@@ -49,7 +49,7 @@ Run skilld in a project to generate skills for your dependencies through a simpl
 npx skilld
 ```
 
-If you need to re-configure skilld just run `npx skilld config` to update your agent, model, or preferences.
+If you need to re-configure skilld, just run `npx skilld config` to update your agent, model, or preferences.
 
 ## Installation
 
