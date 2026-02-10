@@ -6,6 +6,7 @@ import { agents } from '../agent'
 import { CACHE_DIR } from '../cache'
 import { getRegisteredProjects, unregisterProject } from '../core/config'
 import { readLock } from '../core/lockfile'
+import { SHARED_SKILLS_DIR } from '../core/shared'
 
 export interface UninstallOptions {
   scope?: 'project' | 'all'
@@ -109,6 +110,10 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
 
   // Project skills
   if (scope === 'project') {
+    // Shared dir
+    const sharedDir = join(process.cwd(), SHARED_SKILLS_DIR)
+    if (existsSync(sharedDir))
+      processSkillsDir(sharedDir, 'project (.skills)')
     for (const [name, agent] of Object.entries(agents)) {
       if (agentFilter && !agentFilter.includes(name as AgentType))
         continue
@@ -135,6 +140,11 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
         continue
 
       const shortPath = projectPath.replace(process.env.HOME || '', '~')
+
+      // Shared dir
+      const sharedDir = join(projectPath, SHARED_SKILLS_DIR)
+      if (existsSync(sharedDir))
+        processSkillsDir(sharedDir, `${shortPath} (.skills)`)
 
       for (const [name, agent] of Object.entries(agents)) {
         if (agentFilter && !agentFilter.includes(name as AgentType))

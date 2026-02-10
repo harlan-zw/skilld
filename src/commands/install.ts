@@ -15,7 +15,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSy
 import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
 import { join } from 'pathe'
-import { agents, getModelLabel, optimizeDocs } from '../agent'
+import { agents, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent'
 import { generateSkillMd } from '../agent/prompts/skill'
 import {
   hasShippedDocs as checkShippedDocs,
@@ -34,6 +34,7 @@ import {
 import { readConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile'
+import { getSharedSkillsDir } from '../core/shared'
 import { createIndex } from '../retriv'
 import {
   $fetch,
@@ -57,14 +58,18 @@ export interface InstallOptions {
 export async function installCommand(opts: InstallOptions): Promise<void> {
   const cwd = process.cwd()
   const agent = agents[opts.agent]
+  const shared = !opts.global && getSharedSkillsDir(cwd)
   const skillsDir = opts.global
     ? join(homedir(), '.skilld', 'skills')
-    : join(cwd, agent.skillsDir)
+    : shared || join(cwd, agent.skillsDir)
 
   // Collect lockfiles from all agent skill dirs and merge
-  const allSkillsDirs = Object.values(agents).map(t =>
-    opts.global ? t.globalSkillsDir : join(cwd, t.skillsDir),
-  )
+  // In shared mode, read from .skills/ only
+  const allSkillsDirs = shared
+    ? [shared]
+    : Object.values(agents).map(t =>
+        opts.global ? t.globalSkillsDir : join(cwd, t.skillsDir),
+      )
   const allLocks = allSkillsDirs
     .map(dir => readLock(dir))
     .filter((l): l is NonNullable<typeof l> => !!l && Object.keys(l.skills).length > 0)
@@ -375,7 +380,15 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   // Write merged lockfile to target dir and sync to all other existing lockfiles
   for (const [name, info] of Object.entries(lock.skills))
     writeLock(skillsDir, name, info)
-  syncLockfilesToDirs(lock, allSkillsDirs.filter(d => d !== skillsDir))
+
+  // In shared mode: recreate per-agent symlinks, skip per-agent lockfile sync
+  if (shared) {
+    for (const [name] of skills)
+      linkSkillToAgents(name, shared, cwd)
+  }
+  else {
+    syncLockfilesToDirs(lock, allSkillsDirs.filter(d => d !== skillsDir))
+  }
 
   const { shutdownWorker } = await import('../retriv/pool')
   await shutdownWorker()

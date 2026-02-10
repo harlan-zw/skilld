@@ -3,8 +3,8 @@
  */
 
 import type { AgentType } from './types'
-import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'pathe'
+import { existsSync, lstatSync, mkdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { join, relative } from 'pathe'
 import { repairMarkdown, sanitizeMarkdown } from '../core/sanitize'
 import { detectInstalledAgents } from './detect'
 import { agents } from './registry'
@@ -91,4 +91,60 @@ export function installSkillForAgents(
   }
 
   return { installed, paths }
+}
+
+/**
+ * Create relative symlinks from each detected agent's skills dir to the shared .skills/ dir.
+ * Only targets agents whose config dir already exists in the project.
+ * Replaces existing symlinks, skips real directories (user's custom skills).
+ */
+export function linkSkillToAgents(skillName: string, sharedDir: string, cwd: string): void {
+  for (const [, agent] of Object.entries(agents)) {
+    const agentSkillsDir = join(cwd, agent.skillsDir)
+
+    // Only link if the agent's parent config dir exists (e.g. .claude/, .cursor/)
+    const agentConfigDir = join(cwd, agent.skillsDir.split('/')[0]!)
+    if (!existsSync(agentConfigDir))
+      continue
+
+    const target = join(agentSkillsDir, skillName)
+
+    // Check what's at the target path
+    let isSymlink = false
+    let targetExists = false
+    try {
+      const stat = lstatSync(target)
+      targetExists = true
+      isSymlink = stat.isSymbolicLink()
+    }
+    catch {}
+
+    // Skip real directories (user's custom skills, not managed by us)
+    if (targetExists && !isSymlink)
+      continue
+
+    // Remove existing symlink (including dangling)
+    if (isSymlink)
+      unlinkSync(target)
+
+    mkdirSync(agentSkillsDir, { recursive: true })
+
+    const source = join(sharedDir, skillName)
+    const rel = relative(agentSkillsDir, source)
+    symlinkSync(rel, target)
+  }
+}
+
+/**
+ * Remove per-agent symlinks for a skill when removing from shared dir.
+ */
+export function unlinkSkillFromAgents(skillName: string, cwd: string): void {
+  for (const [, agent] of Object.entries(agents)) {
+    const target = join(cwd, agent.skillsDir, skillName)
+    try {
+      if (lstatSync(target).isSymbolicLink())
+        unlinkSync(target)
+    }
+    catch {}
+  }
 }

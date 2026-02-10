@@ -11,6 +11,7 @@ import {
 
   generateSkillMd,
   getModelLabel,
+  linkSkillToAgents,
   optimizeDocs,
 
 } from '../agent'
@@ -27,6 +28,7 @@ import {
 import { defaultFeatures, readConfig, registerProject } from '../core/config'
 import { formatDuration } from '../core/formatting'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
+import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared'
 import {
   fetchPkgDist,
   readLocalDependencies,
@@ -230,7 +232,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     }
   }
 
-  await ensureGitignore(agent.skillsDir, cwd, config.global)
+  const parallelShared = getSharedSkillsDir(cwd)
+  await ensureGitignore(parallelShared ? SHARED_SKILLS_DIR : agent.skillsDir, cwd, config.global)
 
   const { shutdownWorker } = await import('../retriv/pool')
   await shutdownWorker()
@@ -293,6 +296,11 @@ async function syncBaseSkill(
   // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
   const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global)
   if (shippedResult) {
+    const shared = !config.global && getSharedSkillsDir(cwd)
+    if (shared) {
+      for (const shipped of shippedResult.shipped)
+        linkSkillToAgents(shipped.skillName, shared, cwd)
+    }
     update(packageName, 'done', 'Published SKILL.md', versionKey)
     return 'shipped'
   }
@@ -387,6 +395,11 @@ async function syncBaseSkill(
     repoUrl: resolved.repoUrl,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+
+  // Link shared dir to per-agent dirs
+  const shared = !config.global && getSharedSkillsDir(cwd)
+  if (shared)
+    linkSkillToAgents(skillDirName, shared, cwd)
 
   if (!config.global) {
     registerProject(cwd)

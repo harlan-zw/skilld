@@ -2,7 +2,9 @@ import type { AgentType } from '../agent'
 import type { ProjectState, SkillEntry } from '../core/skills'
 import { existsSync, rmSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { unlinkSkillFromAgents } from '../agent'
 import { removeLockEntry } from '../core/lockfile'
+import { getSharedSkillsDir } from '../core/shared'
 import { getSkillsDir, iterateSkills } from '../core/skills'
 
 export interface RemoveOptions {
@@ -40,12 +42,17 @@ export async function removeCommand(state: ProjectState, opts: RemoveOptions): P
   }
 
   // Delete each skill
+  const cwd = process.cwd()
+  const shared = getSharedSkillsDir(cwd)
   for (const skill of skills) {
     const skillsDir = getSkillsDir(skill.agent, skill.scope)
 
     if (existsSync(skill.dir)) {
       rmSync(skill.dir, { recursive: true, force: true })
       removeLockEntry(skillsDir, skill.name)
+      // Clean up per-agent symlinks when removing from shared dir
+      if (shared && skill.scope === 'local')
+        unlinkSkillFromAgents(skill.name, cwd)
       p.log.success(`Removed ${skill.name}`)
     }
     else {

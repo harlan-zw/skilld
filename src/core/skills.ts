@@ -5,6 +5,7 @@ import { join } from 'pathe'
 import { agents } from '../agent'
 import { readLocalDependencies } from '../sources'
 import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile'
+import { getSharedSkillsDir } from './shared'
 
 export interface SkillEntry {
   name: string
@@ -38,11 +39,35 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
   const { scope = 'all', cwd = process.cwd() } = opts
   const agentTypes = opts.agents ?? (Object.keys(agents) as AgentType[])
 
+  // When shared dir exists, read local skills from there (avoid duplicates from agent symlinks)
+  const sharedDir = getSharedSkillsDir(cwd)
+  let yieldedLocal = false
+
+  if (sharedDir && (scope === 'local' || scope === 'all')) {
+    yieldedLocal = true
+    const lock = readLock(sharedDir)
+    const entries = readdirSync(sharedDir).filter(f => !f.startsWith('.') && f !== 'skilld-lock.yaml')
+    // Use first detected agent as the representative
+    const firstAgent = agentTypes[0] ?? (Object.keys(agents) as AgentType[])[0]!
+    for (const name of entries) {
+      const dir = join(sharedDir, name)
+      if (lock?.skills[name]) {
+        yield { name, dir, agent: firstAgent, info: lock.skills[name], scope: 'local' }
+      }
+      else {
+        const info = parseSkillFrontmatter(join(dir, '.skilld', '_SKILL.md'))
+        if (info?.generator === 'skilld') {
+          yield { name, dir, agent: firstAgent, info, scope: 'local' }
+        }
+      }
+    }
+  }
+
   for (const agentType of agentTypes) {
     const agent = agents[agentType]
 
-    // Local skills
-    if (scope === 'local' || scope === 'all') {
+    // Local skills (skip if already yielded from shared dir)
+    if (!yieldedLocal && (scope === 'local' || scope === 'all')) {
       const localDir = join(cwd, agent.skillsDir)
       if (existsSync(localDir)) {
         const lock = readLock(localDir)
@@ -155,5 +180,5 @@ export function getSkillsDir(agent: AgentType, scope: 'local' | 'global', cwd: s
     }
     return agentConfig.globalSkillsDir
   }
-  return join(cwd, agentConfig.skillsDir)
+  return getSharedSkillsDir(cwd) || join(cwd, agentConfig.skillsDir)
 }

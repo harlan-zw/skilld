@@ -10,6 +10,7 @@ import { defaultFeatures, hasConfig, readConfig } from '../core/config'
 import { formatSource, timeAgo } from '../core/formatting'
 import { parsePackages } from '../core/lockfile'
 
+import { getSharedSkillsDir } from '../core/shared'
 import { iterateSkills } from '../core/skills'
 import { version as skilldVersion } from '../version'
 
@@ -124,6 +125,9 @@ function buildConfigLines(): string[] {
   const lastSynced = getLastSynced()
   if (lastSynced)
     lines.push(`Synced    ${dim(lastSynced)}`)
+  const shared = getSharedSkillsDir()
+  if (shared)
+    lines.push(`Shared    ${dim(shared)}`)
   lines.push(`Config    ${dim(join(CACHE_DIR, 'config.yaml'))}${hasConfig() ? '' : dim(' (not created)')}`)
   lines.push(`Cache     ${dim(CACHE_DIR)}`)
 

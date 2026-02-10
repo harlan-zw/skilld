@@ -5,19 +5,36 @@ import { detectCurrentAgent } from 'unagent/env'
 import { agents, detectTargetAgent } from '../agent'
 import { getPackageDbPath } from '../cache'
 import { formatSnippet, readLock, sanitizeMarkdown } from '../core'
+import { getSharedSkillsDir } from '../core/shared'
 import { searchSnippets } from '../retriv'
 
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
 export function findPackageDbs(packageFilter?: string): string[] {
+  const cwd = process.cwd()
+
+  // Try shared dir first
+  const shared = getSharedSkillsDir(cwd)
+  if (shared) {
+    const lock = readLock(shared)
+    if (lock)
+      return filterLockDbs(lock, packageFilter)
+  }
+
   const agent = detectTargetAgent()
   if (!agent)
     return []
 
-  const skillsDir = `${process.cwd()}/${agents[agent].skillsDir}`
+  const skillsDir = `${cwd}/${agents[agent].skillsDir}`
   const lock = readLock(skillsDir)
   if (!lock)
     return []
 
+  return filterLockDbs(lock, packageFilter)
+}
+
+function filterLockDbs(lock: ReturnType<typeof readLock>, packageFilter?: string): string[] {
+  if (!lock)
+    return []
   const normalize = (s: string) => s.toLowerCase().replace(/[-_@/]/g, '')
 
   return Object.values(lock.skills)

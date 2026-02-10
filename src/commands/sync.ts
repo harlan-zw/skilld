@@ -12,6 +12,7 @@ import {
   generateSkillMd,
   getAvailableModels,
   getModelLabel,
+  linkSkillToAgents,
   optimizeDocs,
 } from '../agent'
 import {
@@ -27,6 +28,7 @@ import {
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
+import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared'
 import {
   fetchPkgDist,
   readLocalDependencies,
@@ -430,7 +432,10 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
   const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global)
   if (shippedResult) {
+    const shared = !config.global && getSharedSkillsDir(cwd)
     for (const shipped of shippedResult.shipped) {
+      if (shared)
+        linkSkillToAgents(shipped.skillName, shared, cwd)
       p.log.success(`Using published SKILL.md: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
     }
     spin.stop(`Using published SKILL.md(s) from ${packageName}`)
@@ -494,6 +499,10 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
       packages: allPackages,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+
+    const mergeShared = !config.global && getSharedSkillsDir(cwd)
+    if (mergeShared)
+      linkSkillToAgents(skillDirName, mergeShared, cwd)
 
     if (!config.global)
       registerProject(cwd)
@@ -623,12 +632,17 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     }
   }
 
+  // Link shared dir to per-agent dirs
+  const shared = !config.global && getSharedSkillsDir(cwd)
+  if (shared)
+    linkSkillToAgents(skillDirName, shared, cwd)
+
   // Register project in global config (for uninstall tracking)
   if (!config.global) {
     registerProject(cwd)
   }
 
-  await ensureGitignore(agents[config.agent].skillsDir, cwd, config.global)
+  await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[config.agent].skillsDir, cwd, config.global)
 
   const { shutdownWorker } = await import('../retriv/pool')
   await shutdownWorker()

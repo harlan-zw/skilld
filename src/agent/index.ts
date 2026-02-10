@@ -20,7 +20,7 @@ export { detectInstalledAgents, detectTargetAgent, getAgentVersion } from './det
 export { detectImportedPackages } from './detect-imports'
 
 // Installation
-export { computeSkillDirName, installSkillForAgents, sanitizeName } from './install'
+export { computeSkillDirName, installSkillForAgents, linkSkillToAgents, sanitizeName, unlinkSkillFromAgents } from './install'
 
 // Skill generation
 export { generateSkillMd } from './prompts'

@@ -22,6 +22,7 @@ import {
 import { defaultFeatures, readConfig, registerProject } from '../core/config'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
 import { sanitizeMarkdown } from '../core/sanitize'
+import { getSharedSkillsDir } from '../core/shared'
 import { createIndex } from '../retriv'
 import {
   $fetch,
@@ -175,10 +176,11 @@ export function handleShippedSkills(
   if (shippedSkills.length === 0)
     return null
 
+  const shared = getSharedSkillsDir(cwd)
   const agentConfig = agents[agent]
   const baseDir = global
     ? join(CACHE_DIR, 'skills')
-    : join(cwd, agentConfig.skillsDir)
+    : shared || join(cwd, agentConfig.skillsDir)
   mkdirSync(baseDir, { recursive: true })
 
   for (const shipped of shippedSkills) {
@@ -200,10 +202,13 @@ export function handleShippedSkills(
 
 /** Resolve the base skills directory for an agent */
 export function resolveBaseDir(cwd: string, agent: AgentType, global: boolean): string {
+  if (global)
+    return join(CACHE_DIR, 'skills')
+  const shared = getSharedSkillsDir(cwd)
+  if (shared)
+    return shared
   const agentConfig = agents[agent]
-  return global
-    ? join(CACHE_DIR, 'skills')
-    : join(cwd, agentConfig.skillsDir)
+  return join(cwd, agentConfig.skillsDir)
 }
 
 /** Try resolving a `link:` dependency to local package docs. Returns null if not a link dep or resolution fails. */
