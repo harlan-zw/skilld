@@ -40,7 +40,7 @@ every update. Always use the latest best practices and avoid deprecated patterns
 - 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best practices`, `LLM Gaps`, `Doc Map`, or your own prompts
 - 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
 - 🎯 **Safe & Versioned** - Prompt injection sanitization, version-aware caching, auto-updates on new releases
-- 🤝 **Ecosystem** - [skills-npm](https://github.com/antfu/skills-npm) first-party skills and `/llms.txt` discovery
+- 🤝 **Ecosystem** - Compatible with [`npx skills`](https://skills.sh/) and [skills-npm](https://github.com/antfu/skills-npm)
 
 ## Quick Start
 
