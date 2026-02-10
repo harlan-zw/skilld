@@ -102,9 +102,16 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
 
   return `**IMPORTANT:** Use these references
 
-| Resource | Command |
-|----------|---------|
-| Search all | \`Bash 'npx skilld search "<query>" -p ${packageName}'\` |
+## Search
+
+Use \`npx -y skilld search\` as your primary research tool — search before manually reading files. Hybrid semantic + keyword search across all indexed docs, issues, and releases.
+
+\`\`\`bash
+npx -y skilld search "<query>" -p ${packageName}
+${hasIssues ? `npx -y skilld search "issues:<query>" -p ${packageName}\n` : ''}${hasReleases ? `npx -y skilld search "releases:<query>" -p ${packageName}\n` : ''}\`\`\`
+
+Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.
+
 ${table}`
 }
 
