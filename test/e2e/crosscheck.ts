@@ -114,7 +114,7 @@ async function collectRow(spec: PackageSpec): Promise<CrosscheckRow> {
   // skill
   const fm = parseFrontmatter(result.skillMd)
   row.skillValid = !!fm.name && !!fm.description
-  row.globs = fm.globs || null
+  row.globs = null
   row.version = result.version
   row.releasedAt = fm.releasedAt || null
 

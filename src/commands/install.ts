@@ -32,7 +32,7 @@ import {
 } from '../cache'
 import { readConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
-import { parsePackages, readLock } from '../core/lockfile'
+import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile'
 import { createIndex } from '../retriv'
 import {
   $fetch,
@@ -61,7 +61,27 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     ? join(require('node:os').homedir(), '.skilld', 'skills')
     : join(cwd, agent.skillsDir)
 
-  const lock = readLock(skillsDir)
+  let lock = readLock(skillsDir)
+
+  // Fallback: if no lockfile in target agent dir, try other agents' skill dirs
+  let usedFallbackLock = false
+  if (!lock || Object.keys(lock.skills).length === 0) {
+    for (const target of Object.values(agents)) {
+      if (target.agent === opts.agent)
+        continue
+      const fallbackDir = opts.global
+        ? target.globalSkillsDir
+        : join(cwd, target.skillsDir)
+      const fallbackLock = readLock(fallbackDir)
+      if (fallbackLock && Object.keys(fallbackLock.skills).length > 0) {
+        p.log.info(`Using lockfile from ${target.displayName}`)
+        lock = fallbackLock
+        usedFallbackLock = true
+        break
+      }
+    }
+  }
+
   if (!lock || Object.keys(lock.skills).length === 0) {
     p.log.warn('No skilld-lock.yaml found. Run `skilld` to sync skills first.')
     return
@@ -326,6 +346,12 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         await enhanceRegenerated(pkgName, version, skillDir, llmConfig.model, llmConfig.sections, llmConfig.customPrompt, pkgPackages)
       }
     }
+  }
+
+  // Copy lockfile entries to target agent dir when using fallback
+  if (usedFallbackLock && lock) {
+    for (const [name, info] of Object.entries(lock.skills))
+      writeLock(skillsDir, name, info)
   }
 
   const { shutdownWorker } = await import('../retriv/pool')

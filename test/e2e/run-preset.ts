@@ -197,8 +197,7 @@ export function describePreset(presetName: Preset) {
             const r = get()
             const fm = parseFrontmatter(r.skillMd)
             const expectedDirName = computeSkillDirName(pkg.name, r.resolved.repoUrl)
-            expect(fm.name).toBe(`${expectedDirName}-skilld`)
-            expect(fm.version).toBeTruthy()
+            expect(fm.name).toBe(expectedDirName)
             expect(fm.description).toBeTruthy()
           })
 
@@ -206,13 +205,6 @@ export function describePreset(presetName: Preset) {
             const fm = parseFrontmatter(get().skillMd)
             expect(fm.description).toContain(pkg.expectDescriptionContains)
           })
-
-          if (pkg.expectGlobs) {
-            it(`globs → ${JSON.stringify(pkg.expectGlobs)}`, () => {
-              const fm = parseFrontmatter(get().skillMd)
-              expect(fm.globs).toBe(JSON.stringify(pkg.expectGlobs))
-            })
-          }
         }
 
         // ── Search index (skip for shipped packages, skip in CI — ONNX model unreliable) ──

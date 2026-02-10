@@ -38,8 +38,6 @@ export interface PackageSpec {
   minCacheDocs: number
 
   // ── SKILL.md expectations ──
-  /** Expected globs from FILE_PATTERN_MAP (undefined = none) */
-  expectGlobs?: string[]
   /** Expected description pattern — either glob-based or import-based */
   expectDescriptionContains: string
 
@@ -176,7 +174,6 @@ export const PACKAGES: PackageSpec[] = [
       'src/style-guide/rules-essential.md',
     ],
     minCacheDocs: 50,
-    expectGlobs: ['*.vue'],
     expectDescriptionContains: '"vue"',
     searchQuery: { query: 'reactivity', minHits: 1 },
   },

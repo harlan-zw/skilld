@@ -51,6 +51,12 @@ npx skilld
 
 If you need to re-configure skilld, just run `npx skilld config` to update your agent, model, or preferences.
 
+### Tips
+
+- **Be selective** — only add skills for packages your agent already struggles with or that you're actively debugging. Not every dependency needs a skill.
+- **LLM enhancement is optional** — skilld generates a useful SKILL.md without any LLM, but enhancing with one makes them significantly better. This costs tokens, so be mindful.
+- **Multi-agent support** — if you switch between agents (e.g. Claude Code and Gemini CLI), run `skilld install --agent gemini-cli` to sync your existing skills to the other agent. The doc cache is shared, so nothing is re-downloaded.
+
 ## Installation
 
 If you'd like to install skilld and track the lock file references, add it as a dev dependency:

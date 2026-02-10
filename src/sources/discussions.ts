@@ -4,6 +4,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { BOT_USERS, buildFrontmatter, isoDate } from './github-common'
 import { isGhAvailable } from './issues'
 
 /** Categories most useful for skill generation (in priority order) */
@@ -67,8 +68,6 @@ export async function fetchGitHubDiscussions(
     if (!Array.isArray(nodes))
       return []
 
-    const BOT_USERS = new Set(['renovate[bot]', 'dependabot[bot]', 'renovate-bot', 'dependabot', 'github-actions[bot]'])
-
     const discussions = nodes
       .filter((d: any) => d.author && !BOT_USERS.has(d.author.login))
       .filter((d: any) => {
@@ -110,21 +109,19 @@ export async function fetchGitHubDiscussions(
  * Format a single discussion as markdown with YAML frontmatter
  */
 export function formatDiscussionAsMarkdown(d: GitHubDiscussion): string {
-  const fm = [
-    '---',
-    `number: ${d.number}`,
-    `title: "${d.title.replace(/"/g, '\\"')}"`,
-    `category: ${d.category}`,
-    `created: ${d.createdAt.split('T')[0]}`,
-    `url: ${d.url}`,
-    `upvotes: ${d.upvoteCount}`,
-    `comments: ${d.comments}`,
-    `answered: ${!!d.answer}`,
-    '---',
-  ]
+  const fm = buildFrontmatter({
+    number: d.number,
+    title: d.title,
+    category: d.category,
+    created: isoDate(d.createdAt),
+    url: d.url,
+    upvotes: d.upvoteCount,
+    comments: d.comments,
+    answered: !!d.answer,
+  })
 
   const bodyLimit = d.upvoteCount >= 5 ? 1500 : 800
-  const lines = [fm.join('\n'), '', `# ${d.title}`]
+  const lines = [fm, '', `# ${d.title}`]
 
   if (d.body) {
     const body = d.body.length > bodyLimit

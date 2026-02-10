@@ -13,8 +13,10 @@ describe('agent/skill', () => {
       })
 
       expect(result).toContain('---')
-      expect(result).toContain('name: vue-skilld')
-      expect(result).toContain('version: 3.4.0')
+      expect(result).toContain('name: vue')
+      expect(result).not.toContain('name: vue-skilld')
+      expect(result).toContain('metadata:')
+      expect(result).toContain('  version: 3.4.0')
       expect(result).toContain('Using code importing from \\"vue\\" or working with *.vue files. Researching or debugging vue. (Progressive JavaScript framework)')
       expect(result).toContain('# Vue')
     })
@@ -27,7 +29,8 @@ describe('agent/skill', () => {
         relatedSkills: [],
       })
 
-      expect(result).toContain('name: vuejs-core-skilld')
+      expect(result).toContain('name: vuejs-core')
+      expect(result).not.toContain('name: vuejs-core-skilld')
       // description still uses npm package name for import matching
       expect(result).toContain('importing from \\"vue\\"')
     })

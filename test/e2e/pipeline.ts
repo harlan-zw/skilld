@@ -8,7 +8,7 @@ import type { ResolveAttempt, ResolvedPackage } from '../../src/sources'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import pLimit from 'p-limit'
 import { join } from 'pathe'
-import { computeSkillDirName, FILE_PATTERN_MAP } from '../../src/agent'
+import { computeSkillDirName } from '../../src/agent'
 import {
   ensureCacheDir,
   getCacheDir,
@@ -241,18 +241,17 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
 
   // Generate SKILL.md frontmatter (pure, same as sync command)
   const skillDirName = computeSkillDirName(name, resolved.repoUrl)
-  const patterns = FILE_PATTERN_MAP[name]
   const description = `Using code importing from "${name}". Researching or debugging ${name}.`
 
   const fmLines = [
     '---',
-    `name: ${skillDirName}-skilld`,
+    `name: ${skillDirName}`,
     `description: ${description}`,
   ]
-  if (patterns?.length)
-    fmLines.push(`globs: ${JSON.stringify(patterns)}`)
-  if (version)
-    fmLines.push(`version: "${version}"`)
+  if (version) {
+    fmLines.push('metadata:')
+    fmLines.push(`  version: "${version}"`)
+  }
   fmLines.push('---', '')
 
   return { resolved, attempts, version, docsType, cachedDocsCount, cachedFiles, skillMd: fmLines.join('\n') }

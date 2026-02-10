@@ -8,7 +8,9 @@ import { agents, getAgentVersion } from '../agent'
 import { CACHE_DIR, getPackageDbPath } from '../cache'
 import { getCacheDir } from '../cache/version'
 import { defaultFeatures, hasConfig, readConfig } from '../core/config'
+import { formatSource, timeAgo } from '../core/formatting'
 import { parsePackages } from '../core/lockfile'
+
 import { iterateSkills } from '../core/skills'
 
 const require = createRequire(import.meta.url)
@@ -96,34 +98,6 @@ function countRefDocs(skillDir: string): number {
   }
   walk(refsDir)
   return count
-}
-
-function timeAgo(iso?: string): string {
-  if (!iso)
-    return ''
-  const diff = Date.now() - new Date(iso).getTime()
-  const days = Math.floor(diff / 86400000)
-  if (days <= 0)
-    return 'today'
-  if (days === 1)
-    return '1d ago'
-  if (days < 7)
-    return `${days}d ago`
-  if (days < 30)
-    return `${Math.floor(days / 7)}w ago`
-  return `${Math.floor(days / 30)}mo ago`
-}
-
-function formatSource(source?: string): string {
-  if (!source)
-    return ''
-  if (source === 'shipped')
-    return 'shipped'
-  if (source.includes('llms.txt'))
-    return 'llms.txt'
-  if (source.includes('github.com'))
-    return source.replace(/https?:\/\/github\.com\//, '')
-  return source
 }
 
 // dim helper

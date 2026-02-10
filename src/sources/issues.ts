@@ -6,6 +6,8 @@
 
 import { spawnSync } from 'node:child_process'
 
+import { BOT_USERS, buildFrontmatter, isoDate } from './github-common'
+
 export type IssueType = 'bug' | 'question' | 'docs' | 'feature' | 'other'
 
 export interface IssueComment {
@@ -39,8 +41,6 @@ export function isGhAvailable(): boolean {
   const { status } = spawnSync('gh', ['auth', 'status'], { stdio: 'ignore' })
   return (_ghAvailable = status === 0)
 }
-
-const BOT_USERS = new Set(['renovate[bot]', 'dependabot[bot]', 'renovate-bot', 'dependabot', 'github-actions[bot]'])
 
 /** Labels that indicate noise — filter these out entirely */
 const NOISE_LABELS = new Set([
@@ -180,7 +180,7 @@ function fetchIssuesByState(
 function oneYearAgo(): string {
   const d = new Date()
   d.setFullYear(d.getFullYear() - 1)
-  return d.toISOString().split('T')[0]!
+  return isoDate(d.toISOString())!
 }
 
 /**
@@ -276,22 +276,21 @@ export async function fetchGitHubIssues(
  */
 export function formatIssueAsMarkdown(issue: GitHubIssue): string {
   const limit = bodyLimit(issue.reactions)
-  const fm = [
-    '---',
-    `number: ${issue.number}`,
-    `title: "${issue.title.replace(/"/g, '\\"')}"`,
-    `type: ${issue.type}`,
-    `state: ${issue.state}`,
-    `created: ${issue.createdAt.split('T')[0]}`,
-    `url: ${issue.url}`,
-    `reactions: ${issue.reactions}`,
-    `comments: ${issue.comments}`,
-  ]
+  const fmFields: Record<string, string | number | boolean | undefined> = {
+    number: issue.number,
+    title: issue.title,
+    type: issue.type,
+    state: issue.state,
+    created: isoDate(issue.createdAt),
+    url: issue.url,
+    reactions: issue.reactions,
+    comments: issue.comments,
+  }
   if (issue.labels.length > 0)
-    fm.push(`labels: [${issue.labels.join(', ')}]`)
-  fm.push('---')
+    fmFields.labels = `[${issue.labels.join(', ')}]`
+  const fm = buildFrontmatter(fmFields)
 
-  const lines = [fm.join('\n'), '', `# ${issue.title}`]
+  const lines = [fm, '', `# ${issue.title}`]
 
   if (issue.body) {
     const body = issue.body.length > limit

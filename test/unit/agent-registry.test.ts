@@ -23,7 +23,7 @@ describe('agent/registry', () => {
 
   it('each agent has required config fields', () => {
     for (const [key, config] of Object.entries(agents)) {
-      expect(config.name).toBe(key)
+      expect(config.agent).toBe(key)
       expect(config.displayName).toBeTruthy()
       expect(config.skillsDir).toBeTruthy()
       expect(typeof config.detectInstalled).toBe('function')
@@ -45,7 +45,7 @@ describe('agent/registry', () => {
 
   it('globalSkillsDir paths are absolute', () => {
     for (const config of Object.values(agents)) {
-      expect(config.globalSkillsDir!.startsWith('/')).toBe(true)
+      expect(config.globalSkillsDir.startsWith('/')).toBe(true)
     }
   })
 })

@@ -16,6 +16,7 @@ export {
   getShippedSkills,
   hasShippedDocs,
   isCached,
+  linkCachedDir,
   linkDiscussions,
   linkIssues,
   linkPkg,

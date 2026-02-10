@@ -1,13 +1,11 @@
 /**
- * Minimal LLM provider - spawns CLI directly, no AI SDK
- * Supports claude and gemini CLIs with stream-json output
- *
- * Claude: token-level streaming via --include-partial-messages
- * Gemini: turn-level streaming via -o stream-json
+ * CLI orchestrator — spawns per-CLI processes for skill generation
+ * Each CLI (claude, gemini, codex) has its own buildArgs + parseLine in separate files
  */
 
-import type { CustomPrompt, SkillSection } from '../prompts'
+import type { SkillSection } from '../prompts'
 import type { AgentType } from '../types'
+import type { CliModelConfig, CliName, OptimizeDocsOptions, OptimizeModel, OptimizeResult, ParsedEvent, SectionResult, StreamProgress, ValidationWarning } from './types'
 import { exec, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
@@ -18,105 +16,42 @@ import { sanitizeMarkdown } from '../../core/sanitize'
 import { detectInstalledAgents } from '../detect'
 import { buildAllSectionPrompts, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts'
 import { agents } from '../registry'
+import * as claude from './claude'
+import * as codex from './codex'
+import * as gemini from './gemini'
 
 export { buildAllSectionPrompts, buildSectionPrompt, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts'
 export type { CustomPrompt, SkillSection } from '../prompts'
+export type { CliModelConfig, CliName, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './types'
 
-export type OptimizeModel
-  = | 'opus'
-    | 'sonnet'
-    | 'haiku'
-    | 'gemini-3-pro'
-    | 'gemini-3-flash'
-    | 'gpt-5.2-codex'
-    | 'gpt-5.1-codex-max'
-    | 'gpt-5.2'
-    | 'gpt-5.1-codex-mini'
+// ── Per-CLI dispatch ─────────────────────────────────────────────────
 
-export interface ModelInfo {
-  id: OptimizeModel
-  name: string
-  hint: string
-  recommended?: boolean
-  agentId: string
-  agentName: string
+const CLI_DEFS = [claude, gemini, codex] as const
+
+const CLI_BUILD_ARGS: Record<CliName, (model: string, skillDir: string, symlinkDirs: string[]) => string[]> = {
+  claude: claude.buildArgs,
+  gemini: gemini.buildArgs,
+  codex: codex.buildArgs,
 }
 
-export interface StreamProgress {
-  chunk: string
-  type: 'reasoning' | 'text'
-  text: string
-  reasoning: string
-  section?: SkillSection
+const CLI_PARSE_LINE: Record<CliName, (line: string) => ParsedEvent> = {
+  claude: claude.parseLine,
+  gemini: gemini.parseLine,
+  codex: codex.parseLine,
 }
 
-export interface OptimizeDocsOptions {
-  packageName: string
-  skillDir: string
-  model?: OptimizeModel
-  version?: string
-  hasGithub?: boolean
-  hasReleases?: boolean
-  hasChangelog?: string | false
-  docFiles?: string[]
-  docsType?: 'llms.txt' | 'readme' | 'docs'
-  hasShippedDocs?: boolean
-  onProgress?: (progress: StreamProgress) => void
-  timeout?: number
-  verbose?: boolean
-  debug?: boolean
-  noCache?: boolean
-  /** Which sections to generate */
-  sections?: SkillSection[]
-  /** Custom instructions from the user */
-  customPrompt?: CustomPrompt
-}
+// ── Assemble CLI_MODELS from per-CLI model definitions ───────────────
 
-export interface OptimizeResult {
-  optimized: string
-  wasOptimized: boolean
-  error?: string
-  warnings?: string[]
-  reasoning?: string
-  finishReason?: string
-  usage?: { inputTokens: number, outputTokens: number, totalTokens: number }
-  cost?: number
-  debugLogsDir?: string
-}
+export const CLI_MODELS: Partial<Record<OptimizeModel, CliModelConfig>> = Object.fromEntries(
+  CLI_DEFS.flatMap(def =>
+    Object.entries(def.models).map(([id, entry]) => [
+      id,
+      { ...entry, cli: def.cli, agentId: def.agentId },
+    ]),
+  ),
+)
 
-interface SectionResult {
-  section: SkillSection
-  content: string
-  wasOptimized: boolean
-  error?: string
-  warnings?: ValidationWarning[]
-  usage?: { input: number, output: number }
-  cost?: number
-}
-
-const CACHE_DIR = join(homedir(), '.skilld', 'llm-cache')
-
-interface CliModelConfig {
-  cli: 'claude' | 'gemini' | 'codex'
-  model: string
-  name: string
-  hint: string
-  recommended?: boolean
-  agentId: AgentType
-}
-
-/** CLI config per model */
-const CLI_MODELS: Partial<Record<OptimizeModel, CliModelConfig>> = {
-  'opus': { cli: 'claude', model: 'opus', name: 'Opus 4.6', hint: 'Most capable for complex work', agentId: 'claude-code' },
-  'sonnet': { cli: 'claude', model: 'sonnet', name: 'Sonnet 4.5', hint: 'Best for everyday tasks', recommended: true, agentId: 'claude-code' },
-  'haiku': { cli: 'claude', model: 'haiku', name: 'Haiku 4.5', hint: 'Fastest for quick answers', agentId: 'claude-code' },
-  'gemini-3-pro': { cli: 'gemini', model: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', hint: 'Most capable', agentId: 'gemini-cli' },
-  'gemini-3-flash': { cli: 'gemini', model: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', hint: 'Balanced', recommended: true, agentId: 'gemini-cli' },
-  'gpt-5.2-codex': { cli: 'codex', model: 'gpt-5.2-codex', name: 'GPT-5.2 Codex', hint: 'Frontier agentic coding model', agentId: 'codex' },
-  'gpt-5.1-codex-max': { cli: 'codex', model: 'gpt-5.1-codex-max', name: 'GPT-5.1 Codex Max', hint: 'Codex-optimized flagship', agentId: 'codex' },
-  'gpt-5.2': { cli: 'codex', model: 'gpt-5.2', name: 'GPT-5.2', hint: 'Latest frontier model', agentId: 'codex' },
-  'gpt-5.1-codex-mini': { cli: 'codex', model: 'gpt-5.1-codex-mini', name: 'GPT-5.1 Codex Mini', hint: 'Optimized for codex, cheaper & faster', recommended: true, agentId: 'codex' },
-}
+// ── Model helpers ────────────────────────────────────────────────────
 
 export function getModelName(id: OptimizeModel): string {
   return CLI_MODELS[id]?.name ?? id
@@ -130,7 +65,7 @@ export function getModelLabel(id: OptimizeModel): string {
   return `${agentName} · ${config.name}`
 }
 
-export async function getAvailableModels(): Promise<ModelInfo[]> {
+export async function getAvailableModels(): Promise<import('./types').ModelInfo[]> {
   const { promisify } = await import('node:util')
   const execAsync = promisify(exec)
 
@@ -161,6 +96,8 @@ export async function getAvailableModels(): Promise<ModelInfo[]> {
     }))
 }
 
+// ── Reference dirs ───────────────────────────────────────────────────
+
 /** Resolve symlinks in .skilld/ to get real paths for --add-dir */
 function resolveReferenceDirs(skillDir: string): string[] {
   const refsDir = join(skillDir, '.skilld')
@@ -172,69 +109,13 @@ function resolveReferenceDirs(skillDir: string): string[] {
     .map(p => realpathSync(p))
 }
 
-function buildCliArgs(cli: 'claude' | 'gemini' | 'codex', model: string, skillDir: string, _outputFile: string): string[] {
-  const symlinkDirs = resolveReferenceDirs(skillDir)
-
-  if (cli === 'claude') {
-    const skilldDir = join(skillDir, '.skilld')
-    const readDirs = [skillDir, ...symlinkDirs]
-    const allowedTools = [
-      ...readDirs.flatMap(d => [`Read(${d}/**)`, `Glob(${d}/**)`, `Grep(${d}/**)`]),
-      `Write(${skilldDir}/**)`,
-      `Bash(*skilld search*)`,
-    ].join(' ')
-    return [
-      '-p',
-      '--model',
-      model,
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--include-partial-messages', // token-level streaming
-      '--allowedTools',
-      allowedTools,
-      '--add-dir',
-      skillDir,
-      ...symlinkDirs.flatMap(d => ['--add-dir', d]),
-      '--no-session-persistence',
-    ]
-  }
-
-  if (cli === 'codex') {
-    // OpenAI Codex CLI — exec subcommand with JSON output
-    // Prompt passed via stdin with `-` sentinel
-    return [
-      'exec',
-      '--json',
-      '--model',
-      model,
-      '--full-auto',
-      ...symlinkDirs.flatMap(d => ['--add-dir', d]),
-      '-',
-    ]
-  }
-
-  // gemini
-  return [
-    '-o',
-    'stream-json',
-    '-m',
-    model,
-    '--allowed-tools',
-    'read_file,write_file,list_directory,glob_tool',
-    '--include-directories',
-    skillDir,
-    ...symlinkDirs.flatMap(d => ['--include-directories', d]),
-  ]
-}
-
 // ── Cache ────────────────────────────────────────────────────────────
+
+const CACHE_DIR = join(homedir(), '.skilld', 'llm-cache')
 
 /** Strip absolute paths from prompt so the hash is project-independent */
 function normalizePromptForHash(prompt: string): string {
-  // Replace absolute skill dir paths with placeholder
-  // e.g. /home/user/project/.claude/skills/vue → <SKILL_DIR>
-  return prompt.replace(/\/[^\s`]*\.claude\/skills\/[^\s/`]+/g, '<SKILL_DIR>')
+  return prompt.replace(/\/[^\s`]*\.(?:claude|codex|gemini)\/skills\/[^\s/`]+/g, '<SKILL_DIR>')
 }
 
 function hashPrompt(prompt: string, model: OptimizeModel, section: SkillSection): string {
@@ -259,186 +140,6 @@ function setCache(prompt: string, model: OptimizeModel, section: SkillSection, t
     JSON.stringify({ text, model, section, timestamp: Date.now() }),
     { mode: 0o600 },
   )
-}
-
-// ── Stream event parsing ─────────────────────────────────────────────
-
-interface ParsedEvent {
-  /** Token-level text delta */
-  textDelta?: string
-  /** Complete text from a full message (non-partial) */
-  fullText?: string
-  /** Tool name being invoked */
-  toolName?: string
-  /** Tool input hint (file path, query, etc) */
-  toolHint?: string
-  /** Content from a Write tool call (fallback if Write is denied) */
-  writeContent?: string
-  /** Stream finished */
-  done?: boolean
-  /** Token usage */
-  usage?: { input: number, output: number }
-  /** Cost in USD */
-  cost?: number
-  /** Number of agentic turns */
-  turns?: number
-}
-
-/**
- * Parse claude stream-json events
- *
- * Event types:
- * - stream_event/content_block_delta/text_delta → token streaming
- * - stream_event/content_block_start/tool_use → tool invocation starting
- * - assistant message with tool_use content → tool name + input
- * - assistant message with text content → full text (non-streaming fallback)
- * - result → usage, cost, turns
- */
-function parseClaudeLine(line: string): ParsedEvent {
-  try {
-    const obj = JSON.parse(line)
-
-    // Token-level streaming (--include-partial-messages)
-    if (obj.type === 'stream_event') {
-      const evt = obj.event
-      if (!evt)
-        return {}
-
-      // Text delta — the main streaming path
-      if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') {
-        return { textDelta: evt.delta.text }
-      }
-
-      // Tool use starting — get tool name early
-      if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
-        return { toolName: evt.content_block.name }
-      }
-
-      return {}
-    }
-
-    // Full assistant message (complete turn, after streaming)
-    if (obj.type === 'assistant' && obj.message?.content) {
-      const content = obj.message.content as any[]
-
-      // Extract tool uses with inputs for progress hints
-      const tools = content.filter((c: any) => c.type === 'tool_use')
-      if (tools.length) {
-        const names = tools.map((t: any) => t.name)
-        // Extract useful hint from tool input (file path, query, etc)
-        const hint = tools.map((t: any) => {
-          const input = t.input || {}
-          return input.file_path || input.path || input.pattern || input.query || input.command || ''
-        }).filter(Boolean).join(', ')
-        // Capture Write content as fallback if permission is denied
-        const writeTool = tools.find((t: any) => t.name === 'Write' && t.input?.content)
-        return { toolName: names.join(', '), toolHint: hint || undefined, writeContent: writeTool?.input?.content }
-      }
-
-      // Text content (fallback for non-partial mode)
-      const text = content
-        .filter((c: any) => c.type === 'text')
-        .map((c: any) => c.text)
-        .join('')
-      if (text)
-        return { fullText: text }
-    }
-
-    // Final result
-    if (obj.type === 'result') {
-      const u = obj.usage
-      return {
-        done: true,
-        usage: u ? { input: u.input_tokens ?? u.inputTokens ?? 0, output: u.output_tokens ?? u.outputTokens ?? 0 } : undefined,
-        cost: obj.total_cost_usd,
-        turns: obj.num_turns,
-      }
-    }
-  }
-  catch {}
-  return {}
-}
-
-/**
- * Parse gemini stream-json events
- * Gemini streams at turn level (full message per event)
- */
-function parseGeminiLine(line: string): ParsedEvent {
-  try {
-    const obj = JSON.parse(line)
-
-    // Text message (delta or full)
-    if (obj.type === 'message' && obj.role === 'assistant' && obj.content) {
-      return obj.delta ? { textDelta: obj.content } : { fullText: obj.content }
-    }
-
-    // Tool invocation
-    if (obj.type === 'tool_use' || obj.type === 'tool_call') {
-      return { toolName: obj.tool_name || obj.name || obj.tool || 'tool' }
-    }
-
-    // Final result
-    if (obj.type === 'result') {
-      const s = obj.stats
-      return {
-        done: true,
-        usage: s ? { input: s.input_tokens ?? s.input ?? 0, output: s.output_tokens ?? s.output ?? 0 } : undefined,
-        turns: s?.tool_calls,
-      }
-    }
-  }
-  catch {}
-  return {}
-}
-
-/**
- * Parse codex CLI exec --json output
- *
- * Real event types observed:
- * - thread.started → session start (thread_id)
- * - turn.started / turn.completed → turn lifecycle + usage
- * - item.started → command_execution in progress
- * - item.completed → agent_message (text), reasoning, command_execution (result)
- * - error / turn.failed → errors
- */
-function parseCodexLine(line: string): ParsedEvent {
-  try {
-    const obj = JSON.parse(line)
-
-    if (obj.type === 'item.completed' && obj.item) {
-      const item = obj.item
-      // Agent message — the main text output
-      if (item.type === 'agent_message' && item.text)
-        return { fullText: item.text }
-      // Command execution completed — log as tool progress, NOT writeContent
-      // (aggregated_output is bash stdout, not the section content to write)
-      if (item.type === 'command_execution' && item.aggregated_output)
-        return { toolName: 'Bash', toolHint: `(${item.aggregated_output.length} chars output)` }
-    }
-
-    // Command starting — show progress
-    if (obj.type === 'item.started' && obj.item?.type === 'command_execution') {
-      return { toolName: 'Bash', toolHint: obj.item.command }
-    }
-
-    // Turn completed — usage stats
-    if (obj.type === 'turn.completed' && obj.usage) {
-      return {
-        done: true,
-        usage: {
-          input: obj.usage.input_tokens ?? 0,
-          output: obj.usage.output_tokens ?? 0,
-        },
-      }
-    }
-
-    // Error events
-    if (obj.type === 'turn.failed' || obj.type === 'error') {
-      return { done: true }
-    }
-  }
-  catch {}
-  return {}
 }
 
 // ── Per-section spawn ────────────────────────────────────────────────
@@ -466,8 +167,9 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
   }
 
   const { cli, model: cliModel } = cliConfig
-  const args = buildCliArgs(cli, cliModel, skillDir, outputFile)
-  const parseLine = cli === 'claude' ? parseClaudeLine : cli === 'codex' ? parseCodexLine : parseGeminiLine
+  const symlinkDirs = resolveReferenceDirs(skillDir)
+  const args = CLI_BUILD_ARGS[cli](cliModel, skillDir, symlinkDirs)
+  const parseLine = CLI_PARSE_LINE[cli]
 
   const skilldDir = join(skillDir, '.skilld')
   const outputPath = join(skilldDir, outputFile)
@@ -481,6 +183,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
 
   return new Promise<SectionResult>((resolve) => {
     const proc = spawn(cli, args, {
+      cwd: skilldDir,
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout,
       env: { ...process.env, NO_COLOR: '1' },
@@ -797,11 +500,6 @@ const SECTION_MAX_LINES: Record<string, number> = {
   'best-practices': 300,
   'api': 160,
   'custom': 160,
-}
-
-interface ValidationWarning {
-  section: string
-  warning: string
 }
 
 /** Validate a section's output against heuristic quality checks */

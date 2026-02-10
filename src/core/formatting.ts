@@ -2,6 +2,34 @@ import type { SearchSnippet } from '../retriv'
 import type { ProjectState } from './skills'
 import * as p from '@clack/prompts'
 
+export function timeAgo(iso?: string): string {
+  if (!iso)
+    return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const days = Math.floor(diff / 86400000)
+  if (days <= 0)
+    return 'today'
+  if (days === 1)
+    return '1d ago'
+  if (days < 7)
+    return `${days}d ago`
+  if (days < 30)
+    return `${Math.floor(days / 7)}w ago`
+  return `${Math.floor(days / 30)}mo ago`
+}
+
+export function formatSource(source?: string): string {
+  if (!source)
+    return ''
+  if (source === 'shipped')
+    return 'shipped'
+  if (source.includes('llms.txt'))
+    return 'llms.txt'
+  if (source.includes('github.com'))
+    return source.replace(/https?:\/\/github\.com\//, '')
+  return source
+}
+
 export function formatDuration(ms: number): string {
   if (ms < 1000)
     return `${Math.round(ms)}ms`

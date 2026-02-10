@@ -1,3 +1,4 @@
+import { formatSource, timeAgo } from '../core/formatting'
 import { iterateSkills } from '../core/skills'
 
 export interface ListOptions {
@@ -10,34 +11,6 @@ interface ListEntry {
   version: string
   source: string
   synced: string
-}
-
-function formatSource(source?: string): string {
-  if (!source)
-    return ''
-  if (source === 'shipped')
-    return 'shipped'
-  if (source.includes('llms.txt'))
-    return 'llms.txt'
-  if (source.includes('github.com'))
-    return source.replace(/https?:\/\/github\.com\//, '')
-  return source
-}
-
-function timeAgo(iso?: string): string {
-  if (!iso)
-    return ''
-  const diff = Date.now() - new Date(iso).getTime()
-  const days = Math.floor(diff / 86400000)
-  if (days <= 0)
-    return 'today'
-  if (days === 1)
-    return '1d ago'
-  if (days < 7)
-    return `${days}d ago`
-  if (days < 30)
-    return `${Math.floor(days / 7)}w ago`
-  return `${Math.floor(days / 30)}mo ago`
 }
 
 export function listCommand(opts: ListOptions = {}): void {

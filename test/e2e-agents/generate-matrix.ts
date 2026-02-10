@@ -9,7 +9,7 @@
  * Gated behind GENERATE_E2E=1 env var (LLM calls are slow + costly).
  */
 
-import type { OptimizeModel } from '../../src/agent/llm'
+import type { OptimizeModel } from '../../src/agent/clis'
 import type { AgentType } from '../../src/agent/types'
 
 // ── Types ───────────────────────────────────────────────────────────

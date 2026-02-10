@@ -3,6 +3,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { isoDate } from './github-common'
 import { isGhAvailable } from './issues'
 import { $fetch } from './utils'
 
@@ -164,7 +165,7 @@ export function selectReleases(releases: GitHubRelease[], packageName?: string):
  * Format a release as markdown with YAML frontmatter
  */
 function formatRelease(release: GitHubRelease, packageName?: string): string {
-  const date = (release.publishedAt || release.createdAt).split('T')[0]
+  const date = isoDate(release.publishedAt || release.createdAt)
   const version = extractVersion(release.tag, packageName) || release.tag
 
   const fm = [
@@ -195,7 +196,7 @@ export function generateReleaseIndex(releases: GitHubRelease[], packageName?: st
   const lines: string[] = [fm.join('\n'), '', '# Releases Index', '']
 
   for (const r of releases) {
-    const date = (r.publishedAt || r.createdAt).split('T')[0]
+    const date = isoDate(r.publishedAt || r.createdAt)
     const filename = r.tag.includes('@') || r.tag.startsWith('v') ? r.tag : `v${r.tag}`
     const version = extractVersion(r.tag, packageName) || r.tag
     // Flag major/minor bumps for visibility

@@ -105,6 +105,92 @@ export interface ResolveOptions {
 }
 
 /**
+ * Shared GitHub resolution cascade: git docs → repo meta (homepage) → README.
+ * Used for both "repo URL found in package.json" and "repo URL found via search" paths.
+ */
+async function resolveGitHub(
+  gh: { owner: string, repo: string },
+  targetVersion: string | undefined,
+  pkg: { name: string },
+  result: ResolvedPackage,
+  attempts: ResolveAttempt[],
+  onProgress?: (step: ResolveStep) => void,
+  opts?: { rawRepoUrl?: string, subdir?: string },
+): Promise<string[] | undefined> {
+  let allFiles: string[] | undefined
+
+  // Try versioned git docs first (docs/**/*.md at git tag)
+  if (targetVersion) {
+    onProgress?.('github-docs')
+    const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name, opts?.rawRepoUrl)
+    if (gitDocs) {
+      result.gitDocsUrl = gitDocs.baseUrl
+      result.gitRef = gitDocs.ref
+      allFiles = gitDocs.allFiles
+      attempts.push({
+        source: 'github-docs',
+        url: gitDocs.baseUrl,
+        status: 'success',
+        message: `Found ${gitDocs.files.length} docs at ${gitDocs.ref}`,
+      })
+    }
+    else {
+      attempts.push({
+        source: 'github-docs',
+        url: `${result.repoUrl}/tree/v${targetVersion}/docs`,
+        status: 'not-found',
+        message: 'No docs/ folder found at version tag',
+      })
+    }
+  }
+
+  // If no docsUrl yet (npm had no homepage), try GitHub repo metadata
+  if (!result.docsUrl) {
+    onProgress?.('github-meta')
+    const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
+    if (repoMeta?.homepage && !isUselessDocsUrl(repoMeta.homepage)) {
+      result.docsUrl = repoMeta.homepage
+      attempts.push({
+        source: 'github-meta',
+        url: result.repoUrl!,
+        status: 'success',
+        message: `Found homepage: ${repoMeta.homepage}`,
+      })
+    }
+    else {
+      attempts.push({
+        source: 'github-meta',
+        url: result.repoUrl!,
+        status: 'not-found',
+        message: 'No homepage in repo metadata',
+      })
+    }
+  }
+
+  // README fallback via ungh
+  onProgress?.('readme')
+  const readmeUrl = await fetchReadme(gh.owner, gh.repo, opts?.subdir)
+  if (readmeUrl) {
+    result.readmeUrl = readmeUrl
+    attempts.push({
+      source: 'readme',
+      url: readmeUrl,
+      status: 'success',
+    })
+  }
+  else {
+    attempts.push({
+      source: 'readme',
+      url: `${result.repoUrl}/README.md`,
+      status: 'not-found',
+      message: 'No README found',
+    })
+  }
+
+  return allFiles
+}
+
+/**
  * Resolve documentation URL for a package (legacy - returns null on failure)
  */
 export async function resolvePackageDocs(packageName: string, options: ResolveOptions = {}): Promise<ResolvedPackage | null> {
@@ -193,74 +279,7 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
     const gh = parseGitHubUrl(result.repoUrl)
     if (gh) {
       const targetVersion = options.version || pkg.version
-
-      // Try versioned git docs first (docs/**/*.md at git tag)
-      if (targetVersion) {
-        onProgress?.('github-docs')
-        const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name, rawRepoUrl)
-        if (gitDocs) {
-          result.gitDocsUrl = gitDocs.baseUrl
-          result.gitRef = gitDocs.ref
-          gitDocsAllFiles = gitDocs.allFiles
-          attempts.push({
-            source: 'github-docs',
-            url: gitDocs.baseUrl,
-            status: 'success',
-            message: `Found ${gitDocs.files.length} docs at ${gitDocs.ref}`,
-          })
-        }
-        else {
-          attempts.push({
-            source: 'github-docs',
-            url: `${result.repoUrl}/tree/v${targetVersion}/docs`,
-            status: 'not-found',
-            message: 'No docs/ folder found at version tag',
-          })
-        }
-      }
-
-      // If no docsUrl yet (npm had no homepage), try GitHub repo metadata
-      if (!result.docsUrl) {
-        onProgress?.('github-meta')
-        const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
-        if (repoMeta?.homepage && !isUselessDocsUrl(repoMeta.homepage)) {
-          result.docsUrl = repoMeta.homepage
-          attempts.push({
-            source: 'github-meta',
-            url: result.repoUrl,
-            status: 'success',
-            message: `Found homepage: ${repoMeta.homepage}`,
-          })
-        }
-        else {
-          attempts.push({
-            source: 'github-meta',
-            url: result.repoUrl,
-            status: 'not-found',
-            message: 'No homepage in repo metadata',
-          })
-        }
-      }
-
-      // README fallback via ungh
-      onProgress?.('readme')
-      const readmeUrl = await fetchReadme(gh.owner, gh.repo, subdir)
-      if (readmeUrl) {
-        result.readmeUrl = readmeUrl
-        attempts.push({
-          source: 'readme',
-          url: readmeUrl,
-          status: 'success',
-        })
-      }
-      else {
-        attempts.push({
-          source: 'readme',
-          url: `${result.repoUrl}/README.md`,
-          status: 'not-found',
-          message: 'No README found',
-        })
-      }
+      gitDocsAllFiles = await resolveGitHub(gh, targetVersion, pkg, result, attempts, onProgress, { rawRepoUrl, subdir })
     }
   }
   else if (!result.repoUrl) {
@@ -276,37 +295,10 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
         message: `Found via GitHub search: ${searchedUrl}`,
       })
 
-      // Now run the same GitHub resolution as above
       const gh = parseGitHubUrl(searchedUrl)
       if (gh) {
         const targetVersion = options.version || pkg.version
-        if (targetVersion) {
-          onProgress?.('github-docs')
-          const gitDocs = await fetchGitDocs(gh.owner, gh.repo, targetVersion, pkg.name)
-          if (gitDocs) {
-            result.gitDocsUrl = gitDocs.baseUrl
-            result.gitRef = gitDocs.ref
-            gitDocsAllFiles = gitDocs.allFiles
-            attempts.push({
-              source: 'github-docs',
-              url: gitDocs.baseUrl,
-              status: 'success',
-              message: `Found ${gitDocs.files.length} docs at ${gitDocs.ref}`,
-            })
-          }
-        }
-
-        if (!result.docsUrl) {
-          onProgress?.('github-meta')
-          const repoMeta = await fetchGitHubRepoMeta(gh.owner, gh.repo, pkg.name)
-          if (repoMeta?.homepage && !isUselessDocsUrl(repoMeta.homepage))
-            result.docsUrl = repoMeta.homepage
-        }
-
-        onProgress?.('readme')
-        const readmeUrl = await fetchReadme(gh.owner, gh.repo)
-        if (readmeUrl)
-          result.readmeUrl = readmeUrl
+        gitDocsAllFiles = await resolveGitHub(gh, targetVersion, pkg, result, attempts, onProgress)
       }
     }
     else {

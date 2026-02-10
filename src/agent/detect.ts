@@ -4,8 +4,6 @@
 
 import type { AgentType } from './types'
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { join } from 'pathe'
 import { agents } from './registry'
 
 /**
@@ -20,82 +18,20 @@ export function detectInstalledAgents(): AgentType[] {
 /**
  * Detect the target agent (where skills are installed) from env vars and cwd.
  * This is NOT the generator LLM — it determines the skills directory.
+ *
+ * Priority: env vars first (running inside agent), then project dirs.
+ * Iteration order of the agents record determines priority.
  */
 export function detectTargetAgent(): AgentType | null {
-  // Check environment variables set by agents
-  if (process.env.CLAUDE_CODE || process.env.CLAUDE_CONFIG_DIR) {
-    return 'claude-code'
-  }
-  if (process.env.CURSOR_SESSION || process.env.CURSOR_TRACE_ID) {
-    return 'cursor'
-  }
-  if (process.env.WINDSURF_SESSION) {
-    return 'windsurf'
-  }
-  if (process.env.CLINE_TASK_ID) {
-    return 'cline'
-  }
-  if (process.env.CODEX_HOME || process.env.CODEX_SESSION) {
-    return 'codex'
-  }
-  if (process.env.GITHUB_COPILOT_SESSION) {
-    return 'github-copilot'
-  }
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_SESSION) {
-    return 'gemini-cli'
-  }
-  if (process.env.GOOSE_SESSION) {
-    return 'goose'
-  }
-  if (process.env.AMP_SESSION) {
-    return 'amp'
-  }
-  if (process.env.OPENCODE_SESSION) {
-    return 'opencode'
-  }
-  if (process.env.ROO_SESSION) {
-    return 'roo'
+  for (const [type, target] of Object.entries(agents)) {
+    if (target.detectEnv())
+      return type as AgentType
   }
 
-  // Check for project-level agent config directories and files
-  // Priority order matters — first match wins
   const cwd = process.cwd()
-
-  // Claude Code
-  if (existsSync(join(cwd, '.claude')) || existsSync(join(cwd, 'CLAUDE.md'))) {
-    return 'claude-code'
-  }
-  // Cursor
-  if (existsSync(join(cwd, '.cursor')) || existsSync(join(cwd, '.cursorrules'))) {
-    return 'cursor'
-  }
-  // Windsurf
-  if (existsSync(join(cwd, '.windsurf')) || existsSync(join(cwd, '.windsurfrules'))) {
-    return 'windsurf'
-  }
-  // Cline
-  if (existsSync(join(cwd, '.cline'))) {
-    return 'cline'
-  }
-  // Codex
-  if (existsSync(join(cwd, '.codex'))) {
-    return 'codex'
-  }
-  // GitHub Copilot
-  if (existsSync(join(cwd, '.github', 'copilot-instructions.md'))) {
-    return 'github-copilot'
-  }
-  // Gemini CLI
-  if (existsSync(join(cwd, '.gemini')) || existsSync(join(cwd, 'AGENTS.md'))) {
-    return 'gemini-cli'
-  }
-  // Goose
-  if (existsSync(join(cwd, '.goose'))) {
-    return 'goose'
-  }
-  // Roo Code
-  if (existsSync(join(cwd, '.roo'))) {
-    return 'roo'
+  for (const [type, target] of Object.entries(agents)) {
+    if (target.detectProject(cwd))
+      return type as AgentType
   }
 
   return null

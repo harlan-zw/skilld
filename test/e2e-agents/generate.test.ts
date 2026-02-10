@@ -3,18 +3,19 @@
  *
  * Matrix: packages × generator models × target agents
  *
- * Run with: GENERATE_E2E=1 pnpm test -- test/e2e/generate.test.ts
+ * Run with: GENERATE_E2E=1 pnpm test -- test/e2e-agents/generate.test.ts
  *
  * Requires LLM CLIs to be installed (gemini, codex).
  * Skips generators that aren't available on the system.
  */
 
+import type { PipelineResult } from '../e2e/pipeline'
 import type { GenerateResult, InstallResult } from './generate-pipeline'
-import type { PipelineResult } from './pipeline'
 import { readFileSync } from 'node:fs'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { sanitizeName } from '../../src/agent'
 import { agents } from '../../src/agent/registry'
+import { parseFrontmatter } from '../e2e/pipeline'
 import {
   GENERATOR_MODELS,
   TARGET_AGENTS,
@@ -28,7 +29,6 @@ import {
   writeGenerateArtifact,
   writeInstallArtifact,
 } from './generate-pipeline'
-import { parseFrontmatter } from './pipeline'
 
 // ── Gate ─────────────────────────────────────────────────────────────
 
@@ -94,18 +94,17 @@ describe.runIf(ENABLED)('e2e generate matrix', () => {
             if (genError)
               throw genError
             const fm = parseFrontmatter(genResult.skillMd)
-            expect(fm.name).toBe(`${sanitizeName(pkg)}-skilld`)
-            expect(fm.version).toBeTruthy()
+            expect(fm.name).toBe(sanitizeName(pkg))
             expect(fm.description).toContain(pkg)
           })
 
-          it('frontmatter includes generated_by', () => {
+          it('frontmatter includes generated_by under metadata', () => {
             if (genError)
               throw genError
             if (!genResult.wasOptimized)
               return // No LLM output — no generated_by expected
             const fm = parseFrontmatter(genResult.skillMd)
-            expect(fm.generated_by).toBeTruthy()
+            expect(fm.metadata?.generated_by).toBeTruthy()
           })
 
           it('lLM produced content', () => {

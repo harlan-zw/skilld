@@ -5,9 +5,9 @@
  *   docs cached → LLM generates sections → assembles SKILL.md → installs to agent dir
  */
 
-import type { OptimizeModel, SkillSection } from '../../src/agent/llm'
+import type { OptimizeModel, SkillSection } from '../../src/agent/clis'
 import type { AgentType } from '../../src/agent/types'
-import type { PipelineResult } from './pipeline'
+import type { PipelineResult } from '../e2e/pipeline'
 import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -23,8 +23,8 @@ import {
   resolvePkgDir,
 } from '../../src/cache'
 import { detectChangelog, linkAllReferences } from '../../src/commands/sync-shared'
+import { runPipeline } from '../e2e/pipeline'
 import { GENERATE_SECTIONS } from './generate-matrix'
-import { runPipeline } from './pipeline'
 
 // ── Types ───────────────────────────────────────────────────────────
 

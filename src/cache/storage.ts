@@ -96,66 +96,40 @@ function cleanStaleCacheDirs(name: string, version: string): void {
 }
 
 /**
- * Create .skilld directory with symlinked docs (only if external fetch needed)
+ * Create symlink from .skilld dir to a cached subdirectory.
+ * Unified handler for docs, issues, discussions, sections, releases.
  *
  * Structure:
- *   .claude/skills/<skill>/.skilld/
- *     pkg -> node_modules/<pkg> (always, has package.json, README.md, dist/)
- *     docs -> ~/.skilld/references/<pkg>@<version>/docs (only if fetched externally)
+ *   .claude/skills/<skill>/.skilld/<subdir> -> ~/.skilld/references/<pkg>@<version>/<subdir>
  *
  * The .skilld/ dirs are gitignored. After clone, `skilld install` recreates from lockfile.
  */
+export function linkCachedDir(skillDir: string, name: string, version: string, subdir: string): void {
+  const cacheDir = getCacheDir(name, version)
+  const referencesDir = join(skillDir, '.skilld')
+  const linkPath = join(referencesDir, subdir)
+  const cachedPath = join(cacheDir, subdir)
+
+  mkdirSync(referencesDir, { recursive: true })
+
+  if (existsSync(cachedPath)) {
+    safeSymlink(cachedPath, linkPath)
+  }
+}
+
+/** @deprecated Use linkCachedDir(skillDir, name, version, 'docs') */
 export function linkReferences(skillDir: string, name: string, version: string): void {
-  const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, '.skilld')
-  const docsLinkPath = join(referencesDir, 'docs')
-  const cachedDocsPath = join(cacheDir, 'docs')
-
-  // Create references dir if needed
-  mkdirSync(referencesDir, { recursive: true })
-
-  // Symlink docs from cache
-  if (existsSync(cachedDocsPath)) {
-    safeSymlink(cachedDocsPath, docsLinkPath)
-  }
+  linkCachedDir(skillDir, name, version, 'docs')
 }
 
-/**
- * Create symlink from .skilld dir to cached issues
- *
- * Structure:
- *   .claude/skills/<skill>/.skilld/issues -> ~/.skilld/references/<pkg>@<version>/issues
- */
+/** @deprecated Use linkCachedDir(skillDir, name, version, 'issues') */
 export function linkIssues(skillDir: string, name: string, version: string): void {
-  const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, '.skilld')
-  const linkPath = join(referencesDir, 'issues')
-  const cachedPath = join(cacheDir, 'issues')
-
-  mkdirSync(referencesDir, { recursive: true })
-
-  if (existsSync(cachedPath)) {
-    safeSymlink(cachedPath, linkPath)
-  }
+  linkCachedDir(skillDir, name, version, 'issues')
 }
 
-/**
- * Create symlink from .skilld dir to cached discussions
- *
- * Structure:
- *   .claude/skills/<skill>/.skilld/discussions -> ~/.skilld/references/<pkg>@<version>/discussions
- */
+/** @deprecated Use linkCachedDir(skillDir, name, version, 'discussions') */
 export function linkDiscussions(skillDir: string, name: string, version: string): void {
-  const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, '.skilld')
-  const linkPath = join(referencesDir, 'discussions')
-  const cachedPath = join(cacheDir, 'discussions')
-
-  mkdirSync(referencesDir, { recursive: true })
-
-  if (existsSync(cachedPath)) {
-    safeSymlink(cachedPath, linkPath)
-  }
+  linkCachedDir(skillDir, name, version, 'discussions')
 }
 
 /**
@@ -278,23 +252,9 @@ export function getShippedSkills(name: string, cwd: string, version?: string): S
     .map(d => ({ skillName: d.name, skillDir: join(skillsPath, d.name) }))
 }
 
-/**
- * Create symlink from .skilld dir to cached sections (LLM-generated)
- *
- * Structure:
- *   .claude/skills/<skill>/.skilld/sections -> ~/.skilld/references/<pkg>@<version>/sections
- */
+/** @deprecated Use linkCachedDir(skillDir, name, version, 'sections') */
 export function linkSections(skillDir: string, name: string, version: string): void {
-  const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, '.skilld')
-  const linkPath = join(referencesDir, 'sections')
-  const cachedPath = join(cacheDir, 'sections')
-
-  mkdirSync(referencesDir, { recursive: true })
-
-  if (existsSync(cachedPath)) {
-    safeSymlink(cachedPath, linkPath)
-  }
+  linkCachedDir(skillDir, name, version, 'sections')
 }
 
 /**
@@ -322,26 +282,9 @@ export function readCachedSection(name: string, version: string, file: string): 
   return readFileSync(path, 'utf-8')
 }
 
-/**
- * Create symlink from .skilld dir to cached releases
- *
- * Structure:
- *   .claude/skills/<skill>/.skilld/releases -> ~/.skilld/references/<pkg>@<version>/releases
- */
+/** @deprecated Use linkCachedDir(skillDir, name, version, 'releases') */
 export function linkReleases(skillDir: string, name: string, version: string): void {
-  const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, '.skilld')
-  const releasesLinkPath = join(referencesDir, 'releases')
-  const cachedReleasesPath = join(cacheDir, 'releases')
-
-  mkdirSync(referencesDir, { recursive: true })
-
-  if (existsSync(releasesLinkPath)) {
-    unlinkSync(releasesLinkPath)
-  }
-  if (existsSync(cachedReleasesPath)) {
-    symlinkSync(cachedReleasesPath, releasesLinkPath, 'junction')
-  }
+  linkCachedDir(skillDir, name, version, 'releases')
 }
 
 /**

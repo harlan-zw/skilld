@@ -2,15 +2,8 @@
  * Agent module - detection, installation, and skill optimization
  */
 
-// Detection
-export { detectInstalledAgents, detectTargetAgent, getAgentVersion } from './detect'
-// Import detection
-export { detectImportedPackages } from './detect-imports'
-// Installation
-export { computeSkillDirName, installSkillForAgents, sanitizeName } from './install'
-export type { CustomPrompt, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, SkillSection, StreamProgress } from './llm'
-
-// LLM optimization
+export type { CustomPrompt, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, SkillSection, StreamProgress } from './clis'
+// CLI optimization
 export {
   buildAllSectionPrompts,
   buildSectionPrompt,
@@ -20,7 +13,14 @@ export {
   optimizeDocs,
   SECTION_MERGE_ORDER,
   SECTION_OUTPUT_FILES,
-} from './llm'
+} from './clis'
+// Detection
+export { detectInstalledAgents, detectTargetAgent, getAgentVersion } from './detect'
+// Import detection
+export { detectImportedPackages } from './detect-imports'
+
+// Installation
+export { computeSkillDirName, installSkillForAgents, sanitizeName } from './install'
 
 // Skill generation
 export { generateSkillMd } from './prompts'
@@ -29,7 +29,10 @@ export type { SkillOptions } from './prompts'
 // Registry
 export { agents } from './registry'
 
+// Targets
+export type { AgentTarget, FrontmatterField } from './targets'
+
 // Types
-export type { AgentConfig, AgentType, SkillMetadata } from './types'
+export type { AgentType, SkillMetadata } from './types'
 
 export { FILE_PATTERN_MAP } from './types'
