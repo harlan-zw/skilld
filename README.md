@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
 [![license](https://img.shields.io/npm/l/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE)
 
-> Expert SKILL.md knowledge for your NPM dependencies.
+> Generate AI agent skills from your NPM dependencies.
 
 ## Why?
 
@@ -54,9 +54,9 @@ If you need to re-configure skilld, just run `npx -y skilld config` to update yo
 
 ### Tips
 
-- **Be selective** — only add skills for packages your agent already struggles with or that you're actively debugging. Not every dependency needs a skill.
-- **LLM enhancement is optional** — skilld generates a useful SKILL.md without any LLM, but enhancing with one makes them significantly better. This costs tokens, so be mindful.
-- **Multi-agent support** — if you switch between agents (e.g. Claude Code and Gemini CLI), run `skilld install --agent gemini-cli` to sync your existing skills to the other agent. The doc cache is shared, so nothing is re-downloaded.
+- **Be selective** - Only add skills for packages your agent struggles with. Not every dependency needs one.
+- **LLM is optional** - Skills work without any LLM, but enhancing with one makes them significantly better.
+- **Multi-agent** - Run `skilld install --agent gemini-cli` to sync skills to another agent. The doc cache is shared.
 
 ## Installation
 
@@ -85,7 +85,7 @@ Add to `package.json` to keep skills fresh on install:
 ## CLI Usage
 
 ```bash
-# Interactive mode — auto-discover from package.json
+# Interactive mode - auto-discover from package.json
 skilld
 
 # Add skills for specific package(s)
@@ -146,6 +146,20 @@ skilld config
 | `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
 | `--prepare`    |      | `false`        | Non-interactive sync for prepare hook (outdated only) |
 | `--background` | `-b` | `false`        | Run `--prepare` in a detached background process |
+
+## FAQ
+
+### How is this different from Context7?
+
+Context7 is an MCP that fetches raw doc chunks at query time. You get different results each prompt, no curation, and it requires their server. Skilld is local-first: it generates a SKILL.md that lives in your project, tied to your actual package versions. No MCP dependency, no per-prompt latency, and it goes further with LLM-enhanced sections, prompt injection sanitization, and semantic search.
+
+### Aren't these just AI convention files?
+
+Similar idea, but instead of hand-writing them, skilld generates them from the latest package docs, issues, and releases. This makes them considerably more accurate at a low token cost. They also auto-update when your dependencies ship new versions.
+
+### Do skills update when my deps update?
+
+Yes. Run `skilld update` to regenerate outdated skills, or add `skilld --prepare -b` to your prepare script and they regenerate in the background whenever you install packages.
 
 ## Related
 
