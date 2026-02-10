@@ -34,9 +34,8 @@ Skilld leverages maintainers existing effort. Maintainers write great docs for u
 
 ## Features
 
-- 🌍 **Any NPM Package** - Opt any dependency into skill generation, docs are auto-resolved from GitHub, `/llms.txt`, or README
-- 📦 **Opt-in Sources** - Enrich skills with GitHub issues, discussions, and releases per-package
-- 🤖 **11 Agents** - Claude Code, Cursor, Windsurf, Cline, Codex, Copilot, Gemini CLI, Goose, Amp, OpenCode, Roo
+- 🌍 **Any Source: Opt-in** - Any NPM dependency or GitHub source, docs auto-resolved
+- 📦 **Bleeding Edge Context** - Latest issues, discussions, and releases as context refreshed on every upgrade
 - 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best practices`, `LLM Gaps`, `Doc Map`, or your own prompts
 - 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
 - 🎯 **Safe & Versioned** - Prompt injection sanitization, version-aware caching, auto-updates on new releases
