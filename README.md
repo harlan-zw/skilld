@@ -64,6 +64,20 @@ If you need to re-configure skilld, just run `npx -y skilld config` to update yo
 - **LLM is optional** - Skills work without any LLM, but enhancing with one makes them significantly better.
 - **Multi-agent** - Run `skilld install --agent gemini-cli` to sync skills to another agent. The doc cache is shared.
 
+## FAQ
+
+### How is this different from Context7?
+
+Context7 is an MCP that fetches raw doc chunks at query time. You get different results each prompt, no curation, and it requires their server. Skilld is local-first: it generates a SKILL.md that lives in your project, tied to your actual package versions. No MCP dependency, no per-prompt latency, and it goes further with LLM-enhanced sections, prompt injection sanitization, and semantic search.
+
+### Aren't these just AI convention files?
+
+Similar idea, but instead of hand-writing them, skilld generates them from the latest package docs, issues, and releases. This makes them considerably more accurate at a low token cost. They also auto-update when your dependencies ship new versions.
+
+### Do skills update when my deps update?
+
+Yes. Run `skilld update` to regenerate outdated skills, or add `skilld --prepare -b` to your prepare script and they regenerate in the background whenever you install packages.
+
 ## Installation
 
 If you'd like to install skilld and track the lock file references, add it as a dev dependency:
@@ -152,20 +166,6 @@ skilld config
 | `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
 | `--prepare`    |      | `false`        | Non-interactive sync for prepare hook (outdated only) |
 | `--background` | `-b` | `false`        | Run `--prepare` in a detached background process |
-
-## FAQ
-
-### How is this different from Context7?
-
-Context7 is an MCP that fetches raw doc chunks at query time. You get different results each prompt, no curation, and it requires their server. Skilld is local-first: it generates a SKILL.md that lives in your project, tied to your actual package versions. No MCP dependency, no per-prompt latency, and it goes further with LLM-enhanced sections, prompt injection sanitization, and semantic search.
-
-### Aren't these just AI convention files?
-
-Similar idea, but instead of hand-writing them, skilld generates them from the latest package docs, issues, and releases. This makes them considerably more accurate at a low token cost. They also auto-update when your dependencies ship new versions.
-
-### Do skills update when my deps update?
-
-Yes. Run `skilld update` to regenerate outdated skills, or add `skilld --prepare -b` to your prepare script and they regenerate in the background whenever you install packages.
 
 ## Related
 
