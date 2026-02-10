@@ -34,7 +34,7 @@ Skilld leverages maintainers existing effort. Maintainers write great docs for u
 
 ## Features
 
-- 🌍 **Any NPM Package** - Repo, docs, releases, issues, discussions
+- 🌍 **Full Context SKILL.md** - Generates with the repo code, docs, releases, issues, discussions
 - 🤖 **BYO Agent** - Generate SKILL.md with or without an LLM
 - 📚 **Customizable** - `Best practices`, `LLM Gaps`, `Doc Map` or your own prompts
 - 🔍 **Semantic Search** - Token-optimized search via [retriv](https://github.com/harlan-zw/retriv)
