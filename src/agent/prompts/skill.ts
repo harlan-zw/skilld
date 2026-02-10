@@ -208,15 +208,19 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
 
   const lines = [
     '---',
-    `name: ${dirName ?? sanitizeName(name)}-skilld`,
+    `name: ${dirName ?? sanitizeName(name)}`,
     `description: ${yamlEscape(desc)}`,
   ]
-  if (patterns?.length)
-    lines.push(`globs: ${JSON.stringify(patterns)}`)
+  // version and generated_by go under metadata per Agent Skills spec
+  const metaEntries: string[] = []
   if (version)
-    lines.push(`version: ${yamlEscape(version)}`)
+    metaEntries.push(`  version: ${yamlEscape(version)}`)
   if (body && generatedBy)
-    lines.push(`generated_by: ${yamlEscape(generatedBy)}`)
+    metaEntries.push(`  generated_by: ${yamlEscape(generatedBy)}`)
+  if (metaEntries.length) {
+    lines.push('metadata:')
+    lines.push(...metaEntries)
+  }
   lines.push('---', '', '')
   return lines.join('\n')
 }
