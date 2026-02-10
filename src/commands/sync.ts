@@ -394,15 +394,20 @@ export interface LlmConfig {
  * Returns null if cancelled or no sections/model selected.
  */
 export async function selectLlmConfig(presetModel?: OptimizeModel, message?: string): Promise<LlmConfig | null> {
-  const { sections, customPrompt, cancelled } = presetModel
-    ? { sections: DEFAULT_SECTIONS, customPrompt: undefined, cancelled: false }
-    : await selectSkillSections(message)
+  if (presetModel) {
+    return { model: presetModel, sections: DEFAULT_SECTIONS }
+  }
 
-  if (cancelled || sections.length === 0)
+  const model = await selectModel(false)
+  if (!model)
     return null
 
-  const model = presetModel ?? await selectModel(false)
-  if (!model)
+  const modelName = getModelName(model)
+  const { sections, customPrompt, cancelled } = await selectSkillSections(
+    message ? `${message} (${modelName})` : `Generate SKILL.md with ${modelName}`,
+  )
+
+  if (cancelled || sections.length === 0)
     return null
 
   return { model, sections, customPrompt }
