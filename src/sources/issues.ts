@@ -143,11 +143,28 @@ function fetchIssuesByState(
   repo: string,
   state: 'open' | 'closed',
   count: number,
+  releasedAt?: string,
 ): GitHubIssue[] {
   const fetchCount = Math.min(count * 3, 100)
-  const datePart = state === 'closed'
-    ? `+closed:>${oneYearAgo()}`
-    : ''
+  let datePart = ''
+  if (state === 'closed') {
+    if (releasedAt) {
+      // For older versions, include issues closed up to 6 months after release
+      const date = new Date(releasedAt)
+      date.setMonth(date.getMonth() + 6)
+      datePart = `+closed:<=${isoDate(date.toISOString())}`
+    }
+    else {
+      datePart = `+closed:>${oneYearAgo()}`
+    }
+  }
+  else if (releasedAt) {
+    // For older versions, only include issues created around or before release
+    const date = new Date(releasedAt)
+    date.setMonth(date.getMonth() + 6)
+    datePart = `+created:<=${isoDate(date.toISOString())}`
+  }
+
   const q = `repo:${owner}/${repo}+is:issue+is:${state}${datePart}`
 
   const { stdout: result } = spawnSync('gh', [
@@ -252,6 +269,7 @@ export async function fetchGitHubIssues(
   owner: string,
   repo: string,
   limit = 30,
+  releasedAt?: string,
 ): Promise<GitHubIssue[]> {
   if (!isGhAvailable())
     return []
@@ -260,8 +278,8 @@ export async function fetchGitHubIssues(
   const closedCount = limit - openCount
 
   try {
-    const open = fetchIssuesByState(owner, repo, 'open', openCount)
-    const closed = fetchIssuesByState(owner, repo, 'closed', closedCount)
+    const open = fetchIssuesByState(owner, repo, 'open', openCount, releasedAt)
+    const closed = fetchIssuesByState(owner, repo, 'closed', closedCount, releasedAt)
     const all = [...open, ...closed]
     enrichWithComments(owner, repo, all)
     return all

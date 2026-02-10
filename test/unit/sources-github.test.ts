@@ -218,12 +218,42 @@ describe('sources/github', () => {
 
       expect(result).toBe('# Hello')
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://ungh.cc/repos/vuejs/vue/readme',
+        'https://ungh.cc/repos/vuejs/vue/readme?ref=main',
         expect.any(Object),
       )
     })
 
-    it('handles ungh:// with subdir', async () => {
+    it('handles ungh:// with ref', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({ markdown: '# Hello v1' })),
+      })
+
+      const result = await fetchReadmeContent('ungh://vuejs/vue@v1.0.0')
+
+      expect(result).toBe('# Hello v1')
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://ungh.cc/repos/vuejs/vue/readme?ref=v1.0.0',
+        expect.any(Object),
+      )
+    })
+
+    it('handles ungh:// with subdir and ref', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        text: () => Promise.resolve(JSON.stringify({ file: { contents: '# Subpkg v1' } })),
+      })
+
+      const result = await fetchReadmeContent('ungh://nuxt/nuxt/packages/kit@v1.0.0')
+
+      expect(result).toBe('# Subpkg v1')
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://ungh.cc/repos/nuxt/nuxt/files/v1.0.0/packages/kit/README.md',
+        expect.any(Object),
+      )
+    })
+
+    it('handles ungh:// with subdir (no ref)', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         text: () => Promise.resolve(JSON.stringify({ file: { contents: '# Subpkg' } })),

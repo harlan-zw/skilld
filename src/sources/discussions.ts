@@ -47,9 +47,20 @@ export async function fetchGitHubDiscussions(
   owner: string,
   repo: string,
   limit = 20,
+  releasedAt?: string,
 ): Promise<GitHubDiscussion[]> {
   if (!isGhAvailable())
     return []
+
+  // GraphQL discussions endpoint doesn't support date filtering,
+  // so we fetch latest N and filter client-side. Skip entirely
+  // if the cutoff is in the past — results would be empty anyway.
+  if (releasedAt) {
+    const cutoff = new Date(releasedAt)
+    cutoff.setMonth(cutoff.getMonth() + 6)
+    if (cutoff < new Date())
+      return []
+  }
 
   try {
     // Fetch more to compensate for filtering

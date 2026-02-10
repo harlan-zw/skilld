@@ -572,7 +572,7 @@ description: Vue skill
       const result = await resolvePackageDocs('@nuxt/kit')
 
       expect(result?.readmeUrl).toBe('ungh://nuxt/nuxt/packages/kit')
-      expect(fetchReadme).toHaveBeenCalledWith('nuxt', 'nuxt', 'packages/kit')
+      expect(fetchReadme).toHaveBeenCalledWith('nuxt', 'nuxt', 'packages/kit', undefined)
     })
   })
 })

@@ -423,7 +423,7 @@ export async function fetchAndCacheResources(opts: {
     const gh = parseGitHubUrl(resolved.repoUrl)
     if (gh) {
       onProgress('Fetching issues via GitHub API')
-      const issues = await fetchGitHubIssues(gh.owner, gh.repo, 30).catch(() => [])
+      const issues = await fetchGitHubIssues(gh.owner, gh.repo, 30, resolved.releasedAt).catch(() => [])
       if (issues.length > 0) {
         onProgress(`Caching ${issues.length} issues`)
         writeToCache(packageName, version, issues.map(issue => ({
@@ -451,7 +451,7 @@ export async function fetchAndCacheResources(opts: {
     const gh = parseGitHubUrl(resolved.repoUrl)
     if (gh) {
       onProgress('Fetching discussions via GitHub API')
-      const discussions = await fetchGitHubDiscussions(gh.owner, gh.repo, 20).catch(() => [])
+      const discussions = await fetchGitHubDiscussions(gh.owner, gh.repo, 20, resolved.releasedAt).catch(() => [])
       if (discussions.length > 0) {
         onProgress(`Caching ${discussions.length} discussions`)
         writeToCache(packageName, version, discussions.map(d => ({

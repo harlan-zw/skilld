@@ -35,10 +35,15 @@ interface SemVer {
 
 function parseSemver(version: string): SemVer | null {
   const clean = version.replace(/^v/, '')
-  const match = clean.match(/^(\d+)\.(\d+)\.(\d+)/)
+  const match = clean.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/)
   if (!match)
     return null
-  return { major: +match[1]!, minor: +match[2]!, patch: +match[3]!, raw: clean }
+  return {
+    major: +match[1]!,
+    minor: match[2] ? +match[2] : 0,
+    patch: match[3] ? +match[3] : 0,
+    raw: clean,
+  }
 }
 
 /**
@@ -129,25 +134,34 @@ async function fetchAllReleases(owner: string, repo: string): Promise<GitHubRele
  * Select last 20 stable releases for a package, sorted newest first.
  * For monorepos, filters to package-specific tags (pkg@version).
  * Falls back to generic tags (v1.2.3) only if no package-specific found.
+ * If installedVersion is provided, filters out releases newer than it.
  */
-export function selectReleases(releases: GitHubRelease[], packageName?: string): GitHubRelease[] {
+export function selectReleases(releases: GitHubRelease[], packageName?: string, installedVersion?: string): GitHubRelease[] {
   // Check if this looks like a monorepo (has package-prefixed tags)
   const hasMonorepoTags = packageName && releases.some(r => tagMatchesPackage(r.tag, packageName))
+  const installedSv = installedVersion ? parseSemver(installedVersion) : null
 
   const filtered = releases.filter((r) => {
     if (r.prerelease)
       return false
 
-    // Monorepo: only include tags for this package
-    if (hasMonorepoTags && packageName) {
-      if (!tagMatchesPackage(r.tag, packageName))
-        return false
-      const ver = extractVersion(r.tag, packageName)
-      return ver && parseSemver(ver)
-    }
+    const ver = extractVersion(r.tag, hasMonorepoTags ? packageName : undefined)
+    if (!ver)
+      return false
 
-    // Single-package repo: use generic version tags
-    return parseSemver(r.tag)
+    const sv = parseSemver(ver)
+    if (!sv)
+      return false
+
+    // Monorepo: only include tags for this package
+    if (hasMonorepoTags && packageName && !tagMatchesPackage(r.tag, packageName))
+      return false
+
+    // Filter out releases newer than installed version
+    if (installedSv && compareSemver(sv, installedSv) > 0)
+      return false
+
+    return true
   })
 
   return filtered
@@ -251,7 +265,7 @@ export async function fetchReleaseNotes(
   packageName?: string,
 ): Promise<CachedDoc[]> {
   const releases = await fetchAllReleases(owner, repo)
-  const selected = selectReleases(releases, packageName)
+  const selected = selectReleases(releases, packageName, installedVersion)
 
   if (selected.length > 0) {
     // Detect changelog-redirect pattern: short stubs that just link to CHANGELOG.md

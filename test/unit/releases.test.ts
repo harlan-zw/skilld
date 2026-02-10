@@ -1,10 +1,64 @@
 import type { GitHubRelease } from '../../src/sources/releases'
 import { describe, expect, it } from 'vitest'
-import { isChangelogRedirectPattern } from '../../src/sources/releases'
+import { isChangelogRedirectPattern, selectReleases } from '../../src/sources/releases'
 
 function makeRelease(tag: string, markdown: string, prerelease = false): GitHubRelease {
   return { id: 1, tag, name: tag, prerelease, createdAt: '2024-01-01T00:00:00Z', publishedAt: '2024-01-01T00:00:00Z', markdown }
 }
+
+describe('selectReleases', () => {
+  const releases = [
+    makeRelease('v3.5.0', 'three five'),
+    makeRelease('v3.4.2', 'three four two'),
+    makeRelease('v3.4.1', 'three four one'),
+    makeRelease('v3.4.0', 'three four zero'),
+    makeRelease('v3.3.0', 'three three'),
+  ]
+
+  it('selects latest stable releases', () => {
+    const selected = selectReleases(releases)
+    expect(selected[0]?.tag).toBe('v3.5.0')
+    expect(selected.length).toBe(5)
+  })
+
+  it('filters by installedVersion', () => {
+    const selected = selectReleases(releases, undefined, '3.4.1')
+    expect(selected[0]?.tag).toBe('v3.4.1')
+    expect(selected[1]?.tag).toBe('v3.4.0')
+    expect(selected[2]?.tag).toBe('v3.3.0')
+    expect(selected.length).toBe(3)
+  })
+
+  it('filters by installedVersion (v-prefix)', () => {
+    const selected = selectReleases(releases, undefined, 'v3.4.0')
+    expect(selected[0]?.tag).toBe('v3.4.0')
+    expect(selected[1]?.tag).toBe('v3.3.0')
+    expect(selected.length).toBe(2)
+  })
+
+  it('handles monorepo tags', () => {
+    const monoReleases = [
+      makeRelease('pkg-a@1.1.0', 'a 1.1'),
+      makeRelease('pkg-a@1.0.0', 'a 1.0'),
+      makeRelease('pkg-b@2.0.0', 'b 2.0'),
+    ]
+    const selected = selectReleases(monoReleases, 'pkg-a')
+    expect(selected.length).toBe(2)
+    expect(selected[0]?.tag).toBe('pkg-a@1.1.0')
+  })
+
+  it('filters monorepo tags by version', () => {
+    const monoReleases = [
+      makeRelease('pkg-a@1.2.0', 'a 1.2'),
+      makeRelease('pkg-a@1.1.0', 'a 1.1'),
+      makeRelease('pkg-a@1.0.0', 'a 1.0'),
+    ]
+    const selected = selectReleases(monoReleases, 'pkg-a', '1.1.0')
+    expect(selected.length).toBe(2)
+    expect(selected[0]?.tag).toBe('pkg-a@1.1.0')
+    expect(selected[1]?.tag).toBe('pkg-a@1.0.0')
+  })
+})
 
 describe('isChangelogRedirectPattern', () => {
   it('detects Vue-style changelog redirects', () => {

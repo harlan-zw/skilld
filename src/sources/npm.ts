@@ -160,7 +160,7 @@ async function resolveGitHub(
 
   // README fallback via ungh
   onProgress?.('readme')
-  const readmeUrl = await fetchReadme(gh.owner, gh.repo, opts?.subdir)
+  const readmeUrl = await fetchReadme(gh.owner, gh.repo, opts?.subdir, result.gitRef)
   if (readmeUrl) {
     result.readmeUrl = readmeUrl
     attempts.push({
@@ -546,7 +546,7 @@ export async function resolveLocalPackageDocs(localPath: string): Promise<Resolv
       }
 
       // README fallback via ungh
-      const readmeUrl = await fetchReadme(gh.owner, gh.repo)
+      const readmeUrl = await fetchReadme(gh.owner, gh.repo, undefined, result.gitRef)
       if (readmeUrl) {
         result.readmeUrl = readmeUrl
       }

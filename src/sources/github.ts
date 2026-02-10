@@ -505,24 +505,27 @@ export async function fetchGitHubRepoMeta(owner: string, repo: string, packageNa
 /**
  * Resolve README URL for a GitHub repo, returns ungh:// pseudo-URL or raw URL
  */
-export async function fetchReadme(owner: string, repo: string, subdir?: string): Promise<string | null> {
+export async function fetchReadme(owner: string, repo: string, subdir?: string, ref?: string): Promise<string | null> {
+  const branch = ref || 'main'
+
   // Try ungh first
   const unghUrl = subdir
-    ? `https://ungh.cc/repos/${owner}/${repo}/files/main/${subdir}/README.md`
-    : `https://ungh.cc/repos/${owner}/${repo}/readme`
+    ? `https://ungh.cc/repos/${owner}/${repo}/files/${branch}/${subdir}/README.md`
+    : `https://ungh.cc/repos/${owner}/${repo}/readme${ref ? `?ref=${ref}` : ''}`
 
   const unghRes = await $fetch.raw(unghUrl).catch(() => null)
 
   if (unghRes?.ok) {
-    return `ungh://${owner}/${repo}${subdir ? `/${subdir}` : ''}`
+    return `ungh://${owner}/${repo}${subdir ? `/${subdir}` : ''}${ref ? `@${ref}` : ''}`
   }
 
   // Fallback to raw.githubusercontent.com — use GET instead of HEAD
   // because raw.githubusercontent.com sometimes returns HTML on HEAD for valid URLs
   const basePath = subdir ? `${subdir}/` : ''
-  for (const branch of ['main', 'master']) {
+  const branches = ref ? [ref] : ['main', 'master']
+  for (const b of branches) {
     for (const filename of ['README.md', 'Readme.md', 'readme.md']) {
-      const readmeUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${basePath}${filename}`
+      const readmeUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${b}/${basePath}${filename}`
       const res = await $fetch.raw(readmeUrl).catch(() => null)
       if (res?.ok)
         return readmeUrl
@@ -621,14 +624,24 @@ export async function fetchReadmeContent(url: string): Promise<string | null> {
   }
 
   if (url.startsWith('ungh://')) {
-    const parts = url.replace('ungh://', '').split('/')
+    let path = url.replace('ungh://', '')
+    let ref = 'main'
+
+    // Parse ref from owner/repo/subdir@ref
+    const atIdx = path.lastIndexOf('@')
+    if (atIdx !== -1) {
+      ref = path.slice(atIdx + 1)
+      path = path.slice(0, atIdx)
+    }
+
+    const parts = path.split('/')
     const owner = parts[0]
     const repo = parts[1]
     const subdir = parts.slice(2).join('/')
 
     const unghUrl = subdir
-      ? `https://ungh.cc/repos/${owner}/${repo}/files/main/${subdir}/README.md`
-      : `https://ungh.cc/repos/${owner}/${repo}/readme`
+      ? `https://ungh.cc/repos/${owner}/${repo}/files/${ref}/${subdir}/README.md`
+      : `https://ungh.cc/repos/${owner}/${repo}/readme?ref=${ref}`
 
     const text = await $fetch(unghUrl, { responseType: 'text' }).catch(() => null)
     if (!text)
