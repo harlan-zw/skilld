@@ -1,5 +1,5 @@
 import type { AgentType } from '../agent'
-import { existsSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { join } from 'pathe'
 import { agents } from '../agent'
@@ -7,6 +7,42 @@ import { CACHE_DIR } from '../cache'
 import { getRegisteredProjects, unregisterProject } from '../core/config'
 import { readLock } from '../core/lockfile'
 import { SHARED_SKILLS_DIR } from '../core/shared'
+import { SKILLD_MARKER_END, SKILLD_MARKER_START } from './sync'
+
+/**
+ * Remove the skilld marker block from an agent's instruction file.
+ */
+function removeAgentInstructions(agent: AgentType, projectPath: string): boolean {
+  const agentConfig = agents[agent]
+  if (!agentConfig.instructionFile)
+    return false
+
+  const filePath = join(projectPath, agentConfig.instructionFile)
+  if (!existsSync(filePath))
+    return false
+
+  const content = readFileSync(filePath, 'utf-8')
+  const startIdx = content.indexOf(SKILLD_MARKER_START)
+  if (startIdx === -1)
+    return false
+
+  const endIdx = content.indexOf(SKILLD_MARKER_END, startIdx)
+  if (endIdx === -1)
+    return false
+
+  // Remove marker block plus surrounding blank lines
+  const before = content.slice(0, startIdx).replace(/\n+$/, '')
+  const after = content.slice(endIdx + SKILLD_MARKER_END.length).replace(/^\n+/, '')
+  const updated = before + (before && after ? '\n' : '') + after
+
+  if (updated.trim() === '') {
+    rmSync(filePath)
+  }
+  else {
+    writeFileSync(filePath, updated.endsWith('\n') ? updated : `${updated}\n`)
+  }
+  return true
+}
 
 export interface UninstallOptions {
   scope?: 'project' | 'all'
@@ -229,6 +265,17 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
   // Show grouped removal summary
   for (const [prefix, items] of groups) {
     p.log.success(`Removed ${prefix}: ${formatGroup(items)}`)
+  }
+
+  // Remove skilld instructions from agent instruction files
+  const agentTypes = agentFilter || (Object.keys(agents) as AgentType[])
+  for (const proj of projectsToUnregister) {
+    for (const agent of agentTypes) {
+      if (removeAgentInstructions(agent, proj)) {
+        const file = agents[agent].instructionFile!
+        p.log.success(`Cleaned ${file}`)
+      }
+    }
   }
 
   // Unregister projects from config (skip if cache dir was removed — config is gone)

@@ -31,6 +31,8 @@ export interface AgentTarget {
   detectProject: (cwd: string) => boolean
   /** CLI command name (if agent has a CLI for skill generation) */
   cli?: string
+  /** Project-level instruction file for always-on rules (e.g. CLAUDE.md, AGENTS.md) */
+  instructionFile?: string
 
   // --- Skill file conventions ---
 

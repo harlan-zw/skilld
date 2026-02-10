@@ -24,6 +24,7 @@ export const cline = defineTarget({
   detectInstalled: () => existsSync(join(home, '.cline')),
   detectEnv: () => !!process.env.CLINE_TASK_ID,
   detectProject: cwd => existsSync(join(cwd, '.cline')),
+  instructionFile: '.clinerules',
 
   skillsDir: '.cline/skills',
   globalSkillsDir: join(home, '.cline/skills'),

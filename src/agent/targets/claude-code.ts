@@ -24,6 +24,7 @@ export const claudeCode = defineTarget({
   detectEnv: () => !!(process.env.CLAUDE_CODE || process.env.CLAUDE_CONFIG_DIR),
   detectProject: cwd => existsSync(join(cwd, '.claude')) || existsSync(join(cwd, 'CLAUDE.md')),
   cli: 'claude',
+  instructionFile: 'CLAUDE.md',
 
   skillsDir: '.claude/skills',
   globalSkillsDir: join(claudeHome, 'skills'),

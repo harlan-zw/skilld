@@ -110,6 +110,57 @@ export async function ensureGitignore(skillsDir: string, cwd: string, isGlobal: 
   p.log.success('Updated .gitignore')
 }
 
+export const SKILLD_MARKER_START = '<!-- skilld -->'
+export const SKILLD_MARKER_END = '<!-- /skilld -->'
+
+const SKILLD_INSTRUCTIONS = `${SKILLD_MARKER_START}
+Before modifying code, evaluate each installed skill against the current task.
+For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
+${SKILLD_MARKER_END}`
+
+/**
+ * Check if agent instruction file has skilld skill-activation snippet.
+ * If missing, prompt to add it. Skipped for global installs or agents without an instructionFile.
+ */
+export async function ensureAgentInstructions(agent: AgentType, cwd: string, isGlobal: boolean): Promise<void> {
+  if (isGlobal)
+    return
+
+  const agentConfig = agents[agent]
+  if (!agentConfig.instructionFile)
+    return
+
+  const filePath = join(cwd, agentConfig.instructionFile)
+
+  // Check if marker already present
+  if (existsSync(filePath)) {
+    const content = readFileSync(filePath, 'utf-8')
+    if (content.includes(SKILLD_MARKER_START))
+      return
+  }
+
+  p.note(SKILLD_INSTRUCTIONS, `Will be added to ${agentConfig.instructionFile}`)
+
+  const add = await p.confirm({
+    message: `Add skill activation instructions to ${agentConfig.instructionFile}?`,
+    initialValue: true,
+  })
+
+  if (p.isCancel(add) || !add)
+    return
+
+  if (existsSync(filePath)) {
+    const existing = readFileSync(filePath, 'utf-8')
+    const separator = existing.endsWith('\n') ? '' : '\n'
+    appendFileSync(filePath, `${separator}\n${SKILLD_INSTRUCTIONS}\n`)
+  }
+  else {
+    writeFileSync(filePath, `${SKILLD_INSTRUCTIONS}\n`)
+  }
+
+  p.log.success(`Updated ${agentConfig.instructionFile}`)
+}
+
 export interface SyncOptions {
   packages?: string[]
   global: boolean
@@ -643,6 +694,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   }
 
   await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[config.agent].skillsDir, cwd, config.global)
+  await ensureAgentInstructions(config.agent, cwd, config.global)
 
   await shutdownWorker()
 

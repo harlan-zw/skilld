@@ -17,7 +17,7 @@ describe('agent/skill', () => {
       expect(result).not.toContain('name: vue-skilld')
       expect(result).toContain('metadata:')
       expect(result).toContain('  version: 3.4.0')
-      expect(result).toContain('Using code importing from \\"vue\\" or working with *.vue files. Researching or debugging vue. (Progressive JavaScript framework)')
+      expect(result).toContain('ALWAYS use when editing or working with *.vue files or code importing \\"vue\\". Consult for debugging, best practices, or modifying vue. (Progressive JavaScript framework)')
       expect(result).toContain('# Vue')
     })
 
@@ -32,7 +32,7 @@ describe('agent/skill', () => {
       expect(result).toContain('name: vuejs-core')
       expect(result).not.toContain('name: vuejs-core-skilld')
       // description still uses npm package name for import matching
-      expect(result).toContain('importing from \\"vue\\"')
+      expect(result).toContain('code importing \\"vue\\"')
     })
 
     it('generates fallback description when no globs', () => {
@@ -41,7 +41,7 @@ describe('agent/skill', () => {
         relatedSkills: [],
       })
 
-      expect(result).toContain('Using code importing from \\"test-pkg\\". Researching or debugging test-pkg, test pkg.')
+      expect(result).toContain('ALWAYS use when writing code importing \\"test-pkg\\". Consult for debugging, best practices, or modifying test-pkg, test pkg.')
     })
 
     it('generates multi-package description when packages provided', () => {
@@ -53,7 +53,7 @@ describe('agent/skill', () => {
         packages: [{ name: 'vue' }, { name: '@vue/reactivity' }],
       })
 
-      expect(result).toContain('importing from \\"vue\\", \\"@vue/reactivity\\"')
+      expect(result).toContain('code importing \\"vue\\", \\"@vue/reactivity\\"')
       expect(result).toContain('vue/reactivity')
       expect(result).toContain('vue reactivity')
       // Should list named package references

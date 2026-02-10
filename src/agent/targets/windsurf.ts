@@ -23,6 +23,7 @@ export const windsurf = defineTarget({
   detectInstalled: () => existsSync(join(home, '.codeium/windsurf')),
   detectEnv: () => !!process.env.WINDSURF_SESSION,
   detectProject: cwd => existsSync(join(cwd, '.windsurf')) || existsSync(join(cwd, '.windsurfrules')),
+  instructionFile: '.windsurfrules',
 
   skillsDir: '.windsurf/skills',
   globalSkillsDir: join(home, '.codeium/windsurf/skills'),

@@ -23,6 +23,7 @@ export const githubCopilot = defineTarget({
   detectInstalled: () => existsSync(join(home, '.copilot')),
   detectEnv: () => !!process.env.GITHUB_COPILOT_SESSION,
   detectProject: cwd => existsSync(join(cwd, '.github', 'copilot-instructions.md')),
+  instructionFile: '.github/copilot-instructions.md',
 
   skillsDir: '.github/skills',
   globalSkillsDir: join(home, '.copilot/skills'),

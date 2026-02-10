@@ -24,6 +24,7 @@ export const geminiCli = defineTarget({
   detectEnv: () => !!(process.env.GEMINI_API_KEY && process.env.GEMINI_SESSION),
   detectProject: cwd => existsSync(join(cwd, '.gemini')) || existsSync(join(cwd, 'AGENTS.md')),
   cli: 'gemini',
+  instructionFile: 'GEMINI.md',
 
   skillsDir: '.gemini/skills',
   globalSkillsDir: join(home, '.gemini/skills'),

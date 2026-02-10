@@ -23,6 +23,7 @@ export const roo = defineTarget({
   detectInstalled: () => existsSync(join(home, '.roo')),
   detectEnv: () => !!process.env.ROO_SESSION,
   detectProject: cwd => existsSync(join(cwd, '.roo')),
+  instructionFile: '.roorules',
 
   skillsDir: '.roo/skills',
   globalSkillsDir: join(home, '.roo/skills'),

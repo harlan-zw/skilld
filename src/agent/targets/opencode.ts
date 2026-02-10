@@ -23,6 +23,7 @@ export const opencode = defineTarget({
   detectInstalled: () => existsSync(join(configHome, 'opencode')),
   detectEnv: () => !!process.env.OPENCODE_SESSION,
   detectProject: cwd => existsSync(join(cwd, '.opencode')),
+  instructionFile: 'AGENTS.md',
 
   skillsDir: '.opencode/skills',
   globalSkillsDir: join(configHome, 'opencode/skills'),

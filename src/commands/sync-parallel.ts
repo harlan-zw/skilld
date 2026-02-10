@@ -37,7 +37,7 @@ import {
   searchNpmPackages,
 } from '../sources'
 
-import { ensureGitignore, selectLlmConfig } from './sync'
+import { ensureAgentInstructions, ensureGitignore, selectLlmConfig } from './sync'
 import {
   detectChangelog,
   fetchAndCacheResources,
@@ -235,6 +235,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
   const parallelShared = getSharedSkillsDir(cwd)
   await ensureGitignore(parallelShared ? SHARED_SKILLS_DIR : agent.skillsDir, cwd, config.global)
+  await ensureAgentInstructions(config.agent, cwd, config.global)
 
   await shutdownWorker()
 

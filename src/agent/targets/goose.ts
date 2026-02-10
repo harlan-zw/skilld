@@ -21,6 +21,7 @@ export const goose = defineTarget({
   detectEnv: () => !!process.env.GOOSE_SESSION,
   detectProject: cwd => existsSync(join(cwd, '.goose')),
   cli: 'goose',
+  instructionFile: '.goosehints',
 
   skillsDir: '.goose/skills',
   globalSkillsDir: join(configHome, 'goose/skills'),

@@ -179,6 +179,10 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
   const globHint = patterns?.length ? ` or working with ${patterns.join(', ')} files` : ''
   const descSuffix = pkgDescription ? ` (${pkgDescription.replace(/\.?\s*$/, '')})` : ''
 
+  const editHint = globHint
+    ? `editing${globHint} or code importing`
+    : 'writing code importing'
+
   let desc: string
   if (packages && packages.length > 1) {
     // Multi-package description: list all imports and keywords
@@ -190,7 +194,7 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
         allKeywords.add(kw)
     }
     const keywordList = [...allKeywords].join(', ')
-    desc = `Using code importing from ${importList}${globHint}. Researching or debugging ${keywordList}.${descSuffix}`
+    desc = `ALWAYS use when ${editHint} ${importList}. Consult for debugging, best practices, or modifying ${keywordList}.${descSuffix}`
   }
   else {
     const allKeywords = new Set<string>()
@@ -203,7 +207,7 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
         allKeywords.add(kw)
     }
     const nameList = [...allKeywords].join(', ')
-    desc = `Using code importing from "${name}"${globHint}. Researching or debugging ${nameList}.${descSuffix}`
+    desc = `ALWAYS use when ${editHint} "${name}". Consult for debugging, best practices, or modifying ${nameList}.${descSuffix}`
   }
 
   const lines = [

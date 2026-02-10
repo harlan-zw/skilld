@@ -25,6 +25,7 @@ export const codex = defineTarget({
   detectEnv: () => !!(process.env.CODEX_HOME || process.env.CODEX_SESSION),
   detectProject: cwd => existsSync(join(cwd, '.codex')),
   cli: 'codex',
+  instructionFile: 'AGENTS.md',
 
   skillsDir: '.agents/skills',
   globalSkillsDir: join(homedir(), '.agents/skills'),

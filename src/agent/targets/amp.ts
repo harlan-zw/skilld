@@ -23,6 +23,7 @@ export const amp = defineTarget({
   detectInstalled: () => existsSync(join(configHome, 'amp')),
   detectEnv: () => !!process.env.AMP_SESSION,
   detectProject: cwd => existsSync(join(cwd, '.agents', 'AGENTS.md')),
+  instructionFile: 'AGENTS.md',
 
   skillsDir: '.agents/skills',
   globalSkillsDir: join(configHome, 'agents/skills'),

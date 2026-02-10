@@ -2,8 +2,7 @@ skills:
   bombshell-dev-clack:
     packageName: "@clack/prompts"
     version: 1.0.0
-    packages: "@clack/prompts@1.0.0"
     repo: bombshell-dev/clack
     source: "ungh://bombshell-dev/clack/packages/prompts"
-    syncedAt: 2026-02-09
+    syncedAt: 2026-02-10
     generator: skilld

@@ -24,6 +24,7 @@ export const cursor = defineTarget({
   detectInstalled: () => existsSync(join(home, '.cursor')),
   detectEnv: () => !!(process.env.CURSOR_SESSION || process.env.CURSOR_TRACE_ID),
   detectProject: cwd => existsSync(join(cwd, '.cursor')) || existsSync(join(cwd, '.cursorrules')),
+  instructionFile: '.cursorrules',
 
   skillsDir: '.cursor/skills',
   globalSkillsDir: join(home, '.cursor/skills'),
