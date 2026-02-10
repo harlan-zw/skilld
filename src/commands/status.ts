@@ -50,14 +50,14 @@ function countDocs(packageName: string, version?: string): number {
   return count
 }
 
-function countEmbeddings(packageName: string, version?: string): number | null {
+async function countEmbeddings(packageName: string, version?: string): Promise<number | null> {
   if (!version)
     return null
   const dbPath = getPackageDbPath(packageName, version)
   if (!existsSync(dbPath))
     return null
   try {
-    const { DatabaseSync } = require('node:sqlite')
+    const { DatabaseSync } = await import('node:sqlite')
     const db = new DatabaseSync(dbPath, { open: true, readOnly: true })
     const row = db.prepare('SELECT count(*) as cnt FROM vector_metadata').get() as { cnt: number } | undefined
     db.close()
@@ -215,7 +215,7 @@ export function statusCommand(opts: StatusOptions = {}): void {
       if (docs > 0)
         meta.push(`${docs} docs`)
 
-      const embeddings = countEmbeddings(pkgName, info.version)
+      const embeddings = await countEmbeddings(pkgName, info.version)
       if (embeddings !== null)
         meta.push(`${embeddings} chunks`)
 
