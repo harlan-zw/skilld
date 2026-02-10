@@ -565,6 +565,7 @@ const searchSubCommand = defineCommand({
 const main = defineCommand({
   meta: {
     name: 'skilld',
+    version,
     description: 'Sync package documentation for agentic use',
   },
   args: {
