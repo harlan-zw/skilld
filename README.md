@@ -34,22 +34,23 @@ Skilld leverages maintainers existing effort. Maintainers write great docs for u
 
 ## Features
 
-- 🌍 **Full Context SKILL.md** - Generates with the repo code, docs, releases, issues, discussions
-- 🤖 **BYO Agent** - Generate SKILL.md with or without an LLM
-- 📚 **Customizable** - `Best practices`, `LLM Gaps`, `Doc Map` or your own prompts
-- 🔍 **Semantic Search** - Token-optimized search via [retriv](https://github.com/harlan-zw/retriv)
-- 🎯 **Safe** - Prompt injection sanitization, version-aware output
-- 🤝 **Ecosystem** - [skills-npm](https://github.com/antfu/skills-npm) and `/llms.txt` support
+- 🌍 **Any NPM Package** - Opt any dependency into skill generation, docs are auto-resolved from GitHub, `/llms.txt`, or README
+- 📦 **Opt-in Sources** - Enrich skills with GitHub issues, discussions, and releases per-package
+- 🤖 **11 Agents** - Claude Code, Cursor, Windsurf, Cline, Codex, Copilot, Gemini CLI, Goose, Amp, OpenCode, Roo
+- 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best practices`, `LLM Gaps`, `Doc Map`, or your own prompts
+- 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
+- 🎯 **Safe & Versioned** - Prompt injection sanitization, version-aware caching, auto-updates on new releases
+- 🤝 **Ecosystem** - [skills-npm](https://github.com/antfu/skills-npm) first-party skills and `/llms.txt` discovery
 
 ## Quick Start
 
 Run skilld in a project to generate skills for your dependencies through a simple interactive wizard:
 
 ```bash
-npx skilld
+npx -y skilld
 ```
 
-If you need to re-configure skilld, just run `npx skilld config` to update your agent, model, or preferences.
+If you need to re-configure skilld, just run `npx -y skilld config` to update your agent, model, or preferences.
 
 ### Tips
 
