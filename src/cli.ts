@@ -2,6 +2,7 @@
 import type { AgentType, OptimizeModel } from './agent'
 import type { PackageUsage } from './agent/detect-imports'
 import type { ProjectState } from './core'
+import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
@@ -9,9 +10,11 @@ import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
 import { agents, detectImportedPackages, detectInstalledAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent'
 import { cacheCleanCommand, configCommand, installCommand, interactiveSearch, listCommand, removeCommand, runWizard, searchCommand, statusCommand, syncCommand, uninstallCommand } from './commands'
+import { syncGitSkills } from './commands/sync-git'
 import { getProjectState, hasConfig, isOutdated, readConfig, updateConfig } from './core'
 import { timedSpinner } from './core/formatting'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources'
+import { parseGitSkillInput } from './sources/git-skills'
 
 import { version } from './version'
 
@@ -356,8 +359,6 @@ const addCommand = defineCommand({
     )]
 
     // Partition: git sources vs npm packages
-    const { parseGitSkillInput } = await import('./sources/git-skills')
-    const { syncGitSkills } = await import('./commands/sync-git')
     const gitSources: Array<import('./sources/git-skills').GitSkillSource> = []
     const npmTokens: string[] = []
 
@@ -635,7 +636,6 @@ const main = defineCommand({
     if (args.prepare) {
       // Background mode: spawn detached process and exit immediately
       if (args.background) {
-        const { spawn } = await import('node:child_process')
         const child = spawn(process.execPath, [process.argv[1], '--prepare', ...(args.agent ? ['--agent', args.agent] : [])], {
           cwd,
           detached: true,

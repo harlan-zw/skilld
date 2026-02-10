@@ -29,12 +29,14 @@ import { defaultFeatures, readConfig, registerProject, updateConfig } from '../c
 import { timedSpinner } from '../core/formatting'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared'
+import { shutdownWorker } from '../retriv/pool'
 import {
   fetchPkgDist,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
 } from '../sources'
+import { syncPackagesParallel } from './sync-parallel'
 import {
   detectChangelog,
   fetchAndCacheResources,
@@ -123,7 +125,6 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
   if (opts.packages && opts.packages.length > 0) {
     // Use parallel sync for multiple packages
     if (opts.packages.length > 1) {
-      const { syncPackagesParallel } = await import('./sync-parallel')
       return syncPackagesParallel({
         packages: opts.packages,
         global: opts.global,
@@ -149,7 +150,6 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
 
   // Use parallel sync for multiple packages
   if (packages.length > 1) {
-    const { syncPackagesParallel } = await import('./sync-parallel')
     return syncPackagesParallel({
       packages,
       global: opts.global,
@@ -644,7 +644,6 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
 
   await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[config.agent].skillsDir, cwd, config.global)
 
-  const { shutdownWorker } = await import('../retriv/pool')
   await shutdownWorker()
 
   p.outro(`Synced ${packageName} to ${relative(cwd, skillDir)}`)

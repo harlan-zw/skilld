@@ -14,7 +14,7 @@ import type { SkillInfo } from '../core/lockfile'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
-import { join } from 'pathe'
+import { dirname, join } from 'pathe'
 import { agents, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent'
 import { generateSkillMd } from '../agent/prompts/skill'
 import {
@@ -34,8 +34,10 @@ import {
 import { readConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile'
+import { sanitizeMarkdown } from '../core/sanitize'
 import { getSharedSkillsDir } from '../core/shared'
 import { createIndex } from '../retriv'
+import { shutdownWorker } from '../retriv/pool'
 import {
   $fetch,
   downloadLlmsDocs,
@@ -48,6 +50,7 @@ import {
   resolveEntryFiles,
   resolvePackageDocs,
 } from '../sources'
+import { fetchGitSkills } from '../sources/git-skills'
 import { selectLlmConfig } from './sync'
 
 export interface InstallOptions {
@@ -145,7 +148,6 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 
     // Git-sourced skills: re-fetch from remote
     if (info.source === 'github' || info.source === 'gitlab' || info.source === 'local') {
-      const { fetchGitSkills } = await import('../sources/git-skills')
       const source = {
         type: info.source as 'github' | 'gitlab' | 'local',
         ...(info.repo?.includes('/') ? { owner: info.repo.split('/')[0], repo: info.repo.split('/')[1] } : {}),
@@ -156,8 +158,6 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       const result = await fetchGitSkills(source)
       const match = result.skills.find(s => s.name === name)
       if (match) {
-        const { sanitizeMarkdown } = await import('../core/sanitize')
-        const { dirname } = await import('pathe')
         const skillDir = join(skillsDir, name)
         mkdirSync(skillDir, { recursive: true })
         writeFileSync(join(skillDir, 'SKILL.md'), sanitizeMarkdown(match.content))
@@ -390,7 +390,6 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     syncLockfilesToDirs(lock, allSkillsDirs.filter(d => d !== skillsDir))
   }
 
-  const { shutdownWorker } = await import('../retriv/pool')
   await shutdownWorker()
 
   p.outro('Install complete')

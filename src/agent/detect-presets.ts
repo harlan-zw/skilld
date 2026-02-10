@@ -5,6 +5,7 @@
 
 import type { PackageUsage } from './detect-imports'
 import { readFile } from 'node:fs/promises'
+import { parseSync } from 'oxc-parser'
 import { join } from 'pathe'
 
 const NUXT_CONFIG_FILES = ['nuxt.config.ts', 'nuxt.config.js', 'nuxt.config.mjs']
@@ -59,7 +60,6 @@ export async function detectNuxtModules(cwd: string): Promise<PackageUsage[]> {
   if (!config)
     return []
 
-  const { parseSync } = await import('oxc-parser')
   const result = parseSync(config.path, config.content)
   const modules = extractModuleStrings(result.program)
 

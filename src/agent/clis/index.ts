@@ -10,6 +10,7 @@ import { exec, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { promisify } from 'node:util'
 import { join } from 'pathe'
 import { readCachedSection, writeSections } from '../../cache'
 import { sanitizeMarkdown } from '../../core/sanitize'
@@ -66,7 +67,6 @@ export function getModelLabel(id: OptimizeModel): string {
 }
 
 export async function getAvailableModels(): Promise<import('./types').ModelInfo[]> {
-  const { promisify } = await import('node:util')
   const execAsync = promisify(exec)
 
   const installedAgents = detectInstalledAgents()

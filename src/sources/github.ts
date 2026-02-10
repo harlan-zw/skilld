@@ -4,6 +4,8 @@
 
 import type { LlmsLink } from './types'
 import { spawnSync } from 'node:child_process'
+import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { isGhAvailable } from './issues'
 import { getDocOverride } from './overrides'
 import { $fetch, extractBranchHint, fetchText, parseGitHubUrl } from './utils'
@@ -612,12 +614,10 @@ export async function fetchGitSource(owner: string, repo: string, version: strin
 export async function fetchReadmeContent(url: string): Promise<string | null> {
   // Local file
   if (url.startsWith('file://')) {
-    const { readFileSync, existsSync } = await import('node:fs')
-    const { fileURLToPath } = await import('node:url')
     const filePath = fileURLToPath(url)
-    if (!existsSync(filePath))
+    if (!fsExistsSync(filePath))
       return null
-    return readFileSync(filePath, 'utf-8')
+    return fsReadFileSync(filePath, 'utf-8')
   }
 
   if (url.startsWith('ungh://')) {
