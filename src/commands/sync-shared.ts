@@ -2,8 +2,7 @@ import type { AgentType } from '../agent'
 import type { FeaturesConfig } from '../core/config'
 import type { ResolvedPackage, ResolveStep } from '../sources'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { join } from 'pathe'
+import { join, resolve } from 'pathe'
 import { agents } from '../agent'
 import {
   CACHE_DIR,
@@ -12,13 +11,9 @@ import {
   getPackageDbPath,
   getShippedSkills,
   hasShippedDocs,
-  linkDiscussions,
-  linkIssues,
+  linkCachedDir,
   linkPkg,
   linkPkgNamed,
-  linkReferences,
-  linkReleases,
-  linkSections,
   linkShippedSkill,
   readCachedDocs,
   resolvePkgDir,
@@ -123,12 +118,12 @@ export function linkAllReferences(skillDir: string, packageName: string, cwd: st
     linkPkg(skillDir, packageName, cwd, version)
     linkPkgNamed(skillDir, packageName, cwd, version)
     if (!hasShippedDocs(packageName, cwd, version) && docsType !== 'readme') {
-      linkReferences(skillDir, packageName, version)
+      linkCachedDir(skillDir, packageName, version, 'docs')
     }
-    linkIssues(skillDir, packageName, version)
-    linkDiscussions(skillDir, packageName, version)
-    linkReleases(skillDir, packageName, version)
-    linkSections(skillDir, packageName, version)
+    linkCachedDir(skillDir, packageName, version, 'issues')
+    linkCachedDir(skillDir, packageName, version, 'discussions')
+    linkCachedDir(skillDir, packageName, version, 'releases')
+    linkCachedDir(skillDir, packageName, version, 'sections')
     // Create named symlinks for additional packages in multi-package skills
     if (extraPackages) {
       for (const pkg of extraPackages) {

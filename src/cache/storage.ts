@@ -117,21 +117,6 @@ export function linkCachedDir(skillDir: string, name: string, version: string, s
   }
 }
 
-/** @deprecated Use linkCachedDir(skillDir, name, version, 'docs') */
-export function linkReferences(skillDir: string, name: string, version: string): void {
-  linkCachedDir(skillDir, name, version, 'docs')
-}
-
-/** @deprecated Use linkCachedDir(skillDir, name, version, 'issues') */
-export function linkIssues(skillDir: string, name: string, version: string): void {
-  linkCachedDir(skillDir, name, version, 'issues')
-}
-
-/** @deprecated Use linkCachedDir(skillDir, name, version, 'discussions') */
-export function linkDiscussions(skillDir: string, name: string, version: string): void {
-  linkCachedDir(skillDir, name, version, 'discussions')
-}
-
 /**
  * Resolve the package directory: node_modules first, then cached dist fallback.
  * Returns the path if found, null otherwise.
@@ -252,11 +237,6 @@ export function getShippedSkills(name: string, cwd: string, version?: string): S
     .map(d => ({ skillName: d.name, skillDir: join(skillsPath, d.name) }))
 }
 
-/** @deprecated Use linkCachedDir(skillDir, name, version, 'sections') */
-export function linkSections(skillDir: string, name: string, version: string): void {
-  linkCachedDir(skillDir, name, version, 'sections')
-}
-
 /**
  * Write LLM-generated section outputs to global cache for cross-project reuse
  *
@@ -280,11 +260,6 @@ export function readCachedSection(name: string, version: string, file: string): 
   if (!existsSync(path))
     return null
   return readFileSync(path, 'utf-8')
-}
-
-/** @deprecated Use linkCachedDir(skillDir, name, version, 'releases') */
-export function linkReleases(skillDir: string, name: string, version: string): void {
-  linkCachedDir(skillDir, name, version, 'releases')
 }
 
 /**

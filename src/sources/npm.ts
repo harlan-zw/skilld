@@ -84,15 +84,6 @@ export async function fetchNpmRegistryMeta(packageName: string, version: string)
   }
 }
 
-/**
- * Fetch release date for a specific version from npm registry
- * @deprecated Use fetchNpmRegistryMeta instead
- */
-export async function fetchNpmReleaseDate(packageName: string, version: string): Promise<string | null> {
-  const meta = await fetchNpmRegistryMeta(packageName, version)
-  return meta.releasedAt || null
-}
-
 export type ResolveStep = 'npm' | 'github-docs' | 'github-meta' | 'github-search' | 'readme' | 'llms.txt' | 'local'
 
 export interface ResolveOptions {

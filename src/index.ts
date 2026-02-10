@@ -14,11 +14,9 @@ export {
   getCacheKey,
   getVersionKey,
   isCached,
-  linkReferences,
   listCached,
   readCachedDocs,
   REFERENCES_DIR,
-  SEARCH_DB,
   writeToCache,
 } from './cache/index'
 export type { CacheConfig, CachedDoc, CachedPackage } from './cache/index'

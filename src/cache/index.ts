@@ -3,7 +3,7 @@
  */
 
 // Config
-export { CACHE_DIR, getPackageDbPath, REFERENCES_DIR, SEARCH_DB } from './config'
+export { CACHE_DIR, getPackageDbPath, REFERENCES_DIR } from './config'
 
 // Storage operations
 export type { ShippedSkill } from './storage'
@@ -17,13 +17,8 @@ export {
   hasShippedDocs,
   isCached,
   linkCachedDir,
-  linkDiscussions,
-  linkIssues,
   linkPkg,
   linkPkgNamed,
-  linkReferences,
-  linkReleases,
-  linkSections,
   linkShippedSkill,
   listCached,
   listReferenceFiles,
