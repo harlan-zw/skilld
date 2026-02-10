@@ -150,7 +150,7 @@ function buildConfigLines(): string[] {
   return lines
 }
 
-export function statusCommand(opts: StatusOptions = {}): void {
+export async function statusCommand(opts: StatusOptions = {}): Promise<void> {
   const allSkills = [...iterateSkills({ scope: opts.global ? 'global' : 'all' })]
 
   // Config section
@@ -184,7 +184,7 @@ export function statusCommand(opts: StatusOptions = {}): void {
     }
   }
 
-  const buildPackageLines = (pkgs: Map<string, TrackedPackage>): string[] => {
+  const buildPackageLines = async (pkgs: Map<string, TrackedPackage>): Promise<string[]> => {
     const lines: string[] = []
     for (const [, pkg] of pkgs) {
       const { info } = pkg
@@ -236,12 +236,12 @@ export function statusCommand(opts: StatusOptions = {}): void {
 
   if (!opts.global && localPkgs.size > 0) {
     p.log.step(`${bold('Local')} (project)`)
-    p.log.message(buildPackageLines(localPkgs).join('\n'))
+    p.log.message((await buildPackageLines(localPkgs)).join('\n'))
   }
 
   if (globalPkgs.size > 0) {
     p.log.step(bold('Global'))
-    p.log.message(buildPackageLines(globalPkgs).join('\n'))
+    p.log.message((await buildPackageLines(globalPkgs)).join('\n'))
   }
 
   if (!opts.global && localPkgs.size === 0) {
