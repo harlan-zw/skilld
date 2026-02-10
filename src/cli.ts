@@ -3,7 +3,6 @@ import type { AgentType, OptimizeModel } from './agent'
 import type { PackageUsage } from './agent/detect-imports'
 import type { ProjectState } from './core'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
@@ -14,15 +13,14 @@ import { getProjectState, hasConfig, isOutdated, readConfig, updateConfig } from
 import { timedSpinner } from './core/formatting'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources'
 
+import { version } from './version'
+
 // Suppress node:sqlite ExperimentalWarning (loaded lazily by retriv)
 const _emit = process.emit
 process.emit = (event: string, ...args: any[]) =>
   event === 'warning' && args[0]?.name === 'ExperimentalWarning' && args[0]?.message?.includes('SQLite')
     ? false
     : _emit.apply(process, [event, ...args])
-
-const require = createRequire(import.meta.url)
-const { version } = require('../package.json')
 
 // ── Helpers ──
 

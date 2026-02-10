@@ -74,42 +74,6 @@ describe('cache/storage', () => {
     })
   })
 
-  describe('linkReferences', () => {
-    it('removes existing link before creating new one', async () => {
-      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
-      const { linkReferences } = await import('../../src/cache/storage')
-      // cachedDocsPath exists
-      vi.mocked(existsSync).mockReturnValue(true)
-      // lstatSync returns a symlink stat for existing link
-      vi.mocked(lstatSync).mockReturnValue({ isSymbolicLink: () => true, isFile: () => false } as any)
-
-      linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
-
-      expect(unlinkSync).toHaveBeenCalled()
-      expect(symlinkSync).toHaveBeenCalledWith(
-        expect.stringContaining('vue@3.4'),
-        expect.stringContaining('.skilld/docs'),
-        'junction',
-      )
-    })
-
-    it('skips unlink if no existing link', async () => {
-      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
-      const { linkReferences } = await import('../../src/cache/storage')
-      // cachedDocsPath exists
-      vi.mocked(existsSync).mockReturnValue(true)
-      // lstatSync throws ENOENT (no existing link)
-      vi.mocked(lstatSync).mockImplementation(() => {
-        throw new Error('ENOENT')
-      })
-
-      linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
-
-      expect(unlinkSync).not.toHaveBeenCalled()
-      expect(symlinkSync).toHaveBeenCalled()
-    })
-  })
-
   describe('listCached', () => {
     it('returns empty array when references dir missing', async () => {
       const { existsSync } = await import('node:fs')

@@ -11,7 +11,8 @@
 
 import type { AgentType, CustomPrompt, SkillSection } from '../agent'
 import type { SkillInfo } from '../core/lockfile'
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
 import { join } from 'pathe'
 import { agents, getModelLabel, optimizeDocs } from '../agent'
@@ -57,8 +58,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   const cwd = process.cwd()
   const agent = agents[opts.agent]
   const skillsDir = opts.global
-    // eslint-disable-next-line ts/no-require-imports
-    ? join(require('node:os').homedir(), '.skilld', 'skills')
+    ? join(homedir(), '.skilld', 'skills')
     : join(cwd, agent.skillsDir)
 
   // Collect lockfiles from all agent skill dirs and merge
@@ -186,8 +186,10 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         unlinkSync(sectionsLink)
       if (existsSync(cachedSections))
         symlinkSync(cachedSections, sectionsLink, 'junction')
-      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source, info.packages))
-        regenerated.push({ name, pkgName, version, skillDir, packages: info.packages })
+      if (!copyFromExistingAgent(skillDir, name, allSkillsDirs)) {
+        if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source, info.packages))
+          regenerated.push({ name, pkgName, version, skillDir, packages: info.packages })
+      }
       spin.stop(`Linked ${name}`)
       continue
     }
@@ -316,8 +318,10 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         })), { dbPath: getPackageDbPath(pkgName, version) })
       }
 
-      if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source, info.packages))
-        regenerated.push({ name, pkgName, version, skillDir, packages: info.packages })
+      if (!copyFromExistingAgent(skillDir, name, allSkillsDirs)) {
+        if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source, info.packages))
+          regenerated.push({ name, pkgName, version, skillDir, packages: info.packages })
+      }
       spin.stop(`Downloaded and linked ${name}`)
     }
     else {
@@ -346,6 +350,24 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   await shutdownWorker()
 
   p.outro('Install complete')
+}
+
+/** Copy SKILL.md from another agent's skill dir if one exists */
+function copyFromExistingAgent(skillDir: string, name: string, allSkillsDirs: string[]): boolean {
+  const targetMd = join(skillDir, 'SKILL.md')
+  if (existsSync(targetMd))
+    return false
+  for (const dir of allSkillsDirs) {
+    if (dir === skillDir)
+      continue
+    const candidateMd = join(dir, name, 'SKILL.md')
+    if (existsSync(candidateMd) && !lstatSync(candidateMd).isSymbolicLink()) {
+      mkdirSync(skillDir, { recursive: true })
+      copyFileSync(candidateMd, targetMd)
+      return true
+    }
+  }
+  return false
 }
 
 /** Try to recover original package name from sanitized name + source */

@@ -1,7 +1,6 @@
 import type { AgentType } from '../agent'
 import type { SkillInfo } from '../core/lockfile'
 import { existsSync, readdirSync, statSync } from 'node:fs'
-import { createRequire } from 'node:module'
 import * as p from '@clack/prompts'
 import { join } from 'pathe'
 import { agents, getAgentVersion } from '../agent'
@@ -12,9 +11,7 @@ import { formatSource, timeAgo } from '../core/formatting'
 import { parsePackages } from '../core/lockfile'
 
 import { iterateSkills } from '../core/skills'
-
-const require = createRequire(import.meta.url)
-const { version: skilldVersion } = require('../package.json')
+import { version as skilldVersion } from '../version'
 
 export interface StatusOptions {
   global?: boolean

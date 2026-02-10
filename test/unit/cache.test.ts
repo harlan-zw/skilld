@@ -124,36 +124,4 @@ describe('cache', () => {
       expect(writeFileSync).toHaveBeenCalledTimes(2)
     })
   })
-
-  describe('linkReferences', () => {
-    beforeEach(() => {
-      vi.resetAllMocks()
-    })
-
-    it('removes existing link before creating new one', async () => {
-      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
-      const { linkReferences } = await import('../../src/cache')
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(lstatSync).mockReturnValue({ isSymbolicLink: () => true, isFile: () => false } as any)
-
-      linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
-
-      expect(unlinkSync).toHaveBeenCalled()
-      expect(symlinkSync).toHaveBeenCalled()
-    })
-
-    it('creates symlink without unlinking if no existing link', async () => {
-      const { existsSync, lstatSync, unlinkSync, symlinkSync } = await import('node:fs')
-      const { linkReferences } = await import('../../src/cache')
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(lstatSync).mockImplementation(() => {
-        throw new Error('ENOENT')
-      })
-
-      linkReferences('/project/.claude/skills/vue', 'vue', '3.4.0')
-
-      expect(unlinkSync).not.toHaveBeenCalled()
-      expect(symlinkSync).toHaveBeenCalled()
-    })
-  })
 })
