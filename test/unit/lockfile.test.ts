@@ -181,4 +181,76 @@ describe('core/lockfile', () => {
       expect(lock?.skills['vuejs-core']?.packages).toBe('vue@3.5.0, @vue/reactivity@3.5.0')
     })
   })
+
+  describe('git skill fields (path, ref, commit)', () => {
+    it('readLock parses git fields from lockfile', async () => {
+      const { existsSync, readFileSync } = await import('node:fs')
+      const { readLock } = await import('../../src/core/lockfile')
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(
+        'skills:\n'
+        + '  web-design-guidelines:\n'
+        + '    source: github\n'
+        + '    repo: vercel-labs/agent-skills\n'
+        + '    path: skills/web-design-guidelines\n'
+        + '    ref: main\n'
+        + '    commit: abc123def\n'
+        + '    generator: external\n',
+      )
+
+      const lock = readLock('/skills')
+      const skill = lock?.skills['web-design-guidelines']
+      expect(skill?.source).toBe('github')
+      expect(skill?.repo).toBe('vercel-labs/agent-skills')
+      expect(skill?.path).toBe('skills/web-design-guidelines')
+      expect(skill?.ref).toBe('main')
+      expect(skill?.commit).toBe('abc123def')
+      expect(skill?.generator).toBe('external')
+    })
+
+    it('writeLock serializes git fields', async () => {
+      const { existsSync, writeFileSync } = await import('node:fs')
+      const { writeLock } = await import('../../src/core/lockfile')
+
+      vi.mocked(existsSync).mockReturnValue(false)
+
+      writeLock('/skills', 'web-design-guidelines', {
+        source: 'github',
+        repo: 'vercel-labs/agent-skills',
+        path: 'skills/web-design-guidelines',
+        ref: 'main',
+        commit: 'abc123def456',
+        syncedAt: '2026-02-10',
+        generator: 'external',
+      })
+
+      const written = vi.mocked(writeFileSync).mock.calls[0]![1] as string
+      expect(written).toContain('source: github')
+      expect(written).toContain('repo: vercel-labs/agent-skills')
+      expect(written).toContain('path: skills/web-design-guidelines')
+      expect(written).toContain('ref: main')
+      expect(written).toContain('commit: abc123def456')
+      expect(written).toContain('generator: external')
+    })
+
+    it('writeLock omits git fields when not set', async () => {
+      const { existsSync, writeFileSync } = await import('node:fs')
+      const { writeLock } = await import('../../src/core/lockfile')
+
+      vi.mocked(existsSync).mockReturnValue(false)
+
+      writeLock('/skills', 'vue', {
+        packageName: 'vue',
+        version: '3.5.0',
+        source: 'docs',
+        generator: 'skilld',
+      })
+
+      const written = vi.mocked(writeFileSync).mock.calls[0]![1] as string
+      expect(written).not.toContain('path:')
+      expect(written).not.toContain('ref:')
+      expect(written).not.toContain('commit:')
+    })
+  })
 })

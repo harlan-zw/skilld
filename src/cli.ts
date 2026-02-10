@@ -348,19 +348,49 @@ const addCommand = defineCommand({
         return
     }
 
-    const state = await getProjectState(cwd)
-    p.intro(introLine({ state }))
+    // Collect raw inputs (don't split URLs on slashes/spaces yet)
+    const rawInputs = [...new Set(
+      [args.package, ...((args as any)._ || [])]
+        .map((s: string) => s.trim())
+        .filter(Boolean),
+    )]
 
-    const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
-    return syncCommand(state, {
-      packages,
-      global: args.global,
-      agent,
-      model: args.model as OptimizeModel | undefined,
-      yes: args.yes,
-      force: args.force,
-      debug: args.debug,
-    })
+    // Partition: git sources vs npm packages
+    const { parseGitSkillInput } = await import('./sources/git-skills')
+    const { syncGitSkills } = await import('./commands/sync-git')
+    const gitSources: Array<import('./sources/git-skills').GitSkillSource> = []
+    const npmTokens: string[] = []
+
+    for (const input of rawInputs) {
+      const git = parseGitSkillInput(input)
+      if (git)
+        gitSources.push(git)
+      else
+        npmTokens.push(input)
+    }
+
+    // Handle git sources
+    if (gitSources.length > 0) {
+      for (const source of gitSources) {
+        await syncGitSkills({ source, global: args.global, agent, yes: args.yes })
+      }
+    }
+
+    // Handle npm packages via existing flow (expand comma/space-split for backwards compat)
+    if (npmTokens.length > 0) {
+      const packages = [...new Set(npmTokens.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      const state = await getProjectState(cwd)
+      p.intro(introLine({ state }))
+      return syncCommand(state, {
+        packages,
+        global: args.global,
+        agent,
+        model: args.model as OptimizeModel | undefined,
+        yes: args.yes,
+        force: args.force,
+        debug: args.debug,
+      })
+    }
   },
 })
 

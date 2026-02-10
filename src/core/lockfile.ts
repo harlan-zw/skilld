@@ -11,6 +11,12 @@ export interface SkillInfo {
   source?: string
   syncedAt?: string
   generator?: string
+  /** Skill path within repo (git-sourced skills) */
+  path?: string
+  /** Git ref tracked for updates */
+  ref?: string
+  /** Git commit SHA at install time */
+  commit?: string
 }
 
 export function parsePackages(packages?: string): Array<{ name: string, version: string }> {
@@ -61,6 +67,12 @@ export function parseSkillFrontmatter(skillPath: string): SkillInfo | null {
       info.syncedAt = value
     if (key === 'generator')
       info.generator = value
+    if (key === 'path')
+      info.path = value
+    if (key === 'ref')
+      info.ref = value
+    if (key === 'commit')
+      info.commit = value
   }
   return info
 }
@@ -108,6 +120,12 @@ function serializeLock(lock: SkilldLock): string {
       yaml += `    syncedAt: ${yamlEscape(skill.syncedAt)}\n`
     if (skill.generator)
       yaml += `    generator: ${yamlEscape(skill.generator)}\n`
+    if (skill.path)
+      yaml += `    path: ${yamlEscape(skill.path)}\n`
+    if (skill.ref)
+      yaml += `    ref: ${yamlEscape(skill.ref)}\n`
+    if (skill.commit)
+      yaml += `    commit: ${yamlEscape(skill.commit)}\n`
   }
   return yaml
 }

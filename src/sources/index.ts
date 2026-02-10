@@ -14,6 +14,14 @@ export {
 export type { EntryFile } from './entries'
 
 export { resolveEntryFiles } from './entries'
+// Git skills
+export type { GitSkillSource, RemoteSkill } from './git-skills'
+
+export {
+  fetchGitSkills,
+  parseGitSkillInput,
+  parseSkillFrontmatterName,
+} from './git-skills'
 // GitHub
 export type { GitDocsResult } from './github'
 
@@ -26,9 +34,9 @@ export {
   MIN_GIT_DOCS,
   validateGitDocsWithLlms,
 } from './github'
+
 // Issues
 export type { GitHubIssue } from './issues'
-
 export {
   fetchGitHubIssues,
   formatIssueAsMarkdown,
@@ -45,9 +53,9 @@ export {
   normalizeLlmsLinks,
   parseMarkdownLinks,
 } from './llms'
+
 // NPM
 export type { LocalPackageInfo, ResolveOptions, ResolveStep } from './npm'
-
 export {
   fetchLatestVersion,
   fetchNpmPackage,
@@ -67,10 +75,11 @@ export {
 // Overrides
 export type { DocOverride } from './overrides'
 export { DOC_OVERRIDES, getDocOverride } from './overrides'
-
 // Releases
 export type { GitHubRelease } from './releases'
+
 export { fetchReleaseNotes, generateReleaseIndex } from './releases'
+
 // Types
 export type {
   FetchedDoc,

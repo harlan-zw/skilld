@@ -138,6 +138,37 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       continue
     }
 
+    // Git-sourced skills: re-fetch from remote
+    if (info.source === 'github' || info.source === 'gitlab' || info.source === 'local') {
+      const { fetchGitSkills } = await import('../sources/git-skills')
+      const source = {
+        type: info.source as 'github' | 'gitlab' | 'local',
+        ...(info.repo?.includes('/') ? { owner: info.repo.split('/')[0], repo: info.repo.split('/')[1] } : {}),
+        skillPath: info.path,
+        ref: info.ref,
+        ...(info.source === 'local' ? { localPath: info.repo } : {}),
+      }
+      const result = await fetchGitSkills(source)
+      const match = result.skills.find(s => s.name === name)
+      if (match) {
+        const { sanitizeMarkdown } = await import('../core/sanitize')
+        const { dirname } = await import('pathe')
+        const skillDir = join(skillsDir, name)
+        mkdirSync(skillDir, { recursive: true })
+        writeFileSync(join(skillDir, 'SKILL.md'), sanitizeMarkdown(match.content))
+        for (const f of match.files) {
+          const filePath = join(skillDir, '.skilld', f.path)
+          mkdirSync(dirname(filePath), { recursive: true })
+          writeFileSync(filePath, f.content)
+        }
+        p.log.success(`Restored ${name} from ${info.repo}`)
+      }
+      else {
+        p.log.warn(`${name}: skill not found in ${info.repo}`)
+      }
+      continue
+    }
+
     const skillDir = join(skillsDir, name)
     const referencesPath = join(skillDir, '.skilld')
     const globalCachePath = getCacheDir(pkgName, version)
