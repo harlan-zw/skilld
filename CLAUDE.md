@@ -33,6 +33,8 @@ skilld install        # Restore references from lockfile
 skilld uninstall      # Remove skilld data
 skilld search "query" # Search indexed docs
 skilld search "query" -p nuxt  # Search filtered by package
+skilld cache             # Clean expired LLM cache entries
+skilld add owner/repo    # Add pre-authored skills from git repo
 ```
 
 ## Architecture
@@ -57,6 +59,9 @@ CLI tool that generates AI agent skills from NPM package documentation. Requires
 5. GitHub README via ungh proxy → fallback
 
 Resolution tracked via `ResolveAttempt[]` array for debugging failures.
+
+**Git skills (`src/sources/git-skills.ts`, `src/commands/sync-git.ts`):**
+Installs pre-authored skills from git repos. Accepts `owner/repo`, full URLs, SSH, or local paths. Clones/pulls into `~/.skilld/git-skills/`, copies `skills/` directory contents. Part of skills-npm ecosystem compatibility.
 
 **LLM integration (NO AI SDK):**
 Spawns CLI processes directly (`claude`, `gemini`) with `--add-dir` for references. Custom stream-json parsing for progress. Results cached at `~/.skilld/llm-cache/<sha256>.json` with 7-day TTL.
