@@ -152,6 +152,39 @@ export function writeLock(skillsDir: string, skillName: string, info: SkillInfo)
   writeFileSync(lockPath, serializeLock(lock))
 }
 
+/**
+ * Merge multiple lockfiles, preferring the most recently synced entry per skill.
+ */
+export function mergeLocks(locks: SkilldLock[]): SkilldLock {
+  const merged: Record<string, SkillInfo> = {}
+  for (const lock of locks) {
+    for (const [name, info] of Object.entries(lock.skills)) {
+      const existing = merged[name]
+      if (!existing || (info.syncedAt && (!existing.syncedAt || info.syncedAt > existing.syncedAt)))
+        merged[name] = info
+    }
+  }
+  return { skills: merged }
+}
+
+/**
+ * Sync a lockfile to all other dirs that already have a skilld-lock.yaml.
+ * Only updates existing lockfiles — does not create new ones.
+ */
+export function syncLockfilesToDirs(sourceLock: SkilldLock, dirs: string[]): void {
+  for (const dir of dirs) {
+    const lockPath = join(dir, 'skilld-lock.yaml')
+    if (!existsSync(lockPath))
+      continue
+    const existing = readLock(dir)
+    if (!existing)
+      continue
+    // Merge source into existing
+    const merged = mergeLocks([existing, sourceLock])
+    writeFileSync(lockPath, serializeLock(merged))
+  }
+}
+
 export function removeLockEntry(skillsDir: string, skillName: string): void {
   const lockPath = join(skillsDir, 'skilld-lock.yaml')
   const lock = readLock(skillsDir)

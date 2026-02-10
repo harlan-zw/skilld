@@ -61,31 +61,20 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     ? join(require('node:os').homedir(), '.skilld', 'skills')
     : join(cwd, agent.skillsDir)
 
-  let lock = readLock(skillsDir)
+  // Collect lockfiles from all agent skill dirs and merge
+  const allSkillsDirs = Object.values(agents).map(t =>
+    opts.global ? t.globalSkillsDir : join(cwd, t.skillsDir),
+  )
+  const allLocks = allSkillsDirs
+    .map(dir => readLock(dir))
+    .filter((l): l is NonNullable<typeof l> => !!l && Object.keys(l.skills).length > 0)
 
-  // Fallback: if no lockfile in target agent dir, try other agents' skill dirs
-  let usedFallbackLock = false
-  if (!lock || Object.keys(lock.skills).length === 0) {
-    for (const target of Object.values(agents)) {
-      if (target.agent === opts.agent)
-        continue
-      const fallbackDir = opts.global
-        ? target.globalSkillsDir
-        : join(cwd, target.skillsDir)
-      const fallbackLock = readLock(fallbackDir)
-      if (fallbackLock && Object.keys(fallbackLock.skills).length > 0) {
-        p.log.info(`Using lockfile from ${target.displayName}`)
-        lock = fallbackLock
-        usedFallbackLock = true
-        break
-      }
-    }
-  }
-
-  if (!lock || Object.keys(lock.skills).length === 0) {
+  if (allLocks.length === 0) {
     p.log.warn('No skilld-lock.yaml found. Run `skilld` to sync skills first.')
     return
   }
+
+  const lock = mergeLocks(allLocks)
 
   const skills = Object.entries(lock.skills)
   const toRestore: Array<{ name: string, info: SkillInfo }> = []
@@ -348,11 +337,10 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     }
   }
 
-  // Copy lockfile entries to target agent dir when using fallback
-  if (usedFallbackLock && lock) {
-    for (const [name, info] of Object.entries(lock.skills))
-      writeLock(skillsDir, name, info)
-  }
+  // Write merged lockfile to target dir and sync to all other existing lockfiles
+  for (const [name, info] of Object.entries(lock.skills))
+    writeLock(skillsDir, name, info)
+  syncLockfilesToDirs(lock, allSkillsDirs.filter(d => d !== skillsDir))
 
   const { shutdownWorker } = await import('../retriv/pool')
   await shutdownWorker()
