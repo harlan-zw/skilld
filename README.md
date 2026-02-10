@@ -50,6 +50,12 @@ Run skilld in a project to generate skills for your dependencies through a simpl
 npx -y skilld
 ```
 
+Or add a specific package directly:
+
+```bash
+npx -y skilld add vue
+```
+
 If you need to re-configure skilld, just run `npx -y skilld config` to update your agent, model, or preferences.
 
 ### Tips
