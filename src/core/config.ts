@@ -33,6 +33,14 @@ export function hasConfig(): boolean {
   return existsSync(CONFIG_PATH)
 }
 
+/** Whether the first-run wizard has been completed (not just agent selection) */
+export function hasCompletedWizard(): boolean {
+  if (!existsSync(CONFIG_PATH))
+    return false
+  const config = readConfig()
+  return config.features !== undefined || config.model !== undefined || config.skipLlm !== undefined
+}
+
 export function readConfig(): SkilldConfig {
   if (!existsSync(CONFIG_PATH))
     return {}

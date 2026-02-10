@@ -11,7 +11,7 @@ import { join, resolve } from 'pathe'
 import { agents, detectImportedPackages, detectInstalledAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent'
 import { cacheCleanCommand, configCommand, installCommand, interactiveSearch, listCommand, removeCommand, runWizard, searchCommand, statusCommand, syncCommand, uninstallCommand } from './commands'
 import { syncGitSkills } from './commands/sync-git'
-import { getProjectState, hasConfig, isOutdated, readConfig, updateConfig } from './core'
+import { getProjectState, hasCompletedWizard, isOutdated, readConfig, updateConfig } from './core'
 import { timedSpinner } from './core/formatting'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources'
 import { parseGitSkillInput } from './sources/git-skills'
@@ -714,7 +714,7 @@ const main = defineCommand({
 
     // First time setup - no skills yet
     if (state.skills.length === 0) {
-      if (!hasConfig()) {
+      if (!hasCompletedWizard()) {
         await runWizard()
       }
 
