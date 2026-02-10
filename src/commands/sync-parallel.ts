@@ -112,6 +112,7 @@ interface BaseSkillData {
   pkgFiles: string[]
   relatedSkills: string[]
   packages?: Array<{ name: string }>
+  warnings: string[]
 }
 
 export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<void> {
@@ -200,6 +201,11 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
   const skillMsg = `Created ${successfulPkgs.length} base skills${shippedPkgs.length > 1 ? ` (Skipping ${shippedPkgs.length})` : ''}`
   p.log.success(skillMsg)
+
+  for (const [, data] of skillData) {
+    for (const w of data.warnings)
+      p.log.warn(`\x1B[33m${w}\x1B[0m`)
+  }
 
   if (errors.length > 0) {
     for (const { pkg, reason } of errors) {
@@ -421,6 +427,7 @@ async function syncBaseSkill(
     pkgFiles,
     relatedSkills,
     packages: allPackages.length > 1 ? allPackages : undefined,
+    warnings: resources.warnings,
   }
 }
 

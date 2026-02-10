@@ -27,6 +27,8 @@ export interface GitDocsResult {
   docsPrefix?: string
   /** Full repo file tree — only set when discoverDocFiles() heuristic was used (not standard docs/ prefix) */
   allFiles?: string[]
+  /** True when ref is a branch (main/master) rather than a version-specific tag */
+  fallback?: boolean
 }
 
 interface UnghFilesResponse {
@@ -47,6 +49,8 @@ async function listFilesAtRef(owner: string, repo: string, ref: string): Promise
 interface TagResult {
   ref: string
   files: string[]
+  /** True when ref is a branch fallback (main/master) rather than a version tag */
+  fallback?: boolean
 }
 
 /**
@@ -81,7 +85,7 @@ async function findGitTag(owner: string, repo: string, version: string, packageN
   for (const branch of branches) {
     const files = await listFilesAtRef(owner, repo, branch)
     if (files.length > 0)
-      return { ref: branch, files }
+      return { ref: branch, files, fallback: true }
   }
 
   return null
@@ -276,6 +280,7 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
   const override = packageName ? getDocOverride(packageName) : undefined
   if (override) {
     const ref = override.ref || 'main'
+    const fallback = !override.ref
     const files = await listDocsAtRef(override.owner, override.repo, ref, `${override.path}/`)
     if (files.length === 0)
       return null
@@ -283,6 +288,7 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
       baseUrl: `https://raw.githubusercontent.com/${override.owner}/${override.repo}/${ref}`,
       ref,
       files,
+      fallback,
     }
   }
 
@@ -314,6 +320,7 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
     files: docs,
     docsPrefix,
     allFiles,
+    fallback: tag.fallback,
   }
 }
 

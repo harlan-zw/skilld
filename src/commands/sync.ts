@@ -588,6 +588,8 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   if (resources.hasReleases)
     resParts.push('releases')
   resSpin.stop(`Fetched ${resParts.length > 0 ? resParts.join(', ') : 'resources'}`)
+  for (const w of resources.warnings)
+    p.log.warn(`\x1B[33m${w}\x1B[0m`)
 
   // Create symlinks
   linkAllReferences(skillDir, packageName, cwd, version, resources.docsType)

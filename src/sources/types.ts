@@ -36,6 +36,8 @@ export interface ResolvedPackage {
   gitDocsUrl?: string
   /** Git tag/ref used for gitDocsUrl */
   gitRef?: string
+  /** True when gitRef is a branch fallback (no version tag found) */
+  gitDocsFallback?: boolean
 }
 
 export interface LocalDependency {

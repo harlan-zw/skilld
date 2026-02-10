@@ -117,12 +117,15 @@ async function resolveGitHub(
     if (gitDocs) {
       result.gitDocsUrl = gitDocs.baseUrl
       result.gitRef = gitDocs.ref
+      result.gitDocsFallback = gitDocs.fallback
       allFiles = gitDocs.allFiles
       attempts.push({
         source: 'github-docs',
         url: gitDocs.baseUrl,
         status: 'success',
-        message: `Found ${gitDocs.files.length} docs at ${gitDocs.ref}`,
+        message: gitDocs.fallback
+          ? `Found ${gitDocs.files.length} docs at ${gitDocs.ref} (no tag for v${targetVersion})`
+          : `Found ${gitDocs.files.length} docs at ${gitDocs.ref}`,
       })
     }
     else {
@@ -543,6 +546,7 @@ export async function resolveLocalPackageDocs(localPath: string): Promise<Resolv
       if (gitDocs) {
         result.gitDocsUrl = gitDocs.baseUrl
         result.gitRef = gitDocs.ref
+        result.gitDocsFallback = gitDocs.fallback
       }
 
       // README fallback via ungh

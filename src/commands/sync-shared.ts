@@ -250,6 +250,7 @@ export interface FetchResult {
   hasIssues: boolean
   hasDiscussions: boolean
   hasReleases: boolean
+  warnings: string[]
 }
 
 /** Fetch and cache all resources for a package (docs cascade + issues + discussions + releases) */
@@ -266,6 +267,7 @@ export async function fetchAndCacheResources(opts: {
   let docSource: string = resolved.readmeUrl || 'readme'
   let docsType: 'llms.txt' | 'readme' | 'docs' = 'readme'
   const docsToIndex: IndexDoc[] = []
+  const warnings: string[] = []
 
   if (!useCache) {
     const cachedDocs: Array<{ path: string, content: string }> = []
@@ -276,6 +278,9 @@ export async function fetchAndCacheResources(opts: {
       if (gh) {
         onProgress('Fetching git docs')
         const gitDocs = await fetchGitDocs(gh.owner, gh.repo, version, packageName)
+        if (gitDocs?.fallback) {
+          warnings.push(`Docs fetched from ${gitDocs.ref} branch (no tag found for v${version})`)
+        }
         if (gitDocs && gitDocs.files.length > 0) {
           const BATCH_SIZE = 20
           const results: Array<{ file: string, content: string } | null> = []
@@ -501,6 +506,7 @@ export async function fetchAndCacheResources(opts: {
     hasIssues: existsSync(issuesDir),
     hasDiscussions: existsSync(discussionsDir),
     hasReleases: existsSync(releasesPath),
+    warnings,
   }
 }
 
