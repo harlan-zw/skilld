@@ -227,16 +227,16 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
 
 function generateSearchBlock(name: string, hasIssues?: boolean, hasReleases?: boolean): string {
   const examples = [
-    `npx skilld search "query" -p ${name}`,
+    `npx -y skilld search "query" -p ${name}`,
   ]
   if (hasIssues)
-    examples.push(`npx skilld search "issues:error handling" -p ${name}`)
+    examples.push(`npx -y skilld search "issues:error handling" -p ${name}`)
   if (hasReleases)
-    examples.push(`npx skilld search "releases:deprecated" -p ${name}`)
+    examples.push(`npx -y skilld search "releases:deprecated" -p ${name}`)
 
   return `## Search
 
-Use \`npx skilld search\` instead of grepping \`.skilld/\` directories — hybrid semantic + keyword search across all indexed docs, issues, and releases.
+Use \`npx -y skilld search\` instead of grepping \`.skilld/\` directories — hybrid semantic + keyword search across all indexed docs, issues, and releases.
 
 \`\`\`bash
 ${examples.join('\n')}
