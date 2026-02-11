@@ -341,13 +341,13 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
 }
 
 /** Default sections when model is pre-set (non-interactive) */
-export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'llm-gaps']
+export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'api-changes']
 
 export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: CustomPrompt, cancelled: boolean }> {
   const selected = await p.multiselect({
     message,
     options: [
-      { label: 'LLM gaps', value: 'llm-gaps' as SkillSection, hint: 'deprecated APIs, silent failures, changed defaults' },
+      { label: 'API changes', value: 'api-changes' as SkillSection, hint: 'new/deprecated APIs from version history' },
       { label: 'Best practices', value: 'best-practices' as SkillSection, hint: 'gotchas, pitfalls, patterns' },
       { label: 'Doc map', value: 'api' as SkillSection, hint: 'compact index of exports linked to source files' },
       { label: 'Custom section', value: 'custom' as SkillSection, hint: 'add your own section' },

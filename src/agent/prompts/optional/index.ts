@@ -1,5 +1,5 @@
-export { apiSection } from './api'
+export { apiChangesSection } from './api-changes'
 export { bestPracticesSection } from './best-practices'
 export { customSection } from './custom'
-export { llmGapsSection } from './llm-gaps'
+export { apiSection } from './doc-map'
 export type { CustomPrompt, PromptSection, SectionContext } from './types'

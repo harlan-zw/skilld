@@ -1,16 +1,21 @@
 import type { PromptSection, SectionContext } from './types'
 
-export function apiSection({ packageName, hasReleases, hasChangelog }: SectionContext): PromptSection {
+export function apiSection({ packageName, version, hasReleases, hasChangelog }: SectionContext): PromptSection {
   const searchHints = [
     `\`skilld search "added" -p ${packageName}\``,
     `\`skilld search "new" -p ${packageName}\``,
   ]
+  const majorMinor = version?.match(/^(\d+\.\d+)/)?.[1]
+  if (majorMinor) {
+    searchHints.push(`\`skilld search "${majorMinor}" -p ${packageName}\``)
+    searchHints.push(`\`skilld search "Features" -p ${packageName}\``)
+  }
   const releaseHint = hasReleases || hasChangelog
     ? `\n\nSearch ${hasReleases ? 'releases' : 'changelog'} for recently added APIs using ${searchHints.join(' and ')}. Prioritize exports the LLM likely doesn't know about — new in recent minor/major versions.`
     : ''
 
   return {
-    task: `**Generate a doc map — a compact index of exports the LLM wouldn't already know, linked to source files.** Focus on APIs added in recent versions, non-obvious exports, and anything with surprising behavior that isn't covered in LLM Gaps or Best Practices.
+    task: `**Generate a doc map — a compact index of exports the LLM wouldn't already know, linked to source files.** Focus on APIs added in recent versions, non-obvious exports, and anything with surprising behavior that isn't covered in API Changes or Best Practices.
 
 Skip well-known, stable APIs the LLM was trained on. Skip self-explanatory utilities (\`isString\`, \`toArray\`). The value is navigational: function name → which file to Read for details.${releaseHint}`,
 
@@ -37,7 +42,7 @@ Comma-separated names per group. One line per doc page. Annotate version when AP
       '- Skip entirely for packages with fewer than 5 exports or only 1 doc page',
       '- Prioritize new/recent exports over well-established APIs',
       '- No signatures, no descriptions — the linked doc IS the description',
-      '- Do not list functions already in LLM Gaps or Best Practices',
+      '- Do not list functions already in API Changes or Best Practices',
     ],
   }
 }

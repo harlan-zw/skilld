@@ -5,20 +5,20 @@
 import type { FeaturesConfig } from '../../core/config'
 import type { CustomPrompt, PromptSection, SectionContext } from './optional'
 import { dirname } from 'pathe'
-import { apiSection, bestPracticesSection, customSection, llmGapsSection } from './optional'
+import { apiChangesSection, apiSection, bestPracticesSection, customSection } from './optional'
 
-export type SkillSection = 'llm-gaps' | 'best-practices' | 'api' | 'custom'
+export type SkillSection = 'api-changes' | 'best-practices' | 'api' | 'custom'
 
 /** Output file per section (inside .skilld/) */
 export const SECTION_OUTPUT_FILES: Record<SkillSection, string> = {
   'best-practices': '_BEST_PRACTICES.md',
-  'llm-gaps': '_LLM_GAPS.md',
+  'api-changes': '_API_CHANGES.md',
   'api': '_DOC_MAP.md',
   'custom': '_CUSTOM.md',
 }
 
 /** Merge order for final SKILL.md body */
-export const SECTION_MERGE_ORDER: SkillSection[] = ['llm-gaps', 'best-practices', 'api', 'custom']
+export const SECTION_MERGE_ORDER: SkillSection[] = ['api-changes', 'best-practices', 'api', 'custom']
 
 export interface BuildSkillPromptOptions {
   packageName: string
@@ -155,7 +155,7 @@ The context window is a shared resource. Skills share it with system prompt, con
 
 function getSectionDef(section: SkillSection, ctx: SectionContext, customPrompt?: CustomPrompt): PromptSection | null {
   switch (section) {
-    case 'llm-gaps': return llmGapsSection(ctx)
+    case 'api-changes': return apiChangesSection(ctx)
     case 'best-practices': return bestPracticesSection(ctx)
     case 'api': return apiSection(ctx)
     case 'custom': return customPrompt ? customSection(customPrompt) : null
@@ -171,7 +171,7 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
   const versionContext = version ? ` v${version}` : ''
   const preamble = buildPreamble({ ...opts, versionContext })
 
-  const ctx: SectionContext = { packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog }
+  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, features: opts.features }
   const sectionDef = getSectionDef(section, ctx, customPrompt)
   if (!sectionDef)
     return ''

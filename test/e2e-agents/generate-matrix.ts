@@ -52,4 +52,4 @@ export const GENERATE_MATRIX: GenerateSpec[] = TEST_PACKAGES.flatMap(pkg =>
 )
 
 /** LLM sections to generate (skip 'custom' — requires user input) */
-export const GENERATE_SECTIONS = ['llm-gaps', 'best-practices', 'api'] as const
+export const GENERATE_SECTIONS = ['api-changes', 'best-practices', 'api'] as const
