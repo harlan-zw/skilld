@@ -199,7 +199,8 @@ export function generateDiscussionIndex(discussions: GitHubDiscussion[]): string
     for (const d of group) {
       const upvotes = d.upvoteCount > 0 ? ` (+${d.upvoteCount})` : ''
       const answered = d.answer ? ' [answered]' : ''
-      sections.push(`- [#${d.number}](./discussion-${d.number}.md): ${d.title}${upvotes}${answered}`)
+      const date = isoDate(d.createdAt)
+      sections.push(`- [#${d.number}](./discussion-${d.number}.md): ${d.title}${upvotes}${answered} (${date})`)
     }
     sections.push('')
   }

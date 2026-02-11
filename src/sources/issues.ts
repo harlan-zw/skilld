@@ -371,7 +371,8 @@ export function generateIssueIndex(issues: GitHubIssue[]): string {
     for (const issue of group) {
       const reactions = issue.reactions > 0 ? ` (+${issue.reactions})` : ''
       const state = issue.state === 'open' ? '' : ' [closed]'
-      sections.push(`- [#${issue.number}](./issue-${issue.number}.md): ${issue.title}${reactions}${state}`)
+      const date = isoDate(issue.createdAt)
+      sections.push(`- [#${issue.number}](./issue-${issue.number}.md): ${issue.title}${reactions}${state} (${date})`)
     }
     sections.push('')
   }
