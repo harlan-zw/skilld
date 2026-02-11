@@ -322,7 +322,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
 // ── Main orchestrator ────────────────────────────────────────────────
 
 export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
-  const { packageName, skillDir, model = 'sonnet', version, hasGithub, hasReleases, hasChangelog, docFiles, docsType, hasShippedDocs, onProgress, timeout = 180000, debug, noCache, sections, customPrompt } = opts
+  const { packageName, skillDir, model = 'sonnet', version, hasGithub, hasReleases, hasChangelog, docFiles, docsType, hasShippedDocs, onProgress, timeout = 180000, debug, noCache, sections, customPrompt, features } = opts
 
   const selectedSections = sections ?? ['llm-gaps', 'best-practices', 'api'] as SkillSection[]
 
@@ -339,6 +339,7 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     docsType,
     hasShippedDocs,
     customPrompt,
+    features,
     sections: selectedSections,
   })
 

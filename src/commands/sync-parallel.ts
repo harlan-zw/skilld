@@ -1,4 +1,5 @@
 import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent'
+import type { FeaturesConfig } from '../core/config'
 import type { ResolvedPackage } from '../sources'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
@@ -113,6 +114,7 @@ interface BaseSkillData {
   relatedSkills: string[]
   packages?: Array<{ name: string }>
   warnings: string[]
+  features?: FeaturesConfig
 }
 
 export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<void> {
@@ -344,18 +346,20 @@ async function syncBaseSkill(
 
   // Create symlinks
   update(packageName, 'downloading', 'Linking references...', versionKey)
-  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType)
+  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features)
 
   // Index all resources (single batch)
-  update(packageName, 'embedding', 'Indexing docs', versionKey)
-  await indexResources({
-    packageName,
-    version,
-    cwd,
-    docsToIndex: resources.docsToIndex,
-    features,
-    onProgress: msg => update(packageName, 'embedding', msg, versionKey),
-  })
+  if (features.search) {
+    update(packageName, 'embedding', 'Indexing docs', versionKey)
+    await indexResources({
+      packageName,
+      version,
+      cwd,
+      docsToIndex: resources.docsToIndex,
+      features,
+      onProgress: msg => update(packageName, 'embedding', msg, versionKey),
+    })
+  }
 
   const pkgDir = resolvePkgDir(packageName, cwd, version)
   const hasChangelog = detectChangelog(pkgDir)
@@ -400,6 +404,7 @@ async function syncBaseSkill(
     dirName: skillDirName,
     packages: allPackages.length > 1 ? allPackages : undefined,
     repoUrl: resolved.repoUrl,
+    features,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
@@ -428,6 +433,7 @@ async function syncBaseSkill(
     relatedSkills,
     packages: allPackages.length > 1 ? allPackages : undefined,
     warnings: resources.warnings,
+    features,
   }
 }
 
@@ -464,6 +470,7 @@ async function enhanceWithLLM(
     debug: config.debug,
     sections,
     customPrompt,
+    features: data.features,
     onProgress: (progress) => {
       const isReasoning = progress.type === 'reasoning'
       const status = isReasoning ? 'exploring' : 'generating'
@@ -497,6 +504,7 @@ async function enhanceWithLLM(
       dirName: data.skillDirName,
       packages: data.packages,
       repoUrl: data.resolved.repoUrl,
+      features: data.features,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }

@@ -114,16 +114,20 @@ export function forceClearCache(packageName: string, version: string): void {
 }
 
 /** Link all reference symlinks (pkg, docs, issues, discussions, releases) */
-export function linkAllReferences(skillDir: string, packageName: string, cwd: string, version: string, docsType: string, extraPackages?: Array<{ name: string, version?: string }>): void {
+export function linkAllReferences(skillDir: string, packageName: string, cwd: string, version: string, docsType: string, extraPackages?: Array<{ name: string, version?: string }>, features?: FeaturesConfig): void {
+  const f = features ?? readConfig().features ?? defaultFeatures
   try {
     linkPkg(skillDir, packageName, cwd, version)
     linkPkgNamed(skillDir, packageName, cwd, version)
     if (!hasShippedDocs(packageName, cwd, version) && docsType !== 'readme') {
       linkCachedDir(skillDir, packageName, version, 'docs')
     }
-    linkCachedDir(skillDir, packageName, version, 'issues')
-    linkCachedDir(skillDir, packageName, version, 'discussions')
-    linkCachedDir(skillDir, packageName, version, 'releases')
+    if (f.issues)
+      linkCachedDir(skillDir, packageName, version, 'issues')
+    if (f.discussions)
+      linkCachedDir(skillDir, packageName, version, 'discussions')
+    if (f.releases)
+      linkCachedDir(skillDir, packageName, version, 'releases')
     linkCachedDir(skillDir, packageName, version, 'sections')
     // Create named symlinks for additional packages in multi-package skills
     if (extraPackages) {
@@ -503,9 +507,9 @@ export async function fetchAndCacheResources(opts: {
     docSource,
     docsType,
     docsToIndex,
-    hasIssues: existsSync(issuesDir),
-    hasDiscussions: existsSync(discussionsDir),
-    hasReleases: existsSync(releasesPath),
+    hasIssues: features.issues && existsSync(issuesDir),
+    hasDiscussions: features.discussions && existsSync(discussionsDir),
+    hasReleases: features.releases && existsSync(releasesPath),
     warnings,
   }
 }
@@ -521,6 +525,10 @@ export async function indexResources(opts: {
 }): Promise<void> {
   const { packageName, version, cwd, onProgress } = opts
   const features = opts.features ?? readConfig().features ?? defaultFeatures
+
+  if (!features.search)
+    return
+
   const dbPath = getPackageDbPath(packageName, version)
 
   if (existsSync(dbPath))

@@ -1,3 +1,4 @@
+import type { FeaturesConfig } from '../../core/config'
 import type { CustomPrompt, SkillSection } from '../prompts'
 import type { AgentType } from '../types'
 
@@ -70,6 +71,8 @@ export interface OptimizeDocsOptions {
   sections?: SkillSection[]
   /** Custom instructions from the user */
   customPrompt?: CustomPrompt
+  /** Resolved feature flags */
+  features?: FeaturesConfig
 }
 
 export interface OptimizeResult {

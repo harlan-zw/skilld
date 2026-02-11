@@ -2,6 +2,7 @@
  * SKILL.md file generation
  */
 
+import type { FeaturesConfig } from '../../core/config'
 import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize'
 import { yamlEscape } from '../../core/yaml'
 import { sanitizeName } from '../install'
@@ -36,12 +37,16 @@ export interface SkillOptions {
   packages?: Array<{ name: string }>
   /** GitHub repo URL (owner/repo format or full URL) */
   repoUrl?: string
+  /** Resolved feature flags */
+  features?: FeaturesConfig
 }
 
 export function generateSkillMd(opts: SkillOptions): string {
   const header = generatePackageHeader(opts)
-  const search = generateSearchBlock(opts.name, opts.hasIssues, opts.hasReleases)
-  const content = opts.body ? `${header}\n\n${search}\n\n${opts.body}` : `${header}\n\n${search}`
+  const search = opts.features?.search !== false ? generateSearchBlock(opts.name, opts.hasIssues, opts.hasReleases) : ''
+  const content = opts.body
+    ? search ? `${header}\n\n${search}\n\n${opts.body}` : `${header}\n\n${opts.body}`
+    : search ? `${header}\n\n${search}` : header
   const footer = generateFooter(opts.relatedSkills)
   return sanitizeMarkdown(repairMarkdown(`${generateFrontmatter(opts)}${content}\n${footer}`))
 }

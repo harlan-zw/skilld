@@ -621,8 +621,8 @@ describe('sync-shared', () => {
       expect(call[0][1].metadata.source).toBe('pkg/index.d.ts')
     })
 
-    // 6e: features.search=false — no entry scan
-    it('skips entry scan when search disabled', async () => {
+    // 6e: features.search=false — skips indexing entirely
+    it('skips indexing entirely when search disabled', async () => {
       vi.mocked(existsSync).mockReturnValue(false)
       vi.mocked(resolvePkgDir).mockReturnValue('/pkg')
       const docs = [{ id: 'a.md', content: 'content', metadata: {} }]
@@ -634,7 +634,7 @@ describe('sync-shared', () => {
       })
 
       expect(resolveEntryFiles).not.toHaveBeenCalled()
-      expect(createIndex).toHaveBeenCalled()
+      expect(createIndex).not.toHaveBeenCalled()
     })
   })
 

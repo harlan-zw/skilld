@@ -1,4 +1,5 @@
 import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent'
+import type { FeaturesConfig } from '../core/config'
 import type { ProjectState } from '../core/skills'
 import type { ResolveAttempt } from '../sources'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -12,6 +13,7 @@ import {
   generateSkillMd,
   getAvailableModels,
   getModelLabel,
+  getModelName,
   linkSkillToAgents,
   optimizeDocs,
 } from '../agent'
@@ -541,18 +543,20 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     const pkgFiles = getPkgKeyFiles(existingLock.packageName!, cwd, existingLock.version)
     const shippedDocs = hasShippedDocs(existingLock.packageName!, cwd, existingLock.version)
 
+    const mergeFeatures = readConfig().features ?? defaultFeatures
     const skillMd = generateSkillMd({
       name: existingLock.packageName!,
       version: existingLock.version,
       relatedSkills,
-      hasIssues: existsSync(join(skillDir, '.skilld', 'issues')),
-      hasDiscussions: existsSync(join(skillDir, '.skilld', 'discussions')),
-      hasReleases: existsSync(join(skillDir, '.skilld', 'releases')),
+      hasIssues: mergeFeatures.issues && existsSync(join(skillDir, '.skilld', 'issues')),
+      hasDiscussions: mergeFeatures.discussions && existsSync(join(skillDir, '.skilld', 'discussions')),
+      hasReleases: mergeFeatures.releases && existsSync(join(skillDir, '.skilld', 'releases')),
       docsType: (existingLock.source?.includes('llms.txt') ? 'llms.txt' : 'docs') as 'llms.txt' | 'readme' | 'docs',
       hasShippedDocs: shippedDocs,
       pkgFiles,
       dirName: skillDirName,
       packages: allPackages,
+      features: mergeFeatures,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
@@ -597,20 +601,22 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     p.log.warn(`\x1B[33m${w}\x1B[0m`)
 
   // Create symlinks
-  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType)
+  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features)
 
   // ── Phase 2: Search index ──
-  const idxSpin = timedSpinner()
-  idxSpin.start('Creating search index')
-  await indexResources({
-    packageName,
-    version,
-    cwd,
-    docsToIndex: resources.docsToIndex,
-    features,
-    onProgress: msg => idxSpin.message(msg),
-  })
-  idxSpin.stop('Search index ready')
+  if (features.search) {
+    const idxSpin = timedSpinner()
+    idxSpin.start('Creating search index')
+    await indexResources({
+      packageName,
+      version,
+      cwd,
+      docsToIndex: resources.docsToIndex,
+      features,
+      onProgress: msg => idxSpin.message(msg),
+    })
+    idxSpin.stop('Search index ready')
+  }
 
   const pkgDir = resolvePkgDir(packageName, cwd, version)
   const hasChangelog = detectChangelog(pkgDir)
@@ -655,6 +661,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     dirName: skillDirName,
     packages: allPackages.length > 1 ? allPackages : undefined,
     repoUrl: resolved.repoUrl,
+    features,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
 
@@ -686,6 +693,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
         sections: llmConfig.sections,
         customPrompt: llmConfig.customPrompt,
         packages: allPackages.length > 1 ? allPackages : undefined,
+        features,
       })
     }
   }
@@ -728,10 +736,11 @@ interface EnhanceOptions {
   sections?: SkillSection[]
   customPrompt?: CustomPrompt
   packages?: Array<{ name: string }>
+  features?: FeaturesConfig
 }
 
 async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
-  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages } = opts
+  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features } = opts
 
   const llmSpin = timedSpinner()
   llmSpin.start(`Agent exploring ${packageName}`)
@@ -752,6 +761,7 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     debug,
     sections,
     customPrompt,
+    features,
     onProgress: ({ type, chunk, section }) => {
       const prefix = section ? `[${section}] ` : ''
       if (type === 'reasoning' && chunk.startsWith('[')) {
@@ -798,6 +808,7 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
       dirName,
       packages,
       repoUrl: resolved.repoUrl,
+      features,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }

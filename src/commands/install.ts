@@ -28,10 +28,11 @@ import {
   linkPkgNamed,
   linkShippedSkill,
   listReferenceFiles,
+  readCachedDocs,
   resolvePkgDir,
   writeToCache,
 } from '../cache'
-import { readConfig } from '../core/config'
+import { defaultFeatures, readConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile'
 import { sanitizeMarkdown } from '../core/sanitize'
@@ -52,6 +53,7 @@ import {
 } from '../sources'
 import { fetchGitSkills } from '../sources/git-skills'
 import { selectLlmConfig } from './sync'
+import { classifyCachedDoc, indexResources } from './sync-shared'
 
 export interface InstallOptions {
   global: boolean
@@ -124,6 +126,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 
   p.log.info(`Restoring ${toRestore.length} references`)
   ensureCacheDir()
+  const features = readConfig().features ?? defaultFeatures
 
   const allSkillNames = skills.map(([, info]) => info.packageName || '').filter(Boolean)
   const regenerated: Array<{ name: string, pkgName: string, version: string, skillDir: string, packages?: string }> = []
@@ -197,31 +200,48 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         if (existsSync(cachedDocs))
           symlinkSync(cachedDocs, docsLink, 'junction')
       }
-      // Link issues, discussions, and releases
-      const issuesLink = join(referencesPath, 'issues')
-      const cachedIssues = join(globalCachePath, 'issues')
-      if (existsSync(issuesLink))
-        unlinkSync(issuesLink)
-      if (existsSync(cachedIssues))
-        symlinkSync(cachedIssues, issuesLink, 'junction')
-      const discussionsLink = join(referencesPath, 'discussions')
-      const cachedDiscussions = join(globalCachePath, 'discussions')
-      if (existsSync(discussionsLink))
-        unlinkSync(discussionsLink)
-      if (existsSync(cachedDiscussions))
-        symlinkSync(cachedDiscussions, discussionsLink, 'junction')
-      const releasesLink = join(referencesPath, 'releases')
-      const cachedReleases = join(globalCachePath, 'releases')
-      if (existsSync(releasesLink))
-        unlinkSync(releasesLink)
-      if (existsSync(cachedReleases))
-        symlinkSync(cachedReleases, releasesLink, 'junction')
+      // Link issues, discussions, and releases (only if feature enabled)
+      if (features.issues) {
+        const issuesLink = join(referencesPath, 'issues')
+        const cachedIssues = join(globalCachePath, 'issues')
+        if (existsSync(issuesLink))
+          unlinkSync(issuesLink)
+        if (existsSync(cachedIssues))
+          symlinkSync(cachedIssues, issuesLink, 'junction')
+      }
+      if (features.discussions) {
+        const discussionsLink = join(referencesPath, 'discussions')
+        const cachedDiscussions = join(globalCachePath, 'discussions')
+        if (existsSync(discussionsLink))
+          unlinkSync(discussionsLink)
+        if (existsSync(cachedDiscussions))
+          symlinkSync(cachedDiscussions, discussionsLink, 'junction')
+      }
+      if (features.releases) {
+        const releasesLink = join(referencesPath, 'releases')
+        const cachedReleases = join(globalCachePath, 'releases')
+        if (existsSync(releasesLink))
+          unlinkSync(releasesLink)
+        if (existsSync(cachedReleases))
+          symlinkSync(cachedReleases, releasesLink, 'junction')
+      }
       const sectionsLink = join(referencesPath, 'sections')
       const cachedSections = join(globalCachePath, 'sections')
       if (existsSync(sectionsLink))
         unlinkSync(sectionsLink)
       if (existsSync(cachedSections))
         symlinkSync(cachedSections, sectionsLink, 'junction')
+      // Create search index from cached docs if missing
+      if (features.search && !existsSync(getPackageDbPath(pkgName, version))) {
+        spin.message(`Indexing ${name}`)
+        const cached = readCachedDocs(pkgName, version)
+        const docsToIndex = cached.map(d => ({
+          id: d.path,
+          content: d.content,
+          metadata: { package: pkgName, source: d.path, type: classifyCachedDoc(d.path).type },
+        }))
+        await indexResources({ packageName: pkgName, version, cwd, docsToIndex, features, onProgress: msg => spin.message(msg) })
+      }
       if (!copyFromExistingAgent(skillDir, name, allSkillsDirs)) {
         if (regenerateBaseSkillMd(skillDir, pkgName, version, cwd, allSkillNames, info.source, info.packages))
           regenerated.push({ name, pkgName, version, skillDir, packages: info.packages })
@@ -339,19 +359,21 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
           symlinkSync(cachedDocsDir, docsLink, 'junction')
       }
 
-      if (docsToIndex.length > 0) {
-        await createIndex(docsToIndex, { dbPath: getPackageDbPath(pkgName, version) })
-      }
+      if (features.search) {
+        if (docsToIndex.length > 0) {
+          await createIndex(docsToIndex, { dbPath: getPackageDbPath(pkgName, version) })
+        }
 
-      // Index package entry files (.d.ts / .js)
-      const pkgDir = resolvePkgDir(pkgName, cwd, version)
-      const entryFiles = pkgDir ? await resolveEntryFiles(pkgDir) : []
-      if (entryFiles.length > 0) {
-        await createIndex(entryFiles.map(e => ({
-          id: e.path,
-          content: e.content,
-          metadata: { package: pkgName, source: `pkg/${e.path}`, type: e.type },
-        })), { dbPath: getPackageDbPath(pkgName, version) })
+        // Index package entry files (.d.ts / .js)
+        const pkgDir = resolvePkgDir(pkgName, cwd, version)
+        const entryFiles = pkgDir ? await resolveEntryFiles(pkgDir) : []
+        if (entryFiles.length > 0) {
+          await createIndex(entryFiles.map(e => ({
+            id: e.path,
+            content: e.content,
+            metadata: { package: pkgName, source: `pkg/${e.path}`, type: e.type },
+          })), { dbPath: getPackageDbPath(pkgName, version) })
+        }
       }
 
       if (!copyFromExistingAgent(skillDir, name, allSkillsDirs)) {
@@ -491,6 +513,7 @@ async function enhanceRegenerated(
   const hasGithub = hasIssues || hasDiscussions
   const hasReleases = existsSync(join(globalCachePath, 'releases'))
 
+  const features = readConfig().features ?? defaultFeatures
   const { optimized, wasOptimized } = await optimizeDocs({
     packageName: pkgName,
     skillDir,
@@ -501,6 +524,7 @@ async function enhanceRegenerated(
     docFiles,
     sections,
     customPrompt,
+    features,
     onProgress: ({ type, chunk, section }) => {
       const prefix = section ? `[${section}] ` : ''
       if (type === 'reasoning' && chunk.startsWith('['))
@@ -551,6 +575,7 @@ async function enhanceRegenerated(
       pkgFiles: getPkgKeyFiles(pkgName, cwd, version),
       dirName,
       packages: allPackages.length > 1 ? allPackages : undefined,
+      features,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
@@ -594,10 +619,11 @@ function regenerateBaseSkillMd(
   else if (isReadmeOnly(globalCachePath))
     docsType = 'readme'
 
-  // Check cache dirs for issues/discussions/releases
-  const hasIssues = existsSync(join(globalCachePath, 'issues'))
-  const hasDiscussions = existsSync(join(globalCachePath, 'discussions'))
-  const hasReleases = existsSync(join(globalCachePath, 'releases'))
+  // Check cache dirs for issues/discussions/releases (only if feature enabled)
+  const feat = readConfig().features ?? defaultFeatures
+  const hasIssues = feat.issues && existsSync(join(globalCachePath, 'issues'))
+  const hasDiscussions = feat.discussions && existsSync(join(globalCachePath, 'discussions'))
+  const hasReleases = feat.releases && existsSync(join(globalCachePath, 'releases'))
 
   // Related skills from other lockfile entries
   const relatedSkills = allSkillNames.filter(n => n !== pkgName)
@@ -622,6 +648,7 @@ function regenerateBaseSkillMd(
     pkgFiles: getPkgKeyFiles(pkgName, cwd, version),
     dirName,
     packages: allPackages.length > 1 ? allPackages : undefined,
+    features: readConfig().features ?? defaultFeatures,
   })
 
   mkdirSync(skillDir, { recursive: true })

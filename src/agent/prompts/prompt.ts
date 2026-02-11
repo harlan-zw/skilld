@@ -2,6 +2,7 @@
  * Skill generation prompt - minimal, agent explores via tools
  */
 
+import type { FeaturesConfig } from '../../core/config'
 import type { CustomPrompt, PromptSection, SectionContext } from './optional'
 import { dirname } from 'pathe'
 import { apiSection, bestPracticesSection, customSection, llmGapsSection } from './optional'
@@ -41,6 +42,8 @@ export interface BuildSkillPromptOptions {
   hasShippedDocs?: boolean
   /** Custom instructions from the user (when 'custom' section selected) */
   customPrompt?: CustomPrompt
+  /** Resolved feature flags */
+  features?: FeaturesConfig
 }
 
 /**
@@ -59,7 +62,7 @@ function formatDocTree(files: string[]): string {
     .join('\n')
 }
 
-function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir }: {
+function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir, features }: {
   packageName: string
   hasIssues?: boolean
   hasDiscussions?: boolean
@@ -68,6 +71,7 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
   docsType: string
   hasShippedDocs: boolean
   skillDir: string
+  features?: FeaturesConfig
 }): string {
   const docsPath = hasShippedDocs
     ? `\`${skillDir}/.skilld/pkg/docs/\` or \`${skillDir}/.skilld/pkg/README.md\``
@@ -100,9 +104,8 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
     ...rows.map(([desc, cmd]) => `| ${desc} | ${cmd} |`),
   ].join('\n')
 
-  return `**IMPORTANT:** Use these references
-
-## Search
+  const searchBlock = features?.search !== false
+    ? `\n\n## Search
 
 Use \`npx -y skilld search\` as your primary research tool — search before manually reading files. Hybrid semantic + keyword search across all indexed docs, issues, and releases.
 
@@ -110,7 +113,10 @@ Use \`npx -y skilld search\` as your primary research tool — search before man
 npx -y skilld search "<query>" -p ${packageName}
 ${hasIssues ? `npx -y skilld search "issues:<query>" -p ${packageName}\n` : ''}${hasReleases ? `npx -y skilld search "releases:<query>" -p ${packageName}\n` : ''}\`\`\`
 
-Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.
+Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.`
+    : ''
+
+  return `**IMPORTANT:** Use these references${searchBlock}
 
 ${table}`
 }
@@ -123,7 +129,7 @@ function buildPreamble(opts: BuildSkillPromptOptions & { versionContext: string 
     ? `<external-docs>\n**Documentation** (use Read tool to explore):\n${formatDocTree(docFiles)}\n</external-docs>`
     : ''
 
-  const importantBlock = generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir })
+  const importantBlock = generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir, features: opts.features })
 
   return `Generate SKILL.md section for "${packageName}"${versionContext}.
 
@@ -176,7 +182,7 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
     '- Link to exact source file where you found info',
     '- TypeScript only, Vue uses `<script setup lang="ts">`',
     '- Imperative voice ("Use X" not "You should use X")',
-    '- **NEVER fetch external URLs.** All information is in the local `./.skilld/` directory. Use Read, Glob, and `skilld search` only.',
+    `- **NEVER fetch external URLs.** All information is in the local \`./.skilld/\` directory. Use Read, Glob${opts.features?.search !== false ? ', and `skilld search`' : ''} only.`,
     '- **Do NOT use Task tool or spawn subagents.** Work directly.',
     '- **Do NOT re-read files** you have already read in this session.',
     '- **Read `_INDEX.md` first** in issues/releases/discussions — only drill into files that look relevant. Skip stub/placeholder files.',
