@@ -121,7 +121,7 @@ export async function runGenerate(
 
   const docFiles = listReferenceFiles(skillDir)
   const pkgDir = resolvePkgDir(packageName, cwd, version)
-  const hasChangelog = detectChangelog(pkgDir)
+  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version))
   const shippedDocs = hasShippedDocs(packageName, cwd, version)
   const hasGithub = existsSync(`${getCacheDir(packageName, version)}/issues`)
   const hasReleases = existsSync(`${getCacheDir(packageName, version)}/releases`)

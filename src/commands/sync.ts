@@ -19,6 +19,7 @@ import {
 } from '../agent'
 import {
   ensureCacheDir,
+  getCacheDir,
   getPkgKeyFiles,
   getVersionKey,
   hasShippedDocs,
@@ -619,7 +620,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   }
 
   const pkgDir = resolvePkgDir(packageName, cwd, version)
-  const hasChangelog = detectChangelog(pkgDir)
+  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version))
   const relatedSkills = await findRelatedSkills(packageName, baseDir)
   const shippedDocs = hasShippedDocs(packageName, cwd, version)
   const pkgFiles = getPkgKeyFiles(packageName, cwd, version)

@@ -232,11 +232,17 @@ export async function resolveLocalDep(packageName: string, cwd: string): Promise
   return resolveLocalPackageDocs(localPath)
 }
 
-/** Detect CHANGELOG.md in a package directory */
-export function detectChangelog(pkgDir: string | null): string | false {
-  if (!pkgDir)
-    return false
-  return ['CHANGELOG.md', 'changelog.md'].find(f => existsSync(join(pkgDir, f))) || false
+/** Detect CHANGELOG.md in a package directory or cached releases */
+export function detectChangelog(pkgDir: string | null, cacheDir?: string): string | false {
+  if (pkgDir) {
+    const found = ['CHANGELOG.md', 'changelog.md'].find(f => existsSync(join(pkgDir, f)))
+    if (found)
+      return found
+  }
+  // Also check cached releases/CHANGELOG.md (fetched from GitHub)
+  if (cacheDir && existsSync(join(cacheDir, 'releases', 'CHANGELOG.md')))
+    return 'CHANGELOG.md'
+  return false
 }
 
 // ── Shared pipeline functions ──

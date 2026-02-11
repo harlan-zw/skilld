@@ -243,6 +243,20 @@ describe('sync-shared', () => {
       vi.mocked(existsSync).mockReturnValue(false)
       expect(detectChangelog('/pkg')).toBe(false)
     })
+
+    it('detects CHANGELOG.md from cached releases dir', () => {
+      vi.mocked(existsSync).mockImplementation((p: any) =>
+        String(p).includes('releases/CHANGELOG.md'),
+      )
+      expect(detectChangelog(null, '/cache')).toBe('CHANGELOG.md')
+    })
+
+    it('prefers pkg changelog over cached', () => {
+      vi.mocked(existsSync).mockImplementation((p: any) =>
+        String(p).endsWith('CHANGELOG.md'),
+      )
+      expect(detectChangelog('/pkg', '/cache')).toBe('CHANGELOG.md')
+    })
   })
 
   // ── 4. resolveLocalDep ──
