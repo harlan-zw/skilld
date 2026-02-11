@@ -13,8 +13,8 @@ export interface FeaturesConfig {
 
 export const defaultFeatures: FeaturesConfig = {
   search: true,
-  issues: false,
-  discussions: false,
+  issues: true,
+  discussions: true,
   releases: true,
 }
 

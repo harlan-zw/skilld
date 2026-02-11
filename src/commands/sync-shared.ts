@@ -493,7 +493,7 @@ export async function fetchAndCacheResources(opts: {
 
   // Releases (GitHub releases + blog releases + CHANGELOG → unified releases/ dir)
   const releasesPath = join(cacheDir, 'releases')
-  if (features.releases && resolved.repoUrl && !existsSync(releasesPath)) {
+  if (features.releases && resolved.repoUrl && isGhAvailable() && !existsSync(releasesPath)) {
     const gh = parseGitHubUrl(resolved.repoUrl)
     if (gh) {
       onProgress('Fetching releases via GitHub API')
