@@ -291,6 +291,14 @@ export async function fetchReleaseNotes(
       path: 'releases/_INDEX.md',
       content: generateReleaseIndex(selected, packageName),
     })
+
+    // Also fetch CHANGELOG.md alongside individual releases (unless redirect pattern)
+    const ref = gitRef || selected[0]!.tag
+    const changelog = await fetchChangelog(owner, repo, ref)
+    if (changelog && changelog.length < 500_000) {
+      docs.push({ path: 'releases/CHANGELOG.md', content: changelog })
+    }
+
     return docs
   }
 
