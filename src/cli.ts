@@ -843,6 +843,7 @@ const main = defineCommand({
         })
         setupComplete = true
       }
+      return
     }
 
     // Has skills - show status + interactive menu
