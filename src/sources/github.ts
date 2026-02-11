@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { isGhAvailable } from './issues'
-import { getDocOverride } from './overrides'
+import { getDocOverride } from './package-registry'
 import { $fetch, extractBranchHint, fetchText, parseGitHubUrl } from './utils'
 
 /** Minimum git-doc file count to prefer over llms.txt */

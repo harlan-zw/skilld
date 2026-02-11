@@ -188,7 +188,11 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
     '- **Read `_INDEX.md` first** in issues/releases/discussions — only drill into files that look relevant. Skip stub/placeholder files.',
   ]
 
-  return `${preamble}
+  const weightsTable = sectionDef.referenceWeights?.length
+    ? `\n\n## Reference Priority\n\n| Reference | Path | Score | Use For |\n|-----------|------|:-----:|--------|\n${sectionDef.referenceWeights.map(w => `| ${w.name} | [\`${w.path.split('/').pop()}\`](${w.path}) | ${w.score}/10 | ${w.useFor} |`).join('\n')}`
+    : ''
+
+  return `${preamble}${weightsTable}
 
 ## Task
 

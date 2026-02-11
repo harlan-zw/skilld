@@ -33,6 +33,7 @@ vi.mock('../../src/cache', () => ({
 
 vi.mock('../../src/sources', () => ({
   $fetch: vi.fn(),
+  fetchBlogReleases: vi.fn(),
   fetchGitDocs: vi.fn(),
   fetchGitHubDiscussions: vi.fn(),
   fetchGitHubIssues: vi.fn(),
@@ -41,11 +42,13 @@ vi.mock('../../src/sources', () => ({
   fetchReadmeContent: vi.fn(),
   fetchReleaseNotes: vi.fn(),
   downloadLlmsDocs: vi.fn(),
+  getBlogPreset: vi.fn(() => null),
   normalizeLlmsLinks: vi.fn((raw: string) => raw),
   formatDiscussionAsMarkdown: vi.fn((d: any) => `# ${d.title}`),
   formatIssueAsMarkdown: vi.fn((i: any) => `# ${i.title}`),
   generateDiscussionIndex: vi.fn(() => '# Discussions'),
   generateIssueIndex: vi.fn(() => '# Issues'),
+  generateReleaseIndex: vi.fn(() => '# Releases'),
   isGhAvailable: vi.fn(() => true),
   isShallowGitDocs: vi.fn(() => false),
   parseGitHubUrl: vi.fn((url: string) => {

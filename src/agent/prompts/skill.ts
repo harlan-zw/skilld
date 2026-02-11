@@ -5,8 +5,8 @@
 import type { FeaturesConfig } from '../../core/config'
 import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize'
 import { yamlEscape } from '../../core/yaml'
+import { getFilePatterns } from '../../sources/package-registry'
 import { sanitizeName } from '../install'
-import { FILE_PATTERN_MAP } from '../types'
 
 export interface SkillOptions {
   name: string
@@ -180,7 +180,7 @@ function expandRepoName(repoUrl: string): string[] {
 }
 
 function generateFrontmatter({ name, version, description: pkgDescription, globs, body, generatedBy, dirName, packages, repoUrl }: SkillOptions): string {
-  const patterns = globs ?? FILE_PATTERN_MAP[name]
+  const patterns = globs ?? getFilePatterns(name)
   const globHint = patterns?.length ? ` or working with ${patterns.join(', ')} files` : ''
   const descSuffix = pkgDescription ? ` (${pkgDescription.replace(/\.?\s*$/, '')})` : ''
 

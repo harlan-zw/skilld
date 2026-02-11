@@ -34,5 +34,3 @@ export type { AgentTarget, FrontmatterField } from './targets'
 
 // Types
 export type { AgentType, SkillMetadata } from './types'
-
-export { FILE_PATTERN_MAP } from './types'

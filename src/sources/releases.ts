@@ -26,14 +26,14 @@ interface CachedDoc {
   content: string
 }
 
-interface SemVer {
+export interface SemVer {
   major: number
   minor: number
   patch: number
   raw: string
 }
 
-function parseSemver(version: string): SemVer | null {
+export function parseSemver(version: string): SemVer | null {
   const clean = version.replace(/^v/, '')
   const match = clean.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/)
   if (!match)
@@ -79,7 +79,7 @@ function tagMatchesPackage(tag: string, packageName: string): boolean {
   return tag.startsWith(`${packageName}@`) || tag.startsWith(`${packageName}-v`) || tag.startsWith(`${packageName}-`)
 }
 
-function compareSemver(a: SemVer, b: SemVer): number {
+export function compareSemver(a: SemVer, b: SemVer): number {
   if (a.major !== b.major)
     return a.major - b.major
   if (a.minor !== b.minor)
@@ -195,31 +195,67 @@ function formatRelease(release: GitHubRelease, packageName?: string): string {
   return `${fm.join('\n')}\n\n# ${release.name || release.tag}\n\n${release.markdown}`
 }
 
+export interface ReleaseIndexOptions {
+  releases: GitHubRelease[]
+  packageName?: string
+  blogReleases?: Array<{ version: string, title: string, date: string }>
+  hasChangelog?: boolean
+}
+
 /**
- * Generate a summary index of all releases for quick LLM scanning.
- * Shows version timeline so LLM can quickly identify breaking changes.
+ * Generate a unified summary index of all releases for quick LLM scanning.
+ * Includes GitHub releases, blog release posts, and CHANGELOG link.
  */
-export function generateReleaseIndex(releases: GitHubRelease[], packageName?: string): string {
+export function generateReleaseIndex(releasesOrOpts: GitHubRelease[] | ReleaseIndexOptions, packageName?: string): string {
+  // Support both old signature and new options object
+  const opts: ReleaseIndexOptions = Array.isArray(releasesOrOpts)
+    ? { releases: releasesOrOpts, packageName }
+    : releasesOrOpts
+
+  const { releases, blogReleases, hasChangelog } = opts
+  const pkg = opts.packageName
+
+  const total = releases.length + (blogReleases?.length ?? 0)
   const fm = [
     '---',
-    `total: ${releases.length}`,
+    `total: ${total}`,
     `latest: ${releases[0]?.tag || 'unknown'}`,
     '---',
   ]
 
   const lines: string[] = [fm.join('\n'), '', '# Releases Index', '']
 
-  for (const r of releases) {
-    const date = isoDate(r.publishedAt || r.createdAt)
-    const filename = r.tag.includes('@') || r.tag.startsWith('v') ? r.tag : `v${r.tag}`
-    const version = extractVersion(r.tag, packageName) || r.tag
-    // Flag major/minor bumps for visibility
-    const sv = parseSemver(version)
-    const label = sv?.patch === 0 && sv.minor === 0 ? ' **[MAJOR]**' : sv?.patch === 0 ? ' **[MINOR]**' : ''
-    lines.push(`- [${r.tag}](./${filename}.md): ${r.name || r.tag} (${date})${label}`)
+  // Blog release posts (major version announcements)
+  if (blogReleases && blogReleases.length > 0) {
+    lines.push('## Blog Releases', '')
+    for (const b of blogReleases) {
+      lines.push(`- [${b.version}](./blog-${b.version}.md): ${b.title} (${b.date})`)
+    }
+    lines.push('')
   }
 
-  lines.push('')
+  // GitHub release notes
+  if (releases.length > 0) {
+    if (blogReleases && blogReleases.length > 0)
+      lines.push('## Release Notes', '')
+    for (const r of releases) {
+      const date = isoDate(r.publishedAt || r.createdAt)
+      const filename = r.tag.includes('@') || r.tag.startsWith('v') ? r.tag : `v${r.tag}`
+      const version = extractVersion(r.tag, pkg) || r.tag
+      const sv = parseSemver(version)
+      const label = sv?.patch === 0 && sv.minor === 0 ? ' **[MAJOR]**' : sv?.patch === 0 ? ' **[MINOR]**' : ''
+      lines.push(`- [${r.tag}](./${filename}.md): ${r.name || r.tag} (${date})${label}`)
+    }
+    lines.push('')
+  }
+
+  // CHANGELOG link
+  if (hasChangelog) {
+    lines.push('## Changelog', '')
+    lines.push('- [CHANGELOG.md](./CHANGELOG.md)')
+    lines.push('')
+  }
+
   return lines.join('\n')
 }
 
@@ -285,11 +321,6 @@ export async function fetchReleaseNotes(
         path: `releases/${filename}.md`,
         content: formatRelease(r, packageName),
       }
-    })
-    // Add index for quick LLM scanning
-    docs.push({
-      path: 'releases/_INDEX.md',
-      content: generateReleaseIndex(selected, packageName),
     })
 
     // Also fetch CHANGELOG.md alongside individual releases (unless redirect pattern)

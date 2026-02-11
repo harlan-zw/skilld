@@ -1,23 +1,30 @@
-import type { PromptSection, SectionContext } from './types'
+import type { PromptSection, ReferenceWeight, SectionContext } from './types'
 
-export function apiSection({ packageName, version, hasReleases, hasChangelog }: SectionContext): PromptSection {
-  const searchHints = [
-    `\`skilld search "added" -p ${packageName}\``,
-    `\`skilld search "new" -p ${packageName}\``,
+export function apiSection({ hasReleases, hasChangelog, hasIssues, hasDiscussions }: SectionContext): PromptSection {
+  // Build reference weights — only include available references
+  const referenceWeights: ReferenceWeight[] = [
+    { name: 'Docs', path: './.skilld/docs/', score: 10, useFor: 'Primary source — scan all doc pages for export names' },
   ]
-  const majorMinor = version?.match(/^(\d+\.\d+)/)?.[1]
-  if (majorMinor) {
-    searchHints.push(`\`skilld search "${majorMinor}" -p ${packageName}\``)
-    searchHints.push(`\`skilld search "Features" -p ${packageName}\``)
+  if (hasReleases) {
+    referenceWeights.push({ name: 'Releases', path: './.skilld/releases/_INDEX.md', score: 5, useFor: 'New APIs added in recent versions' })
   }
-  const releaseHint = hasReleases || hasChangelog
-    ? `\n\nSearch ${hasReleases ? 'releases' : 'changelog'} for recently added APIs using ${searchHints.join(' and ')}. Prioritize exports the LLM likely doesn't know about — new in recent minor/major versions.`
-    : ''
+  if (hasChangelog) {
+    referenceWeights.push({ name: 'Changelog', path: `./.skilld/pkg/${hasChangelog}`, score: 5, useFor: 'New APIs added in recent versions' })
+  }
+  referenceWeights.push({ name: 'Package', path: './.skilld/pkg/', score: 4, useFor: 'Check exports field and entry points' })
+  if (hasIssues) {
+    referenceWeights.push({ name: 'Issues', path: './.skilld/issues/_INDEX.md', score: 1, useFor: 'Skip' })
+  }
+  if (hasDiscussions) {
+    referenceWeights.push({ name: 'Discussions', path: './.skilld/discussions/_INDEX.md', score: 1, useFor: 'Skip' })
+  }
 
   return {
+    referenceWeights,
+
     task: `**Generate a doc map — a compact index of exports the LLM wouldn't already know, linked to source files.** Focus on APIs added in recent versions, non-obvious exports, and anything with surprising behavior that isn't covered in API Changes or Best Practices.
 
-Skip well-known, stable APIs the LLM was trained on. Skip self-explanatory utilities (\`isString\`, \`toArray\`). The value is navigational: function name → which file to Read for details.${releaseHint}`,
+Skip well-known, stable APIs the LLM was trained on. Skip self-explanatory utilities (\`isString\`, \`toArray\`). The value is navigational: function name → which file to Read for details.`,
 
     format: `\`\`\`
 ## Doc Map

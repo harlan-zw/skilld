@@ -9,6 +9,9 @@ catalogs:
     bumpp:
       specifier: ^10.4.1
       version: 10.4.1
+    mdream:
+      specifier: ^0.15.3
+      version: 0.15.3
     ofetch:
       specifier: ^1.5.1
       version: 1.5.1
@@ -102,6 +105,9 @@ importers:
       log-update:
         specifier: catalog:deps
         version: 7.1.0
+      mdream:
+        specifier: 'catalog:'
+        version: 0.15.3
       mlly:
         specifier: catalog:deps
         version: 1.8.0
@@ -2522,6 +2528,10 @@ packages:
 
   mdast-util-to-string@4.0.0:
     resolution: {integrity: sha512-0H44vDimn51F0YwvxSJSm0eCDOJTRlmN0R1yBh4HLj9wiV1Dn0QoXGbvFAWj2hSItVTlCmBF1hqKlIyUBVFLPg==}
+
+  mdream@0.15.3:
+    resolution: {integrity: sha512-mB367AFnSiL/45kqWVR4/eIdOwzcvXTuJuVcTO7OVkOqePMXba9eK0y81BWDAFR98W6g3KJztz/upLl/5nfssA==}
+    hasBin: true
 
   merge2@1.4.1:
     resolution: {integrity: sha512-8q7VEgMJW4J8tcfVPy8g09NcQwZdbwFEqhe/WZkoIzjn/3TGDwtOCYtXGxA3O8tPzpczCCDgv+P2P5y00ZJOOg==}
@@ -5973,6 +5983,12 @@ snapshots:
   mdast-util-to-string@4.0.0:
     dependencies:
       '@types/mdast': 4.0.4
+
+  mdream@0.15.3:
+    dependencies:
+      cac: 6.7.14
+      pathe: 2.0.3
+      tinyglobby: 0.2.15
 
   merge2@1.4.1: {}
 

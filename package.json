@@ -62,6 +62,7 @@
     "consola": "catalog:deps",
     "globby": "catalog:deps",
     "log-update": "catalog:deps",
+    "mdream": "catalog:",
     "mlly": "catalog:deps",
     "ofetch": "catalog:",
     "oxc-parser": "catalog:deps",

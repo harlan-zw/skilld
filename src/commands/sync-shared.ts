@@ -27,6 +27,7 @@ import { createIndex } from '../retriv'
 import {
   $fetch,
   downloadLlmsDocs,
+  fetchBlogReleases,
   fetchGitDocs,
   fetchGitHubDiscussions,
   fetchGitHubIssues,
@@ -38,6 +39,8 @@ import {
   formatIssueAsMarkdown,
   generateDiscussionIndex,
   generateIssueIndex,
+  generateReleaseIndex,
+  getBlogPreset,
   isGhAvailable,
   isShallowGitDocs,
   normalizeLlmsLinks,
@@ -488,17 +491,64 @@ export async function fetchAndCacheResources(opts: {
     }
   }
 
-  // Releases
+  // Releases (GitHub releases + blog releases + CHANGELOG → unified releases/ dir)
   const releasesPath = join(cacheDir, 'releases')
   if (features.releases && resolved.repoUrl && !existsSync(releasesPath)) {
     const gh = parseGitHubUrl(resolved.repoUrl)
     if (gh) {
       onProgress('Fetching releases via GitHub API')
       const releaseDocs = await fetchReleaseNotes(gh.owner, gh.repo, version, resolved.gitRef, packageName).catch(() => [])
-      if (releaseDocs.length > 0) {
-        onProgress(`Caching ${releaseDocs.length} releases`)
-        writeToCache(packageName, version, releaseDocs)
-        for (const doc of releaseDocs) {
+
+      // Fetch blog releases into same releases/ dir
+      let blogDocs: Array<{ path: string, content: string }> = []
+      if (getBlogPreset(packageName)) {
+        onProgress('Fetching blog release notes')
+        blogDocs = await fetchBlogReleases(packageName, version).catch(() => [])
+      }
+
+      const allDocs = [...releaseDocs, ...blogDocs]
+
+      // Parse blog release metadata for index generation
+      const blogEntries = blogDocs
+        .filter(d => !d.path.endsWith('_INDEX.md'))
+        .map((d) => {
+          const versionMatch = d.path.match(/blog-(.+)\.md$/)
+          const titleMatch = d.content.match(/^title:\s*"(.+)"/m)
+          const dateMatch = d.content.match(/^date:\s*(.+)/m)
+          return {
+            version: versionMatch?.[1] ?? '',
+            title: titleMatch?.[1] ?? `Release ${versionMatch?.[1]}`,
+            date: dateMatch?.[1]?.trim() ?? '',
+          }
+        })
+        .filter(b => b.version)
+
+      // Parse GitHub releases for index (extract from frontmatter)
+      const ghReleases = releaseDocs
+        .filter(d => d.path.startsWith('releases/') && !d.path.endsWith('CHANGELOG.md'))
+        .map((d) => {
+          const tag = d.content.match(/^tag:\s*(.+)/m)?.[1]?.trim() ?? ''
+          const nameMatch = d.content.match(/^name:\s*"([^"]+)"/m) || d.content.match(/^name:\s*(\S+)/m)
+          const name = nameMatch?.[1]?.trim() ?? tag
+          const published = d.content.match(/^published:\s*(.+)/m)?.[1]?.trim() ?? ''
+          return { id: 0, tag, name, prerelease: false, createdAt: published, publishedAt: published, markdown: '' }
+        })
+        .filter(r => r.tag)
+
+      const hasChangelog = allDocs.some(d => d.path === 'releases/CHANGELOG.md')
+
+      // Generate unified _INDEX.md
+      if (ghReleases.length > 0 || blogEntries.length > 0) {
+        allDocs.push({
+          path: 'releases/_INDEX.md',
+          content: generateReleaseIndex({ releases: ghReleases, packageName, blogReleases: blogEntries, hasChangelog }),
+        })
+      }
+
+      if (allDocs.length > 0) {
+        onProgress(`Caching ${allDocs.length} releases`)
+        writeToCache(packageName, version, allDocs)
+        for (const doc of allDocs) {
           docsToIndex.push({
             id: doc.path,
             content: doc.content,
