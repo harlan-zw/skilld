@@ -66,13 +66,25 @@ If you need to re-configure skilld, just run `npx -y skilld config` to update yo
 
 ## FAQ
 
+### Why doesn't the skills run?
+
+Try this in your project/user prompt:
+
+```md
+Before modifying code, evaluate each installed skill against the current task.
+For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
+```
+
 ### How is this different from Context7?
 
 Context7 is an MCP that fetches raw doc chunks at query time. You get different results each prompt, no curation, and it requires their server. Skilld is local-first: it generates a SKILL.md that lives in your project, tied to your actual package versions. No MCP dependency, no per-prompt latency, and it goes further with LLM-enhanced sections, prompt injection sanitization, and semantic search.
 
-### Aren't these just AI convention files?
+### Will I be prompt injection?
 
-Similar idea, but instead of hand-writing them, skilld generates them from the latest package docs, issues, and releases. This makes them considerably more accurate at a low token cost. They also auto-update when your dependencies ship new versions.
+Skilld pulls issues from GitHub which could be abused for potential prompt injection.
+
+Skilld treats all data as unstrusted, running in permissioned environments and using best practices to avoid injections.
+However, always be cautious when using skills from untrusted source.
 
 ### Do skills update when my deps update?
 

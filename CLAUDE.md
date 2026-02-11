@@ -95,8 +95,3 @@ References are global/static; SKILL.md is per-project (different conventions). C
 - **Build** — `obuild` bundles multiple entry points (cli, index, types, cache, retriv, agent, sources) as subpath exports
 - **CLI modes** — `--prepare` flag for pnpm hooks (sync outdated only, no LLM, silent), `--background` spawns detached process
 - **First-run wizard** — `src/commands/wizard.ts` handles agent/model config and package selection on first run
-
-<!-- skilld -->
-Before modifying code, evaluate each installed skill against the current task.
-For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
-<!-- /skilld -->
