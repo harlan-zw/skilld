@@ -482,6 +482,13 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   const version = localVersion || resolved.version || 'latest'
   const versionKey = getVersionKey(version)
 
+  // Force: nuke cached references + search index so all existsSync guards re-fetch
+  if (config.force) {
+    forceClearCache(packageName, version)
+  }
+
+  const useCache = isCached(packageName, version)
+
   // Download npm dist if not in node_modules (for standalone/learning use)
   if (!existsSync(join(cwd, 'node_modules', packageName))) {
     spin.message(`Downloading ${packageName}@${version} dist`)
@@ -501,12 +508,6 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     return
   }
 
-  // Force: nuke cached references + search index so all existsSync guards re-fetch
-  if (config.force) {
-    forceClearCache(packageName, version)
-  }
-
-  const useCache = isCached(packageName, version)
   spin.stop(`Resolved ${packageName}@${useCache ? versionKey : version}${config.force ? ' (force)' : useCache ? ' (cached)' : ''}`)
 
   ensureCacheDir()
