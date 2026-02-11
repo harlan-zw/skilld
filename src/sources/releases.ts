@@ -310,7 +310,7 @@ export async function fetchReleaseNotes(
       const ref = gitRef || selected[0]!.tag
       const changelog = await fetchChangelog(owner, repo, ref)
       if (changelog)
-        return [{ path: 'CHANGELOG.md', content: changelog }]
+        return [{ path: 'releases/CHANGELOG.md', content: changelog }]
     }
 
     const docs = selected.map((r) => {
@@ -339,5 +339,5 @@ export async function fetchReleaseNotes(
   if (!changelog)
     return []
 
-  return [{ path: 'CHANGELOG.md', content: changelog }]
+  return [{ path: 'releases/CHANGELOG.md', content: changelog }]
 }
