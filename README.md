@@ -8,19 +8,9 @@
 
 ## Why?
 
-Agents suck at following latest conventions beyond their [reliable knowledge cut-off](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison). They shoot themselves in the foot
-with new APIs and conventions, and they don't know what they don't know.
+Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and predict the most likely code from training data, not the best code. When 17,000 GitHub results use `withDefaults(defineProps())` and only 73 use Vue 3.5's Reactive Props Destructure, the agent picks the old pattern every time.
 
-[Agent Skills](https://agentskills.io/home) help us solve this by distilling the most important patterns and conventions for a package into a single SKILL.md file.
-Getting skills for our packages either involves the maintainer (or ourselves) taking on the maintenance burden and surfacing them or using skill sharing
-sites like [skills.sh](https://skills.sh/).
-
-While these are great for generic skills, they aren't good for NPM skills:
-- No version-awareness, high maintenance burden to keep up with new releases and deprecations.
-- Non-optimized context windows, prompt injection risks, missing references.
-- Community-sourced skills leak personal opinions and biases. Maintainers are out of the loop, and may not even know about them.
-
-Skilld leverages maintainers existing effort. Maintainers write great docs for us, we generate our own local skills optimized for our models and codebase from them.
+Skilld generates [agent skills](https://agentskills.io/home) from the docs maintainers already write — version-aware, local-first, and optimized for your codebase. See [The Landscape](#the-landscape) for how it compares to other approaches.
 
 <p align="center">
 <table>
@@ -178,6 +168,28 @@ skilld config
 | `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
 | `--prepare`    |      | `false`        | Non-interactive sync for prepare hook (outdated only) |
 | `--background` | `-b` | `false`        | Run `--prepare` in a detached background process |
+
+## The Landscape
+
+Several approaches exist for steering agent knowledge. Each fills a different niche:
+
+| Approach | Versioned | Curated | No Opt-in | Local |
+|:---------|:---------:|:-------:|:---------:|:-----:|
+| **Manual rules** | ✗ | ✓ | ✓ | ✓ |
+| **llms.txt** | ~ | ✗ | ✗ | ✗ |
+| **MCP servers** | ✓ | ✗ | ✗ | ✗ |
+| **skills.sh** | ✗ | ~ | ✓ | ✗ |
+| **skills-npm** | ✓ | ✓ | ✗ | ✓ |
+| **skilld** | ✓ | ✓ | ✓ | ✓ |
+
+> **Versioned** — tied to your installed package version. **Curated** — distilled best practices, not raw docs. **No Opt-in** — works without the package author doing anything. **Local** — runs on your machine, no external service dependency.
+
+- **Manual rules** (CLAUDE.md, .cursorrules) — full control, but you need to already know the best practices and maintain them across every dep.
+- **[llms.txt](https://llmstxt.org/)** — standard convention for exposing docs to LLMs, but it's full docs not curated guidance and requires author adoption.
+- **MCP servers** — live, version-aware responses, but adds per-request latency and the maintainer has to build and maintain a server.
+- **[skills.sh](https://skills.sh/)** — easy skill sharing with a growing ecosystem, but community-sourced without version-awareness or author oversight.
+- **[skills-npm](https://github.com/antfu/skills-npm)** — the ideal end-state: zero-token skills shipped by the package author, but requires every maintainer to opt in.
+- **skilld** — generates version-aware skills from existing docs, changelogs, issues, and discussions. Works for any package without author opt-in.
 
 ## Related
 
