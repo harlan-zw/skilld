@@ -8,7 +8,7 @@
 
 ## Why?
 
-Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and predict the most likely code from training data, not the best code. For example, agents still reduce to use Vue v3.5 syntax out of the box, this is because they're trained on conventions not the latest docs.
+Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and predict the most likely code from training data, not the best code. For example, [Vue v3.5](https://blog.vuejs.org/posts/vue-3-5) was released over 16 months ago and agents refuse so use its features out-of-the-box. This is because they're trained on conventions not the latest docs.
 
 Methods of getting the right context to your agent require either manual curation, author opt-in, or external servers. See [the Landscape](#the-landscape)
 for more details.
