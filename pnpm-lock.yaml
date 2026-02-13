@@ -53,8 +53,8 @@ catalogs:
       specifier: ^7.3.0
       version: 7.3.0
     retriv:
-      specifier: ^0.9.1
-      version: 0.9.1
+      specifier: ^0.10.0
+      version: 0.10.0
     sqlite-vec:
       specifier: ^0.1.6
       version: 0.1.6
@@ -125,7 +125,7 @@ importers:
         version: 2.0.3
       retriv:
         specifier: catalog:deps
-        version: 0.9.1(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@5.9.3)
+        version: 0.10.0(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@5.9.3)
       sqlite-vec:
         specifier: catalog:deps
         version: 0.1.6
@@ -2966,8 +2966,8 @@ packages:
     resolution: {integrity: sha512-I1XxrZSQ+oErkRR4jYbAyEEu2I0avBvvMM5JN+6EBprOGRCs63ENqZ3vjavq8fBw2+62G5LF5XelKwuJpcvcxw==}
     engines: {node: '>=10'}
 
-  retriv@0.9.1:
-    resolution: {integrity: sha512-oeBvKbXoyrCzMH6MW0AboSFPFYAgaXndEH3Y52tJeFe4J9N6LnaWC/b4wRwAcBoMP9D/VSVg9HLfUpx8tl4Dbg==}
+  retriv@0.10.0:
+    resolution: {integrity: sha512-WgJxZ+wx+b2mKCpksQZxTkB7xjuu2CSs/RDcVQiHzegZeUVeUhkweEKcqHjQ+a4xLKcxpG57eWjFPKP+1JRfGg==}
     peerDependencies:
       '@ai-sdk/cohere': ^3.0.0
       '@ai-sdk/google': ^3.0.0
@@ -6573,7 +6573,7 @@ snapshots:
 
   ret@0.5.0: {}
 
-  retriv@0.9.1(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@5.9.3):
+  retriv@0.10.0(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@5.9.3):
     optionalDependencies:
       '@huggingface/transformers': 3.8.1
       ai: 6.0.68(zod@4.3.6)

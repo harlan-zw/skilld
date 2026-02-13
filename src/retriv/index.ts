@@ -3,6 +3,7 @@ import { createRetriv } from 'retriv'
 import { autoChunker } from 'retriv/chunkers/auto'
 import sqlite from 'retriv/db/sqlite'
 import { transformersJs } from 'retriv/embeddings/transformers-js'
+import { cachedEmbeddings } from './embedding-cache'
 
 export type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet }
 
@@ -12,7 +13,7 @@ function getDb(config: IndexConfig) {
   return createRetriv({
     driver: sqlite({
       path: config.dbPath,
-      embeddings: transformersJs(),
+      embeddings: cachedEmbeddings(transformersJs()),
     }),
     chunking: autoChunker(),
   })

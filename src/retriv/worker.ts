@@ -4,6 +4,7 @@ import { createRetriv } from 'retriv'
 import { autoChunker } from 'retriv/chunkers/auto'
 import sqlite from 'retriv/db/sqlite'
 import { transformersJs } from 'retriv/embeddings/transformers-js'
+import { cachedEmbeddings } from './embedding-cache'
 
 export interface WorkerIndexMessage {
   type: 'index'
@@ -59,7 +60,7 @@ if (parentPort) {
         const db = await createRetriv({
           driver: sqlite({
             path: config.dbPath,
-            embeddings: transformersJs(),
+            embeddings: cachedEmbeddings(transformersJs()),
           }),
           chunking: autoChunker(),
         })
