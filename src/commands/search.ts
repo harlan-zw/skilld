@@ -1,10 +1,12 @@
 import type { SearchFilter } from '../retriv'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
+import { join } from 'pathe'
 import { detectCurrentAgent } from 'unagent/env'
 import { agents, detectTargetAgent } from '../agent'
-import { getPackageDbPath } from '../cache'
+import { getPackageDbPath, REFERENCES_DIR } from '../cache'
+import { isInteractive } from '../cli-helpers'
 import { formatSnippet, readLock, sanitizeMarkdown } from '../core'
 import { getSharedSkillsDir } from '../core/shared'
 import { searchSnippets } from '../retriv'
@@ -47,8 +49,48 @@ function filterLockDbs(lock: ReturnType<typeof readLock>, packageFilter?: string
       const f = normalize(packageFilter)
       return normalize(info.packageName).includes(f) || normalize(info.packageName) === f
     })
-    .map(info => getPackageDbPath(info.packageName!, info.version!))
-    .filter(db => existsSync(db))
+    .map((info) => {
+      const exact = getPackageDbPath(info.packageName!, info.version!)
+      if (existsSync(exact))
+        return exact
+      // Fallback: find any cached version's search.db for this package
+      return findAnyPackageDb(info.packageName!)
+    })
+    .filter((db): db is string => !!db)
+}
+
+/** Find any search.db for a package when exact version cache is missing */
+function findAnyPackageDb(name: string): string | null {
+  if (!existsSync(REFERENCES_DIR))
+    return null
+
+  const prefix = `${name}@`
+
+  // Scoped packages live in a subdirectory
+  if (name.startsWith('@')) {
+    const [scope, pkg] = name.split('/')
+    const scopeDir = join(REFERENCES_DIR, scope!)
+    if (!existsSync(scopeDir))
+      return null
+    const scopePrefix = `${pkg}@`
+    for (const entry of readdirSync(scopeDir)) {
+      if (entry.startsWith(scopePrefix)) {
+        const db = join(scopeDir, entry, 'search.db')
+        if (existsSync(db))
+          return db
+      }
+    }
+    return null
+  }
+
+  for (const entry of readdirSync(REFERENCES_DIR)) {
+    if (entry.startsWith(prefix)) {
+      const db = join(REFERENCES_DIR, entry, 'search.db')
+      if (existsSync(db))
+        return db
+    }
+  }
+  return null
 }
 
 /** Parse filter prefix (e.g., "issues:bug" -> filter by type=issue, query="bug") */
@@ -126,6 +168,10 @@ export const searchCommandDef = defineCommand({
   async run({ args }) {
     if (args.query)
       return searchCommand(args.query, args.package || undefined)
+    if (!isInteractive()) {
+      console.error('Error: `skilld search` requires a query in non-interactive mode.\n  Usage: skilld search "query"')
+      process.exit(1)
+    }
     const { interactiveSearch } = await import('./search-interactive')
     return interactiveSearch(args.package || undefined)
   },

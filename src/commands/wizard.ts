@@ -2,6 +2,7 @@ import type { FeaturesConfig } from '../core/config'
 import { execSync } from 'node:child_process'
 import * as p from '@clack/prompts'
 import { getAvailableModels } from '../agent'
+import { isInteractive } from '../cli-helpers'
 import { defaultFeatures, updateConfig } from '../core/config'
 
 function hasGhCli(): boolean {
@@ -17,6 +18,9 @@ function hasGhCli(): boolean {
 }
 
 export async function runWizard(): Promise<void> {
+  if (!isInteractive())
+    return
+
   p.note(
     'Skilld gives your AI agent skill knowledge on your NPM\n'
     + 'dependencies gathered from versioned docs, source code\n'

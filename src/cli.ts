@@ -8,7 +8,7 @@ import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
 import { detectImportedPackages } from './agent'
-import { formatStatus, getRepoHint, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers'
+import { formatStatus, getRepoHint, isInteractive, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers'
 import { configCommand, interactiveSearch, removeCommand, runWizard, statusCommand, syncCommand } from './commands'
 import { getProjectState, hasCompletedWizard, isOutdated, readConfig } from './core'
 import { timedSpinner } from './core/formatting'
@@ -230,7 +230,14 @@ const main = defineCommand({
       return
     }
 
-    // Bare `skilld` — interactive menu
+    // Bare `skilld` — interactive menu (requires TTY)
+    if (!isInteractive()) {
+      const state = await getProjectState(cwd)
+      const status = formatStatus(state.synced.length, state.outdated.length)
+      console.log(`skilld v${version} · ${status}`)
+      return
+    }
+
     let currentAgent = resolveAgent(args.agent)
 
     if (!currentAgent) {

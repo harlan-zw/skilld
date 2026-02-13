@@ -5,7 +5,7 @@ import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { agents } from '../agent'
 import { CACHE_DIR } from '../cache'
-import { sharedArgs } from '../cli-helpers'
+import { isInteractive, sharedArgs } from '../cli-helpers'
 import { getRegisteredProjects, unregisterProject } from '../core/config'
 import { readLock } from '../core/lockfile'
 import { SHARED_SKILLS_DIR } from '../core/shared'
@@ -63,23 +63,28 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
 
   // Prompt for scope if not provided
   if (!scope) {
-    const allHint = registeredProjects.length > 0
-      ? `${registeredProjects.length} projects + global + cache`
-      : 'global skills + cache'
-
-    const selected = await p.select({
-      message: 'What do you want to uninstall?',
-      options: [
-        { label: 'This project', value: 'project', hint: 'current project only' },
-        { label: 'Everything', value: 'all', hint: allHint },
-      ],
-    })
-
-    if (p.isCancel(selected)) {
-      p.cancel('Cancelled')
-      return
+    if (!isInteractive()) {
+      scope = 'project'
     }
-    scope = selected as 'project' | 'all'
+    else {
+      const allHint = registeredProjects.length > 0
+        ? `${registeredProjects.length} projects + global + cache`
+        : 'global skills + cache'
+
+      const selected = await p.select({
+        message: 'What do you want to uninstall?',
+        options: [
+          { label: 'This project', value: 'project', hint: 'current project only' },
+          { label: 'Everything', value: 'all', hint: allHint },
+        ],
+      })
+
+      if (p.isCancel(selected)) {
+        p.cancel('Cancelled')
+        return
+      }
+      scope = selected as 'project' | 'all'
+    }
   }
 
   interface RemoveItem { label: string, path: string, version?: string }
@@ -248,7 +253,7 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
     p.log.message(`  ${prefix}: ${formatGroup(items)}`)
   }
 
-  if (!opts.yes) {
+  if (!opts.yes && isInteractive()) {
     const confirmed = await p.confirm({
       message: 'Proceed with uninstall?',
     })

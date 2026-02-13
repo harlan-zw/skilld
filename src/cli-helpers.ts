@@ -8,6 +8,7 @@ import type { ProjectState } from './core/skills'
 import { existsSync, readFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { join } from 'pathe'
+import { detectCurrentAgent } from 'unagent/env'
 import { agents, detectInstalledAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent'
 import { readConfig, updateConfig } from './core/config'
 import { version } from './version'
@@ -58,6 +59,25 @@ export const sharedArgs = {
   },
 }
 
+/** Check if the current environment supports interactive prompts */
+export function isInteractive(): boolean {
+  if (detectCurrentAgent())
+    return false
+  if (process.env.CI)
+    return false
+  if (!process.stdout.isTTY)
+    return false
+  return true
+}
+
+/** Exit with error if interactive terminal is required but unavailable */
+export function requireInteractive(command: string): void {
+  if (!isInteractive()) {
+    console.error(`Error: \`skilld ${command}\` requires an interactive terminal`)
+    process.exit(1)
+  }
+}
+
 /** Resolve agent from flags/cwd/config. cwd is source of truth over config. */
 export function resolveAgent(agentFlag?: string): AgentType | null {
   return (agentFlag as AgentType | undefined)
@@ -69,6 +89,17 @@ export function resolveAgent(agentFlag?: string): AgentType | null {
 /** Prompt user to pick an agent when auto-detection fails */
 export async function promptForAgent(): Promise<AgentType | null> {
   const installed = detectInstalledAgents()
+
+  // Non-interactive: auto-select sole installed agent or error
+  if (!isInteractive()) {
+    if (installed.length === 1) {
+      updateConfig({ agent: installed[0] })
+      return installed[0]!
+    }
+    console.error('Error: could not auto-detect agent. Pass --agent <name> to specify.')
+    process.exit(1)
+  }
+
   const options = (installed.length ? installed : Object.keys(agents) as AgentType[])
     .map(id => ({ label: agents[id].displayName, value: id, hint: agents[id].skillsDir }))
 

@@ -30,7 +30,7 @@ import {
   listReferenceFiles,
   resolvePkgDir,
 } from '../cache'
-import { getInstalledGenerators, introLine, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
+import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
@@ -90,6 +90,20 @@ export async function ensureGitignore(skillsDir: string, cwd: string, isGlobal: 
       return
   }
 
+  // Non-interactive: auto-add (default is true anyway)
+  if (!isInteractive()) {
+    const entry = `\n# Skilld references (recreated by \`skilld install\`)\n${pattern}\n`
+    if (existsSync(gitignorePath)) {
+      const existing = readFileSync(gitignorePath, 'utf-8')
+      const separator = existing.endsWith('\n') ? '' : '\n'
+      appendFileSync(gitignorePath, `${separator}${entry}`)
+    }
+    else {
+      writeFileSync(gitignorePath, entry)
+    }
+    return
+  }
+
   // Show guidance
   p.log.info(
     `\x1B[1mGit guidance:\x1B[0m\n`
@@ -146,6 +160,19 @@ export async function ensureAgentInstructions(agent: AgentType, cwd: string, isG
     const content = readFileSync(filePath, 'utf-8')
     if (content.includes(SKILLD_MARKER_START))
       return
+  }
+
+  // Non-interactive: auto-add
+  if (!isInteractive()) {
+    if (existsSync(filePath)) {
+      const existing = readFileSync(filePath, 'utf-8')
+      const separator = existing.endsWith('\n') ? '' : '\n'
+      appendFileSync(filePath, `${separator}\n${SKILLD_INSTRUCTIONS}\n`)
+    }
+    else {
+      writeFileSync(filePath, `${SKILLD_INSTRUCTIONS}\n`)
+    }
+    return
   }
 
   p.note(SKILLD_INSTRUCTIONS, `Will be added to ${agentConfig.instructionFile}`)
@@ -405,6 +432,14 @@ export interface LlmConfig {
 export async function selectLlmConfig(presetModel?: OptimizeModel, message?: string): Promise<LlmConfig | null> {
   if (presetModel) {
     return { model: presetModel, sections: DEFAULT_SECTIONS }
+  }
+
+  // Non-interactive: auto-pick model with default sections
+  if (!isInteractive()) {
+    const model = await selectModel(true)
+    if (!model)
+      return null
+    return { model, sections: DEFAULT_SECTIONS }
   }
 
   const model = await selectModel(false)

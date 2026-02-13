@@ -4,7 +4,7 @@ import { existsSync, rmSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { unlinkSkillFromAgents } from '../agent'
-import { getInstalledGenerators, introLine, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
+import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
 import { readConfig } from '../core/config'
 import { removeLockEntry } from '../core/lockfile'
 import { getSharedSkillsDir } from '../core/shared'
@@ -22,6 +22,12 @@ export async function removeCommand(state: ProjectState, opts: RemoveOptions): P
   const scope = opts.global ? 'global' : 'local'
   const allSkills = [...iterateSkills({ scope })]
 
+  // Non-interactive without packages → error
+  if (!isInteractive() && !opts.packages) {
+    console.error('Error: `skilld remove` requires package names in non-interactive mode.\n  Usage: skilld remove <package...>')
+    process.exit(1)
+  }
+
   // Get skills to choose from
   const skills = opts.packages
     ? allSkills.filter(s => opts.packages!.includes(s.name))
@@ -32,8 +38,8 @@ export async function removeCommand(state: ProjectState, opts: RemoveOptions): P
     return
   }
 
-  // Confirm deletion
-  if (!opts.yes) {
+  // Confirm deletion (skip in non-interactive)
+  if (!opts.yes && isInteractive()) {
     const confirmed = await p.confirm({
       message: `Remove ${skills.length} skill(s)? ${skills.map(s => s.name).join(', ')}`,
     })
@@ -96,6 +102,11 @@ async function pickSkillsToRemove(skills: SkillEntry[], scope: 'local' | 'global
 export const removeCommandDef = defineCommand({
   meta: { name: 'remove', description: 'Remove installed skills' },
   args: {
+    package: {
+      type: 'positional',
+      description: 'Package(s) to remove (space-separated)',
+      required: false,
+    },
     ...sharedArgs,
   },
   async run({ args }) {
@@ -114,7 +125,13 @@ export const removeCommandDef = defineCommand({
     const intro = { state, generators, modelId: config.model }
     p.intro(`${introLine(intro)} · remove (${scope})`)
 
+    // Collect packages from positional args
+    const packages = args.package
+      ? [...new Set([args.package, ...((args as any)._ || [])].map((s: string) => s.trim()).filter(Boolean))]
+      : undefined
+
     return removeCommand(state, {
+      packages,
       global: args.global,
       agent,
       yes: args.yes,
