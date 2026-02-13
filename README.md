@@ -13,7 +13,7 @@ Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude
 Methods of getting the right context to your agent require either manual curation, author opt-in, or external servers. See [the landscape](#the-landscape)
 for more details.
 
-Skilld generates [agent skills](https://agentskills.io/home) from the docs maintainers already write. Version-aware, local-first, and optimized for your codebase. 
+Skilld generates [agent skills](https://agentskills.io/home) from the docs maintainers already write. Version-aware, local-first, and optimized for your codebase.
 
 <p align="center">
 <table>
