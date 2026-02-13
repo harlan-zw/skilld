@@ -39,7 +39,7 @@ export function ensureCacheDir(): void {
 }
 
 /**
- * Write docs to cache, cleaning stale version dirs for the same package
+ * Write docs to cache
  */
 export function writeToCache(
   name: string,
@@ -49,9 +49,6 @@ export function writeToCache(
   const cacheDir = getCacheDir(name, version)
   mkdirSync(cacheDir, { recursive: true, mode: 0o700 })
 
-  // Clean stale cache dirs for same package with different version keys
-  cleanStaleCacheDirs(name, version)
-
   for (const doc of docs) {
     const filePath = join(cacheDir, doc.path)
     mkdirSync(join(filePath, '..'), { recursive: true, mode: 0o700 })
@@ -59,40 +56,6 @@ export function writeToCache(
   }
 
   return cacheDir
-}
-
-/**
- * Remove stale cache dirs for same package but different version keys
- * e.g. @clack/prompts@1.0 vs @clack/prompts@1.0.0
- */
-function cleanStaleCacheDirs(name: string, version: string): void {
-  const prefix = `${name}@`
-
-  // For scoped packages, check inside the scope dir
-  if (name.startsWith('@')) {
-    const [scope, pkg] = name.split('/')
-    const scopeDir = join(REFERENCES_DIR, scope!)
-    if (!existsSync(scopeDir))
-      return
-
-    const scopePrefix = `${pkg}@`
-    const currentDirName = basename(getCacheDir(name, version))
-
-    for (const entry of readdirSync(scopeDir)) {
-      if (entry.startsWith(scopePrefix) && entry !== currentDirName) {
-        rmSync(join(scopeDir, entry), { recursive: true, force: true })
-      }
-    }
-  }
-  else {
-    if (!existsSync(REFERENCES_DIR))
-      return
-    for (const entry of readdirSync(REFERENCES_DIR)) {
-      if (entry.startsWith(prefix) && entry !== basename(getCacheDir(name, version))) {
-        rmSync(join(REFERENCES_DIR, entry), { recursive: true, force: true })
-      }
-    }
-  }
 }
 
 /**
