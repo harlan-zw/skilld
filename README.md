@@ -8,9 +8,12 @@
 
 ## Why?
 
-Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and predict the most likely code from training data, not the best code. When 17,000 GitHub results use `withDefaults(defineProps())` and only 73 use Vue 3.5's Reactive Props Destructure, the agent picks the old pattern every time.
+Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and predict the most likely code from training data, not the best code. For example, agents still reduce to use Vue v3.5 syntax out of the box, this is because they're trained on conventions not the latest docs.
 
-Skilld generates [agent skills](https://agentskills.io/home) from the docs maintainers already write — version-aware, local-first, and optimized for your codebase. See [The Landscape](#the-landscape) for how it compares to other approaches.
+Methods of getting the right context to your agent require either manual curation, author opt-in, or external servers. See [the Landscape](#the-landscape)
+for more details.
+
+Skilld generates [agent skills](https://agentskills.io/home) from the docs maintainers already write. Version-aware, local-first, and optimized for your codebase. 
 
 <p align="center">
 <table>
