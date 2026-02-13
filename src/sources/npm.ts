@@ -473,11 +473,6 @@ export async function readLocalDependencies(cwd: string): Promise<LocalDependenc
   const results: LocalDependency[] = []
 
   for (const [name, version] of Object.entries(deps)) {
-    // Skip types and dev tools
-    if (name.startsWith('@types/') || ['typescript', 'eslint', 'prettier', 'vitest', 'jest'].includes(name)) {
-      continue
-    }
-
     const parsed = parseVersionSpecifier(name, version, cwd)
     if (parsed) {
       results.push(parsed)
