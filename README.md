@@ -184,12 +184,12 @@ Several approaches exist for steering agent knowledge. Each fills a different ni
 
 > **Versioned** — tied to your installed package version. **Curated** — distilled best practices, not raw docs. **No Opt-in** — works without the package author doing anything. **Local** — runs on your machine, no external service dependency.
 
-- **Manual rules** (CLAUDE.md, .cursorrules) — full control, but you need to already know the best practices and maintain them across every dep.
-- **[llms.txt](https://llmstxt.org/)** — standard convention for exposing docs to LLMs, but it's full docs not curated guidance and requires author adoption.
-- **MCP servers** — live, version-aware responses, but adds per-request latency and the maintainer has to build and maintain a server.
-- **[skills.sh](https://skills.sh/)** — easy skill sharing with a growing ecosystem, but community-sourced without version-awareness or author oversight.
-- **[skills-npm](https://github.com/antfu/skills-npm)** — the ideal end-state: zero-token skills shipped by the package author, but requires every maintainer to opt in.
-- **skilld** — generates version-aware skills from existing docs, changelogs, issues, and discussions. Works for any package without author opt-in.
+- **Manual rules** (CLAUDE.md, .cursorrules): full control, but you need to already know the best practices and maintain them across every dep.
+- **[llms.txt](https://llmstxt.org/)**: standard convention for exposing docs to LLMs, but it's full docs not curated guidance and requires author adoption.
+- **MCP servers**: live, version-aware responses, but adds per-request latency and the maintainer has to build and maintain a server.
+- **[skills.sh](https://skills.sh/)**: easy skill sharing with a growing ecosystem, but community-sourced without version-awareness or author oversight.
+- **[skills-npm](https://github.com/antfu/skills-npm)**: the ideal end-state: zero-token skills shipped by the package author, but requires every maintainer to opt in.
+- **skilld**: generates version-aware skills from existing docs, changelogs, issues, and discussions. Works for any package without author opt-in.
 
 ## Related
 
