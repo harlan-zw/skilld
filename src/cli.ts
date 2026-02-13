@@ -1,20 +1,18 @@
 #!/usr/bin/env node
-import type { AgentType, OptimizeModel } from './agent'
+import type { AgentType } from './agent'
 import type { PackageUsage } from './agent/detect-imports'
-import type { ProjectState } from './core'
 import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
-import { agents, detectImportedPackages, detectInstalledAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent'
-import { cacheCleanCommand, configCommand, installCommand, interactiveSearch, listCommand, removeCommand, runWizard, searchCommand, statusCommand, syncCommand, uninstallCommand } from './commands'
-import { syncGitSkills } from './commands/sync-git'
-import { getProjectState, hasCompletedWizard, isOutdated, readConfig, updateConfig } from './core'
+import { detectImportedPackages } from './agent'
+import { formatStatus, getRepoHint, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers'
+import { configCommand, interactiveSearch, removeCommand, runWizard, statusCommand, syncCommand } from './commands'
+import { getProjectState, hasCompletedWizard, isOutdated, readConfig } from './core'
 import { timedSpinner } from './core/formatting'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources'
-import { parseGitSkillInput } from './sources/git-skills'
 
 import { version } from './version'
 
@@ -24,68 +22,6 @@ process.emit = (event: string, ...args: any[]) =>
   event === 'warning' && args[0]?.name === 'ExperimentalWarning' && args[0]?.message?.includes('SQLite')
     ? false
     : _emit.apply(process, [event, ...args])
-
-// ── Helpers ──
-
-function getRepoHint(name: string, cwd: string): string | undefined {
-  const pkgJsonPath = join(cwd, 'node_modules', name, 'package.json')
-  if (!existsSync(pkgJsonPath))
-    return undefined
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
-  const url = typeof pkg.repository === 'string'
-    ? pkg.repository
-    : pkg.repository?.url
-  if (!url)
-    return undefined
-  return url
-    .replace(/^git\+/, '')
-    .replace(/\.git$/, '')
-    .replace(/^git:\/\//, 'https://')
-    .replace(/^ssh:\/\/git@github\.com/, 'https://github.com')
-    .replace(/^https?:\/\/(www\.)?github\.com\//, '')
-}
-
-function formatStatus(synced: number, outdated: number): string {
-  const parts: string[] = []
-  if (synced > 0)
-    parts.push(`\x1B[32m${synced} synced\x1B[0m`)
-  if (outdated > 0)
-    parts.push(`\x1B[33m${outdated} outdated\x1B[0m`)
-  return `Skills: ${parts.join(' · ')}`
-}
-
-function relativeTime(date: Date): string {
-  const now = Date.now()
-  const diff = now - date.getTime()
-  const mins = Math.floor(diff / 60000)
-  const hours = Math.floor(diff / 3600000)
-  const days = Math.floor(diff / 86400000)
-  if (mins < 1)
-    return 'just now'
-  if (mins < 60)
-    return `${mins}m ago`
-  if (hours < 24)
-    return `${hours}h ago`
-  return `${days}d ago`
-}
-
-function getLastSynced(state: ProjectState): string | null {
-  let latest: Date | null = null
-  for (const skill of state.skills) {
-    if (skill.info?.syncedAt) {
-      const d = new Date(skill.info.syncedAt)
-      if (!latest || d > latest)
-        latest = d
-    }
-  }
-  return latest ? relativeTime(latest) : null
-}
-
-interface IntroOptions {
-  state: ProjectState
-  generators?: Array<{ name: string, version: string }>
-  modelId?: string
-}
 
 // ── Brand animation ──
 
@@ -209,31 +145,6 @@ async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> 
   return result
 }
 
-function introLine({ state, generators, modelId }: IntroOptions): string {
-  const name = '\x1B[1m\x1B[35mskilld\x1B[0m'
-  const ver = `\x1B[90mv${version}\x1B[0m`
-  const lastSynced = getLastSynced(state)
-  const synced = lastSynced ? ` · \x1B[90msynced ${lastSynced}\x1B[0m` : ''
-  const modelStr = modelId ? ` · ${getModelName(modelId as any)}` : ''
-  const genStr = generators?.length
-    ? generators.map(g => `${g.name} v${g.version}`).join(', ')
-    : ''
-  const genLine = genStr ? `\n\x1B[90m↳ ${genStr}${modelStr}\x1B[0m` : ''
-  return `${name} ${ver}${synced}${genLine}`
-}
-
-/** Get installed LLM generators with working CLIs (verified via --version) */
-function getInstalledGenerators(): Array<{ name: string, version: string }> {
-  const installed = detectInstalledAgents()
-  return installed
-    .filter(id => agents[id].cli)
-    .map((id) => {
-      const version = getAgentVersion(id)
-      return version ? { name: agents[id].displayName, version } : null
-    })
-    .filter((a): a is { name: string, version: string } => a !== null)
-}
-
 /** Non-interactive sync for pnpm prepare hook. Syncs outdated skills only, no LLM, exits 0 always. */
 async function prepareSync(cwd: string, agentFlag?: AgentType): Promise<void> {
   const agent = resolveAgent(agentFlag)
@@ -256,338 +167,9 @@ async function prepareSync(cwd: string, agentFlag?: AgentType): Promise<void> {
   })
 }
 
-/** Resolve agent from flags/cwd/config. cwd is source of truth over config. */
-function resolveAgent(agentFlag?: string): AgentType | null {
-  return (agentFlag as AgentType | undefined)
-    ?? detectTargetAgent()
-    ?? (readConfig().agent as AgentType | undefined)
-    ?? null
-}
-
-/** Prompt user to pick an agent when auto-detection fails */
-async function promptForAgent(): Promise<AgentType | null> {
-  const installed = detectInstalledAgents()
-  const options = (installed.length ? installed : Object.keys(agents) as AgentType[])
-    .map(id => ({ label: agents[id].displayName, value: id, hint: agents[id].skillsDir }))
-
-  const hint = installed.length
-    ? `Detected ${installed.map(t => agents[t].displayName).join(', ')} but couldn't determine which to use`
-    : 'No agents auto-detected'
-
-  p.log.warn(`Could not detect which coding agent to install skills for.\n  ${hint}`)
-
-  const choice = await p.select({
-    message: 'Which coding agent should skills be installed for?',
-    options,
-  })
-
-  if (p.isCancel(choice))
-    return null
-
-  // Save as default so they don't get asked again
-  updateConfig({ agent: choice })
-  p.log.success(`Default agent set to ${agents[choice].displayName}`)
-  return choice
-}
-
-// ── Shared args reused by subcommands ──
-
-const sharedArgs = {
-  global: {
-    type: 'boolean' as const,
-    alias: 'g',
-    description: 'Install globally to ~/.claude/skills',
-    default: false,
-  },
-  agent: {
-    type: 'string' as const,
-    alias: 'a',
-    description: 'Agent where skills are installed (claude-code, cursor, windsurf, etc.)',
-  },
-  model: {
-    type: 'string' as const,
-    alias: 'm',
-    description: 'LLM model for skill generation (sonnet, haiku, opus, gemini-2.5-pro, etc.)',
-  },
-  yes: {
-    type: 'boolean' as const,
-    alias: 'y',
-    description: 'Skip prompts, use defaults',
-    default: false,
-  },
-  force: {
-    type: 'boolean' as const,
-    alias: 'f',
-    description: 'Ignore all caches, re-fetch docs and regenerate',
-    default: false,
-  },
-  debug: {
-    type: 'boolean' as const,
-    description: 'Save raw LLM output to logs/ for each section',
-    default: false,
-  },
-}
-
-// ── Subcommands ──
+// ── Subcommands (lazy-loaded) ──
 
 const SUBCOMMAND_NAMES = ['add', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache']
-
-const addCommand = defineCommand({
-  meta: { name: 'add', description: 'Add skills for package(s)' },
-  args: {
-    package: {
-      type: 'positional',
-      description: 'Package(s) to sync (space or comma-separated, e.g., vue nuxt pinia)',
-      required: true,
-    },
-    ...sharedArgs,
-  },
-  async run({ args }) {
-    const cwd = process.cwd()
-    let agent = resolveAgent(args.agent)
-    if (!agent) {
-      agent = await promptForAgent()
-      if (!agent)
-        return
-    }
-
-    // Collect raw inputs (don't split URLs on slashes/spaces yet)
-    const rawInputs = [...new Set(
-      [args.package, ...((args as any)._ || [])]
-        .map((s: string) => s.trim())
-        .filter(Boolean),
-    )]
-
-    // Partition: git sources vs npm packages
-    const gitSources: Array<import('./sources/git-skills').GitSkillSource> = []
-    const npmTokens: string[] = []
-
-    for (const input of rawInputs) {
-      const git = parseGitSkillInput(input)
-      if (git)
-        gitSources.push(git)
-      else
-        npmTokens.push(input)
-    }
-
-    // Handle git sources
-    if (gitSources.length > 0) {
-      for (const source of gitSources) {
-        await syncGitSkills({ source, global: args.global, agent, yes: args.yes })
-      }
-    }
-
-    // Handle npm packages via existing flow (expand comma/space-split for backwards compat)
-    if (npmTokens.length > 0) {
-      const packages = [...new Set(npmTokens.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
-      const state = await getProjectState(cwd)
-      p.intro(introLine({ state }))
-      return syncCommand(state, {
-        packages,
-        global: args.global,
-        agent,
-        model: args.model as OptimizeModel | undefined,
-        yes: args.yes,
-        force: args.force,
-        debug: args.debug,
-      })
-    }
-  },
-})
-
-const updateSubCommand = defineCommand({
-  meta: { name: 'update', description: 'Update outdated skills' },
-  args: {
-    package: {
-      type: 'positional',
-      description: 'Package(s) to update (space or comma-separated). Without args, syncs all outdated.',
-      required: false,
-    },
-    ...sharedArgs,
-  },
-  async run({ args }) {
-    const cwd = process.cwd()
-    let agent = resolveAgent(args.agent)
-    if (!agent) {
-      agent = await promptForAgent()
-      if (!agent)
-        return
-    }
-
-    const state = await getProjectState(cwd)
-    const generators = getInstalledGenerators()
-    const config = readConfig()
-    p.intro(introLine({ state, generators, modelId: config.model }))
-
-    // Specific packages
-    if (args.package) {
-      const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
-      return syncCommand(state, {
-        packages,
-        global: args.global,
-        agent,
-        model: args.model as OptimizeModel | undefined,
-        yes: args.yes,
-        force: args.force,
-        debug: args.debug,
-      })
-    }
-
-    // No args: sync all outdated
-    if (state.outdated.length === 0) {
-      p.log.success('All skills up to date')
-      return
-    }
-
-    const packages = state.outdated.map(s => s.packageName || s.name)
-    return syncCommand(state, {
-      packages,
-      global: args.global,
-      agent,
-      model: args.model as OptimizeModel | undefined,
-      yes: args.yes,
-      force: args.force,
-      debug: args.debug,
-    })
-  },
-})
-
-const infoSubCommand = defineCommand({
-  meta: { name: 'info', description: 'Show skill info and config' },
-  args: {
-    global: sharedArgs.global,
-  },
-  run({ args }) {
-    return statusCommand({ global: args.global })
-  },
-})
-
-const listSubCommand = defineCommand({
-  meta: { name: 'list', description: 'List installed skills' },
-  args: {
-    global: sharedArgs.global,
-    json: {
-      type: 'boolean' as const,
-      description: 'Output as JSON',
-      default: false,
-    },
-  },
-  run({ args }) {
-    return listCommand({ global: args.global, json: args.json })
-  },
-})
-
-const configSubCommand = defineCommand({
-  meta: { name: 'config', description: 'Edit settings' },
-  args: {},
-  async run() {
-    const cwd = process.cwd()
-    const state = await getProjectState(cwd)
-    const generators = getInstalledGenerators()
-    const config = readConfig()
-    p.intro(introLine({ state, generators, modelId: config.model }))
-    return configCommand()
-  },
-})
-
-const removeSubCommand = defineCommand({
-  meta: { name: 'remove', description: 'Remove installed skills' },
-  args: {
-    ...sharedArgs,
-  },
-  async run({ args }) {
-    const cwd = process.cwd()
-    let agent = resolveAgent(args.agent)
-    if (!agent) {
-      agent = await promptForAgent()
-      if (!agent)
-        return
-    }
-
-    const state = await getProjectState(cwd)
-    const generators = getInstalledGenerators()
-    const config = readConfig()
-    const scope = args.global ? 'global' : 'project'
-    const intro = { state, generators, modelId: config.model }
-    p.intro(`${introLine(intro)} · remove (${scope})`)
-
-    return removeCommand(state, {
-      global: args.global,
-      agent,
-      yes: args.yes,
-    })
-  },
-})
-
-const installSubCommand = defineCommand({
-  meta: { name: 'install', description: 'Restore references from lockfile' },
-  args: {
-    global: sharedArgs.global,
-    agent: sharedArgs.agent,
-  },
-  async run({ args }) {
-    let agent = resolveAgent(args.agent)
-    if (!agent) {
-      agent = await promptForAgent()
-      if (!agent)
-        return
-    }
-
-    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m install`)
-    return installCommand({ global: args.global, agent })
-  },
-})
-
-const uninstallSubCommand = defineCommand({
-  meta: { name: 'uninstall', description: 'Remove skilld data' },
-  args: {
-    ...sharedArgs,
-  },
-  async run({ args }) {
-    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m uninstall`)
-    return uninstallCommand({
-      scope: args.global ? 'all' : undefined,
-      agent: args.agent as AgentType | undefined,
-      yes: args.yes,
-    })
-  },
-})
-
-const cacheSubCommand = defineCommand({
-  meta: { name: 'cache', description: 'Cache management' },
-  args: {
-    clean: {
-      type: 'boolean',
-      description: 'Remove expired LLM cache entries',
-      default: true,
-    },
-  },
-  async run() {
-    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m cache clean`)
-    await cacheCleanCommand()
-  },
-})
-
-const searchSubCommand = defineCommand({
-  meta: { name: 'search', description: 'Search indexed docs' },
-  args: {
-    query: {
-      type: 'positional',
-      description: 'Search query (e.g., "useFetch options"). Omit for interactive mode.',
-      required: false,
-    },
-    package: {
-      type: 'string',
-      alias: 'p',
-      description: 'Filter by package name',
-    },
-  },
-  async run({ args }) {
-    if (args.query)
-      return searchCommand(args.query, args.package || undefined)
-    return interactiveSearch(args.package || undefined)
-  },
-})
 
 // ── Main command ──
 
@@ -612,16 +194,16 @@ const main = defineCommand({
     agent: sharedArgs.agent,
   },
   subCommands: {
-    add: addCommand,
-    update: updateSubCommand,
-    info: infoSubCommand,
-    list: listSubCommand,
-    config: configSubCommand,
-    remove: removeSubCommand,
-    install: installSubCommand,
-    uninstall: uninstallSubCommand,
-    search: searchSubCommand,
-    cache: cacheSubCommand,
+    add: () => import('./commands/sync').then(m => m.addCommandDef),
+    update: () => import('./commands/sync').then(m => m.updateCommandDef),
+    info: () => import('./commands/status').then(m => m.infoCommandDef),
+    list: () => import('./commands/list').then(m => m.listCommandDef),
+    config: () => import('./commands/config').then(m => m.configCommandDef),
+    remove: () => import('./commands/remove').then(m => m.removeCommandDef),
+    install: () => import('./commands/install').then(m => m.installCommandDef),
+    uninstall: () => import('./commands/uninstall').then(m => m.uninstallCommandDef),
+    search: () => import('./commands/search').then(m => m.searchCommandDef),
+    cache: () => import('./commands/cache').then(m => m.cacheCommandDef),
   },
   async run({ args }) {
     // Guard: citty always calls parent run() after subcommand dispatch.
@@ -809,6 +391,10 @@ const main = defineCommand({
 
           // Let user select which packages
           const packages = usages.map(u => u.name)
+          if (packages.length === 0) {
+            p.log.warn('No packages found')
+            continue
+          }
           const sourceMap = new Map(usages.map(u => [u.name, u.source]))
           const maxLen = Math.max(...packages.map(n => n.length))
           const choice = await p.multiselect({
@@ -942,6 +528,10 @@ const main = defineCommand({
             }
 
             const packages = usages.map(u => u.name)
+            if (packages.length === 0) {
+              p.log.warn('No packages found')
+              continue
+            }
             const sourceMap = new Map(usages.map(u => [u.name, u.source]))
             const maxLen = Math.max(...packages.map(n => n.length))
             const choice = await p.multiselect({

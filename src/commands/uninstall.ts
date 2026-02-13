@@ -1,9 +1,11 @@
 import type { AgentType } from '../agent'
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { agents } from '../agent'
 import { CACHE_DIR } from '../cache'
+import { sharedArgs } from '../cli-helpers'
 import { getRegisteredProjects, unregisterProject } from '../core/config'
 import { readLock } from '../core/lockfile'
 import { SHARED_SKILLS_DIR } from '../core/shared'
@@ -287,3 +289,18 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
 
   p.outro('skilld uninstalled')
 }
+
+export const uninstallCommandDef = defineCommand({
+  meta: { name: 'uninstall', description: 'Remove skilld data' },
+  args: {
+    ...sharedArgs,
+  },
+  async run({ args }) {
+    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m uninstall`)
+    return uninstallCommand({
+      scope: args.global ? 'all' : undefined,
+      agent: args.agent as AgentType | undefined,
+      yes: args.yes,
+    })
+  },
+})

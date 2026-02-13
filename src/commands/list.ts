@@ -1,3 +1,5 @@
+import { defineCommand } from 'citty'
+import { sharedArgs } from '../cli-helpers'
 import { formatSource, timeAgo } from '../core/formatting'
 import { iterateSkills } from '../core/skills'
 
@@ -59,3 +61,18 @@ export function listCommand(opts: ListOptions = {}): void {
     process.stdout.write(`${line}\n`)
   }
 }
+
+export const listCommandDef = defineCommand({
+  meta: { name: 'list', description: 'List installed skills' },
+  args: {
+    global: sharedArgs.global,
+    json: {
+      type: 'boolean' as const,
+      description: 'Output as JSON',
+      default: false,
+    },
+  },
+  run({ args }) {
+    return listCommand({ global: args.global, json: args.json })
+  },
+})

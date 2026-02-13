@@ -4,6 +4,7 @@
 
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { CACHE_DIR } from '../cache'
 import { clearEmbeddingCache } from '../retriv/embedding-cache'
@@ -62,3 +63,18 @@ export async function cacheCleanCommand(): Promise<void> {
     p.log.info('Cache is clean — no expired entries')
   }
 }
+
+export const cacheCommandDef = defineCommand({
+  meta: { name: 'cache', description: 'Cache management', hidden: true },
+  args: {
+    clean: {
+      type: 'boolean',
+      description: 'Remove expired LLM cache entries',
+      default: true,
+    },
+  },
+  async run() {
+    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m cache clean`)
+    await cacheCleanCommand()
+  },
+})

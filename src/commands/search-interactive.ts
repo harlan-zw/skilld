@@ -1,4 +1,5 @@
 import type { SearchFilter, SearchSnippet } from '../retriv'
+import { createLogUpdate } from 'log-update'
 import { formatCompactSnippet, highlightTerms, sanitizeMarkdown } from '../core'
 import { closePool, openPool, searchPooled } from '../retriv'
 import { findPackageDbs, parseFilterPrefix } from './search'
@@ -36,7 +37,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
     return
   }
 
-  const logUpdate = (await import('log-update')).default
+  const logUpdate = createLogUpdate(process.stderr, { showCursor: true })
   const pool = await openPool(dbs)
 
   // State
@@ -210,7 +211,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
 
     function exit() {
       cleanup()
-      logUpdate.clear()
+      logUpdate.done()
       resolve()
     }
 
@@ -219,7 +220,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
         return
       const r = results[selectedIndex]!
       cleanup()
-      logUpdate.clear()
+      logUpdate.done()
 
       // Print full result
       const refPath = `.claude/skills/${r.package}/.skilld/${r.source}`

@@ -2,8 +2,10 @@ import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../ag
 import type { FeaturesConfig } from '../core/config'
 import type { ProjectState } from '../core/skills'
 import type { ResolveAttempt } from '../sources'
+import type { GitSkillSource } from '../sources/git-skills'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { join, relative } from 'pathe'
 import {
   agents,
@@ -28,10 +30,12 @@ import {
   listReferenceFiles,
   resolvePkgDir,
 } from '../cache'
+import { getInstalledGenerators, introLine, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared'
+import { getProjectState } from '../core/skills'
 import { shutdownWorker } from '../retriv/pool'
 import {
   fetchPkgDist,
@@ -39,6 +43,8 @@ import {
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
 } from '../sources'
+import { parseGitSkillInput } from '../sources/git-skills'
+import { syncGitSkills } from './sync-git'
 import { syncPackagesParallel } from './sync-parallel'
 import {
   detectChangelog,
@@ -744,8 +750,7 @@ interface EnhanceOptions {
 async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
   const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features } = opts
 
-  const llmSpin = timedSpinner()
-  llmSpin.start(`Agent exploring ${packageName}`)
+  const llmLog = p.taskLog({ title: `Agent exploring ${packageName}` })
   const docFiles = listReferenceFiles(skillDir)
   const hasGithub = hasIssues || hasDiscussions
   const { optimized, wasOptimized, usage, cost, warnings, debugLogsDir } = await optimizeDocs({
@@ -765,13 +770,11 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     customPrompt,
     features,
     onProgress: ({ type, chunk, section }) => {
-      const prefix = section ? `[${section}] ` : ''
-      if (type === 'reasoning' && chunk.startsWith('[')) {
-        llmSpin.message(`${prefix}${chunk}`)
-      }
-      else if (type === 'text') {
-        llmSpin.message(`${prefix}Writing...`)
-      }
+      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+      if (type === 'reasoning' && chunk.startsWith('['))
+        llmLog.message(`${prefix}${chunk}`)
+      else if (type === 'text')
+        llmLog.message(`${prefix}Writing...`)
     },
   })
 
@@ -784,7 +787,7 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     if (cost)
       costParts.push(`$${cost.toFixed(2)}`)
     const costSuffix = costParts.length > 0 ? ` (${costParts.join(', ')})` : ''
-    llmSpin.stop(`Generated best practices${costSuffix}`)
+    llmLog.success(`Generated best practices${costSuffix}`)
     if (debugLogsDir)
       p.log.info(`Debug logs: ${debugLogsDir}`)
     if (warnings?.length) {
@@ -815,6 +818,128 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
-    llmSpin.stop('LLM optimization failed')
+    llmLog.error('LLM optimization failed')
   }
 }
+
+// ── Citty command definitions (lazy-loaded by cli.ts) ──
+
+export const addCommandDef = defineCommand({
+  meta: { name: 'add', description: 'Add skills for package(s)' },
+  args: {
+    package: {
+      type: 'positional',
+      description: 'Package(s) to sync (space or comma-separated, e.g., vue nuxt pinia)',
+      required: true,
+    },
+    ...sharedArgs,
+  },
+  async run({ args }) {
+    const cwd = process.cwd()
+    let agent = resolveAgent(args.agent)
+    if (!agent) {
+      agent = await promptForAgent()
+      if (!agent)
+        return
+    }
+
+    // Collect raw inputs (don't split URLs on slashes/spaces yet)
+    const rawInputs = [...new Set(
+      [args.package, ...((args as any)._ || [])]
+        .map((s: string) => s.trim())
+        .filter(Boolean),
+    )]
+
+    // Partition: git sources vs npm packages
+    const gitSources: GitSkillSource[] = []
+    const npmTokens: string[] = []
+
+    for (const input of rawInputs) {
+      const git = parseGitSkillInput(input)
+      if (git)
+        gitSources.push(git)
+      else
+        npmTokens.push(input)
+    }
+
+    // Handle git sources
+    if (gitSources.length > 0) {
+      for (const source of gitSources) {
+        await syncGitSkills({ source, global: args.global, agent, yes: args.yes })
+      }
+    }
+
+    // Handle npm packages via existing flow
+    if (npmTokens.length > 0) {
+      const packages = [...new Set(npmTokens.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      const state = await getProjectState(cwd)
+      p.intro(introLine({ state }))
+      return syncCommand(state, {
+        packages,
+        global: args.global,
+        agent,
+        model: args.model as OptimizeModel | undefined,
+        yes: args.yes,
+        force: args.force,
+        debug: args.debug,
+      })
+    }
+  },
+})
+
+export const updateCommandDef = defineCommand({
+  meta: { name: 'update', description: 'Update outdated skills' },
+  args: {
+    package: {
+      type: 'positional',
+      description: 'Package(s) to update (space or comma-separated). Without args, syncs all outdated.',
+      required: false,
+    },
+    ...sharedArgs,
+  },
+  async run({ args }) {
+    const cwd = process.cwd()
+    let agent = resolveAgent(args.agent)
+    if (!agent) {
+      agent = await promptForAgent()
+      if (!agent)
+        return
+    }
+
+    const state = await getProjectState(cwd)
+    const generators = getInstalledGenerators()
+    const config = readConfig()
+    p.intro(introLine({ state, generators, modelId: config.model }))
+
+    // Specific packages
+    if (args.package) {
+      const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      return syncCommand(state, {
+        packages,
+        global: args.global,
+        agent,
+        model: args.model as OptimizeModel | undefined,
+        yes: args.yes,
+        force: args.force,
+        debug: args.debug,
+      })
+    }
+
+    // No args: sync all outdated
+    if (state.outdated.length === 0) {
+      p.log.success('All skills up to date')
+      return
+    }
+
+    const packages = state.outdated.map(s => s.packageName || s.name)
+    return syncCommand(state, {
+      packages,
+      global: args.global,
+      agent,
+      model: args.model as OptimizeModel | undefined,
+      yes: args.yes,
+      force: args.force,
+      debug: args.debug,
+    })
+  },
+})

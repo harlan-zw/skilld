@@ -2,10 +2,12 @@ import type { AgentType } from '../agent'
 import type { SkillInfo } from '../core/lockfile'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { agents, getAgentVersion } from '../agent'
 import { CACHE_DIR, getPackageDbPath } from '../cache'
 import { getCacheDir } from '../cache/version'
+import { sharedArgs } from '../cli-helpers'
 import { defaultFeatures, hasConfig, readConfig } from '../core/config'
 import { formatSource, timeAgo } from '../core/formatting'
 import { parsePackages } from '../core/lockfile'
@@ -256,3 +258,13 @@ export async function statusCommand(opts: StatusOptions = {}): Promise<void> {
   const total = localPkgs.size + globalPkgs.size
   p.log.info(`${total} package${total !== 1 ? 's' : ''}`)
 }
+
+export const infoCommandDef = defineCommand({
+  meta: { name: 'info', description: 'Show skill info and config' },
+  args: {
+    global: sharedArgs.global,
+  },
+  run({ args }) {
+    return statusCommand({ global: args.global })
+  },
+})

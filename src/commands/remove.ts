@@ -2,10 +2,13 @@ import type { AgentType } from '../agent'
 import type { ProjectState, SkillEntry } from '../core/skills'
 import { existsSync, rmSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { unlinkSkillFromAgents } from '../agent'
+import { getInstalledGenerators, introLine, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
+import { readConfig } from '../core/config'
 import { removeLockEntry } from '../core/lockfile'
 import { getSharedSkillsDir } from '../core/shared'
-import { getSkillsDir, iterateSkills } from '../core/skills'
+import { getProjectState, getSkillsDir, iterateSkills } from '../core/skills'
 
 export interface RemoveOptions {
   packages?: string[]
@@ -89,3 +92,32 @@ async function pickSkillsToRemove(skills: SkillEntry[], scope: 'local' | 'global
   const selectedSet = new Set(selected as string[])
   return skills.filter(s => selectedSet.has(s.name))
 }
+
+export const removeCommandDef = defineCommand({
+  meta: { name: 'remove', description: 'Remove installed skills' },
+  args: {
+    ...sharedArgs,
+  },
+  async run({ args }) {
+    const cwd = process.cwd()
+    let agent = resolveAgent(args.agent)
+    if (!agent) {
+      agent = await promptForAgent()
+      if (!agent)
+        return
+    }
+
+    const state = await getProjectState(cwd)
+    const generators = getInstalledGenerators()
+    const config = readConfig()
+    const scope = args.global ? 'global' : 'project'
+    const intro = { state, generators, modelId: config.model }
+    p.intro(`${introLine(intro)} · remove (${scope})`)
+
+    return removeCommand(state, {
+      global: args.global,
+      agent,
+      yes: args.yes,
+    })
+  },
+})

@@ -1,7 +1,10 @@
 import type { FeaturesConfig } from '../core/config'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { agents, getAvailableModels } from '../agent'
+import { getInstalledGenerators, introLine } from '../cli-helpers'
 import { defaultFeatures, readConfig, updateConfig } from '../core/config'
+import { getProjectState } from '../core/skills'
 
 export async function configCommand(): Promise<void> {
   const config = readConfig()
@@ -110,3 +113,16 @@ export async function configCommand(): Promise<void> {
     }
   }
 }
+
+export const configCommandDef = defineCommand({
+  meta: { name: 'config', description: 'Edit settings' },
+  args: {},
+  async run() {
+    const cwd = process.cwd()
+    const state = await getProjectState(cwd)
+    const generators = getInstalledGenerators()
+    const config = readConfig()
+    p.intro(introLine({ state, generators, modelId: config.model }))
+    return configCommand()
+  },
+})

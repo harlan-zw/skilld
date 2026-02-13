@@ -14,6 +14,7 @@ import type { SkillInfo } from '../core/lockfile'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { dirname, join } from 'pathe'
 import { agents, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent'
 import { generateSkillMd } from '../agent/prompts/skill'
@@ -32,6 +33,7 @@ import {
   resolvePkgDir,
   writeToCache,
 } from '../cache'
+import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
 import { defaultFeatures, readConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile'
@@ -503,8 +505,7 @@ async function enhanceRegenerated(
   customPrompt?: CustomPrompt,
   packages?: string,
 ): Promise<void> {
-  const llmSpin = timedSpinner()
-  llmSpin.start(`Agent exploring ${pkgName}`)
+  const llmLog = p.taskLog({ title: `Agent exploring ${pkgName}` })
 
   const docFiles = listReferenceFiles(skillDir)
   const globalCachePath = getCacheDir(pkgName, version)
@@ -526,16 +527,16 @@ async function enhanceRegenerated(
     customPrompt,
     features,
     onProgress: ({ type, chunk, section }) => {
-      const prefix = section ? `[${section}] ` : ''
+      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
       if (type === 'reasoning' && chunk.startsWith('['))
-        llmSpin.message(`${prefix}${chunk}`)
+        llmLog.message(`${prefix}${chunk}`)
       else if (type === 'text')
-        llmSpin.message(`${prefix}Writing...`)
+        llmLog.message(`${prefix}Writing...`)
     },
   })
 
   if (wasOptimized) {
-    llmSpin.stop('Generated best practices')
+    llmLog.success('Generated best practices')
     // Re-read local metadata for the enhanced version
     const cwd = process.cwd()
     const pkgPath = resolvePkgDir(pkgName, cwd, version)
@@ -580,9 +581,28 @@ async function enhanceRegenerated(
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
-    llmSpin.stop('LLM optimization skipped')
+    llmLog.error('LLM optimization skipped')
   }
 }
+
+export const installCommandDef = defineCommand({
+  meta: { name: 'install', description: 'Restore references from lockfile' },
+  args: {
+    global: sharedArgs.global,
+    agent: sharedArgs.agent,
+  },
+  async run({ args }) {
+    let agent = resolveAgent(args.agent)
+    if (!agent) {
+      agent = await promptForAgent()
+      if (!agent)
+        return
+    }
+
+    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m install`)
+    return installCommand({ global: args.global, agent })
+  },
+})
 
 /** Regenerate base SKILL.md from local metadata if missing */
 function regenerateBaseSkillMd(

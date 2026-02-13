@@ -1,6 +1,7 @@
 import type { SearchFilter } from '../retriv'
 import { existsSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { detectCurrentAgent } from 'unagent/env'
 import { agents, detectTargetAgent } from '../agent'
 import { getPackageDbPath } from '../cache'
@@ -106,3 +107,26 @@ export async function searchCommand(rawQuery: string, packageFilter?: string): P
     p.log.message(`${output}\n\n${summary}`)
   }
 }
+
+export const searchCommandDef = defineCommand({
+  meta: { name: 'search', description: 'Search indexed docs' },
+  args: {
+    query: {
+      type: 'positional',
+      description: 'Search query (e.g., "useFetch options"). Omit for interactive mode.',
+      required: false,
+    },
+    package: {
+      type: 'string',
+      alias: 'p',
+      description: 'Filter by package name',
+      valueHint: 'name',
+    },
+  },
+  async run({ args }) {
+    if (args.query)
+      return searchCommand(args.query, args.package || undefined)
+    const { interactiveSearch } = await import('./search-interactive')
+    return interactiveSearch(args.package || undefined)
+  },
+})
