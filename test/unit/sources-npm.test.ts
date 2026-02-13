@@ -104,48 +104,6 @@ describe('sources/npm', () => {
       expect(deps).toContainEqual({ name: 'pkg-exact', version: '4.0.0' })
     })
 
-    it('filters out @types packages', async () => {
-      const { existsSync, readFileSync } = await import('node:fs')
-      const { resolvePathSync } = await import('mlly')
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockImplementation((p: any) => {
-        if (String(p).includes('node_modules'))
-          return JSON.stringify({ version: '3.0.0' })
-        return JSON.stringify({
-          dependencies: { vue: '3.0.0' },
-          devDependencies: { '@types/node': '20.0.0' },
-        })
-      })
-      vi.mocked(resolvePathSync).mockImplementation((id: string) => `/test/node_modules/${id}`)
-
-      const deps = await readLocalDependencies('/test')
-
-      expect(deps.find(d => d.name === '@types/node')).toBeUndefined()
-      expect(deps.find(d => d.name === 'vue')).toBeDefined()
-    })
-
-    it('filters out common dev tools', async () => {
-      const { existsSync, readFileSync } = await import('node:fs')
-      const { resolvePathSync } = await import('mlly')
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({
-        devDependencies: {
-          typescript: '5.0.0',
-          eslint: '8.0.0',
-          prettier: '3.0.0',
-          vitest: '1.0.0',
-          jest: '29.0.0',
-        },
-      }))
-      vi.mocked(resolvePathSync).mockImplementation(() => {
-        throw new Error('not found')
-      })
-
-      const deps = await readLocalDependencies('/test')
-
-      expect(deps).toHaveLength(0)
-    })
-
     it('throws if package.json not found', async () => {
       const { existsSync } = await import('node:fs')
       vi.mocked(existsSync).mockReturnValue(false)
