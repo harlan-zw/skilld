@@ -36,21 +36,18 @@ export function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-/** Spinner wrapper that appends elapsed time in dim text on stop */
+/** Spinner wrapper that shows elapsed time via built-in timer indicator */
 export function timedSpinner() {
-  const spin = p.spinner()
-  let startTime = 0
+  const spin = p.spinner({ indicator: 'timer' })
   return {
     start(msg: string) {
-      startTime = performance.now()
       spin.start(msg)
     },
     message(msg: string) {
       spin.message(msg)
     },
     stop(msg: string) {
-      const elapsed = performance.now() - startTime
-      spin.stop(`${msg} \x1B[90m(${formatDuration(elapsed)})\x1B[0m`)
+      spin.stop(msg)
     },
   }
 }
