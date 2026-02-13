@@ -8,7 +8,7 @@
 
 ## Why?
 
-Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and predict the most likely code from training data, not the best code. For example, [Vue v3.5](https://blog.vuejs.org/posts/vue-3-5) was released over 16 months ago and agents refuse so use its features out-of-the-box. This is because they're trained on conventions not the latest docs.
+Agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and predict the most likely code from training data, not the best code. For example, [Vue v3.5](https://blog.vuejs.org/posts/vue-3-5) was released over 16 months ago and agents refuse to use its features out-of-the-box. This is because they're trained on conventions not the latest docs.
 
 Methods of getting the right context to your agent require either manual curation, author opt-in, or external servers. See [the landscape](#the-landscape)
 for more details.
@@ -59,7 +59,7 @@ If you need to re-configure skilld, just run `npx -y skilld config` to update yo
 
 ## FAQ
 
-### Why doesn't the skills run?
+### Why don't the skills run?
 
 Try this in your project/user prompt:
 
@@ -72,12 +72,12 @@ For each skill, determine YES/NO relevance and invoke all YES skills before proc
 
 Context7 is an MCP that fetches raw doc chunks at query time. You get different results each prompt, no curation, and it requires their server. Skilld is local-first: it generates a SKILL.md that lives in your project, tied to your actual package versions. No MCP dependency, no per-prompt latency, and it goes further with LLM-enhanced sections, prompt injection sanitization, and semantic search.
 
-### Will I be prompt injection?
+### Will I be prompt injected?
 
 Skilld pulls issues from GitHub which could be abused for potential prompt injection.
 
-Skilld treats all data as unstrusted, running in permissioned environments and using best practices to avoid injections.
-However, always be cautious when using skills from untrusted source.
+Skilld treats all data as untrusted, running in permissioned environments and using best practices to avoid injections.
+However, always be cautious when using skills from untrusted sources.
 
 ### Do skills update when my deps update?
 
