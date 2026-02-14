@@ -17,7 +17,7 @@ describe('agent/skill', () => {
       expect(result).not.toContain('name: vue-skilld')
       expect(result).toContain('metadata:')
       expect(result).toContain('  version: 3.4.0')
-      expect(result).toContain('ALWAYS use when editing or working with *.vue files or code importing \\"vue\\". Consult for debugging, best practices, or modifying vue. (Progressive JavaScript framework)')
+      expect(result).toContain('Progressive JavaScript framework. ALWAYS use when editing or working with *.vue files or code importing \\"vue\\". Consult for debugging, best practices, or modifying vue.')
       expect(result).toContain('# Vue')
     })
 
@@ -41,7 +41,7 @@ describe('agent/skill', () => {
         relatedSkills: [],
       })
 
-      expect(result).toContain('ALWAYS use when writing code importing \\"test-pkg\\". Consult for debugging, best practices, or modifying test-pkg, test pkg.')
+      expect(result).toContain('ALWAYS use when writing code importing \\"test-pkg\\". Consult for debugging, best practices, or modifying test-pkg, test pkg')
     })
 
     it('generates multi-package description when packages provided', () => {
@@ -71,6 +71,49 @@ describe('agent/skill', () => {
 
       // Single package: no pkg-<name> references
       expect(result).not.toContain('pkg-vue')
+    })
+
+    it('strips angle brackets from description (security)', () => {
+      const result = generateSkillMd({
+        name: 'some-lib',
+        description: 'A <b>bold</b> library for <React> apps',
+        relatedSkills: [],
+      })
+
+      // No angle brackets in frontmatter (Agent Skills spec security restriction)
+      const frontmatter = result.split('---')[1]
+      expect(frontmatter).not.toContain('<')
+      expect(frontmatter).not.toContain('>')
+      // Description content preserved without tags
+      expect(result).toContain('bold')
+      expect(result).toContain('React')
+    })
+
+    it('enforces 1024 char limit on description', () => {
+      const result = generateSkillMd({
+        name: 'pkg',
+        description: 'A '.repeat(600),
+        relatedSkills: [],
+      })
+
+      const frontmatter = result.split('---')[1]
+      const descLine = frontmatter.split('\n').find(l => l.startsWith('description:'))!
+      // yamlEscape wraps in quotes, so strip those
+      const desc = descLine.replace('description: ', '').replace(/^"|"$/g, '')
+      expect(desc.length).toBeLessThanOrEqual(1024)
+    })
+
+    it('leads description with what-it-does before when-to-use', () => {
+      const result = generateSkillMd({
+        name: 'vue',
+        description: 'Progressive JavaScript Framework',
+        relatedSkills: [],
+      })
+
+      const frontmatter = result.split('---')[1]
+      const descLine = frontmatter.split('\n').find(l => l.startsWith('description:'))!
+      // Description should start with the package description, not "ALWAYS use when"
+      expect(descLine).toMatch(/description:.*Progressive JavaScript Framework.*ALWAYS use when/)
     })
 
     it('omits version if not provided', () => {

@@ -109,11 +109,10 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
     lines.push(`**Tags:** ${tags}`)
   }
 
-  // References section
+  // References with context hints (progressive disclosure — describe what each contains)
   lines.push('')
   const refs: string[] = []
-  refs.push(`[package.json](./.skilld/pkg/package.json)`)
-  // Multi-package: add named pkg refs (e.g. pkg-vue, pkg-reactivity)
+  refs.push(`[package.json](./.skilld/pkg/package.json) — exports, entry points`)
   if (packages && packages.length > 1) {
     for (const pkg of packages) {
       const shortName = pkg.name.split('/').pop()!.toLowerCase()
@@ -121,13 +120,13 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
     }
   }
   if (pkgFiles?.includes('README.md'))
-    refs.push(`[README](./.skilld/pkg/README.md)`)
+    refs.push(`[README](./.skilld/pkg/README.md) — setup, basic usage`)
   if (hasIssues)
-    refs.push(`[GitHub Issues](./.skilld/issues/_INDEX.md)`)
+    refs.push(`[GitHub Issues](./.skilld/issues/_INDEX.md) — bugs, workarounds, edge cases`)
   if (hasDiscussions)
-    refs.push(`[GitHub Discussions](./.skilld/discussions/_INDEX.md)`)
+    refs.push(`[GitHub Discussions](./.skilld/discussions/_INDEX.md) — Q&A, patterns, recipes`)
   if (hasReleases)
-    refs.push(`[Releases](./.skilld/releases/_INDEX.md)`)
+    refs.push(`[Releases](./.skilld/releases/_INDEX.md) — changelog, breaking changes, new APIs`)
 
   if (refs.length > 0)
     lines.push(`**References:** ${refs.join(' • ')}`)
@@ -182,15 +181,17 @@ function expandRepoName(repoUrl: string): string[] {
 function generateFrontmatter({ name, version, description: pkgDescription, globs, body, generatedBy, dirName, packages, repoUrl }: SkillOptions): string {
   const patterns = globs ?? getFilePatterns(name)
   const globHint = patterns?.length ? ` or working with ${patterns.join(', ')} files` : ''
-  const descSuffix = pkgDescription ? ` (${pkgDescription.replace(/\.?\s*$/, '')})` : ''
+
+  // Strip angle brackets from npm description (forbidden in frontmatter per Agent Skills spec)
+  const cleanDesc = pkgDescription?.replace(/[<>]/g, '').replace(/\.?\s*$/, '')
 
   const editHint = globHint
     ? `editing${globHint} or code importing`
     : 'writing code importing'
 
+  // Structure: [What it does] + [When to use it] + [Key capabilities]
   let desc: string
   if (packages && packages.length > 1) {
-    // Multi-package description: list all imports and keywords
     const importList = packages.map(p => `"${p.name}"`).join(', ')
     const allKeywords = new Set<string>()
     for (const pkg of packages) {
@@ -199,21 +200,26 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
         allKeywords.add(kw)
     }
     const keywordList = [...allKeywords].join(', ')
-    desc = `ALWAYS use when ${editHint} ${importList}. Consult for debugging, best practices, or modifying ${keywordList}.${descSuffix}`
+    const what = cleanDesc ? `${cleanDesc}. ` : ''
+    desc = `${what}ALWAYS use when ${editHint} ${importList}. Consult for debugging, best practices, or modifying ${keywordList}.`
   }
   else {
     const allKeywords = new Set<string>()
     allKeywords.add(name)
     for (const kw of expandPackageName(name))
       allKeywords.add(kw)
-    // Add repo name variants if available
     if (repoUrl) {
       for (const kw of expandRepoName(repoUrl))
         allKeywords.add(kw)
     }
     const nameList = [...allKeywords].join(', ')
-    desc = `ALWAYS use when ${editHint} "${name}". Consult for debugging, best practices, or modifying ${nameList}.${descSuffix}`
+    const what = cleanDesc ? `${cleanDesc}. ` : ''
+    desc = `${what}ALWAYS use when ${editHint} "${name}". Consult for debugging, best practices, or modifying ${nameList}.`
   }
+
+  // Enforce 1024 char limit (Agent Skills spec)
+  if (desc.length > 1024)
+    desc = `${desc.slice(0, 1021)}...`
 
   const lines = [
     '---',

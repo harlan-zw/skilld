@@ -1,6 +1,7 @@
 import type { CustomPrompt, PromptSection } from './types'
+import { maxLines } from './budget'
 
-export function customSection({ heading, body }: CustomPrompt): PromptSection {
+export function customSection({ heading, body }: CustomPrompt, enabledSectionCount?: number): PromptSection {
   return {
     task: `**Custom section — "${heading}":**\n${body}`,
 
@@ -12,7 +13,7 @@ Content addressing the user's instructions above, using concise examples and sou
 \`\`\``,
 
     rules: [
-      `- **Custom section "${heading}":** MAX 80 lines, use \`## ${heading}\` heading`,
+      `- **Custom section "${heading}":** MAX ${maxLines(50, 80, enabledSectionCount)} lines, use \`## ${heading}\` heading`,
     ],
   }
 }

@@ -1,5 +1,6 @@
 export { apiChangesSection } from './api-changes'
 export { bestPracticesSection } from './best-practices'
+export { maxItems, maxLines } from './budget'
 export { customSection } from './custom'
 export { apiSection } from './doc-map'
 export type { CustomPrompt, PromptSection, ReferenceWeight, SectionContext } from './types'

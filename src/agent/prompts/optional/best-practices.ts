@@ -1,6 +1,7 @@
 import type { PromptSection, ReferenceWeight, SectionContext } from './types'
+import { maxItems, maxLines } from './budget'
 
-export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, features }: SectionContext): PromptSection {
+export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, features, enabledSectionCount }: SectionContext): PromptSection {
   const searchHints: string[] = []
   if (features?.search !== false) {
     searchHints.push(
@@ -55,8 +56,8 @@ async function fetchUser(id: string, signal?: AbortSignal) {
 Each item: ✅ + pattern name + why it's preferred + source link. Code block only when the pattern isn't obvious from the title. Use the most relevant language tag (ts, vue, css, json, etc).`,
 
     rules: [
-      '- **5-10 best practice items**',
-      '- **MAX 150 lines** for best practices section',
+      `- **${maxItems(4, 10, enabledSectionCount)} best practice items**`,
+      `- **MAX ${maxLines(80, 150, enabledSectionCount)} lines** for best practices section`,
       '- **Only link files confirmed to exist** via Glob or Read — no guessed paths',
     ],
   }

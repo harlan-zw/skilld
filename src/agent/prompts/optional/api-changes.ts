@@ -1,6 +1,7 @@
 import type { PromptSection, ReferenceWeight, SectionContext } from './types'
+import { maxItems, maxLines } from './budget'
 
-export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasIssues, hasDiscussions, features }: SectionContext): PromptSection {
+export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasIssues, hasDiscussions, features, enabledSectionCount }: SectionContext): PromptSection {
   const [, major, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
 
   // Search hints for the task text (specific queries to run)
@@ -82,7 +83,7 @@ This section documents version-specific API changes — prioritize recent major/
 Each item: ⚠️ (breaking/deprecated) or ✨ (new) + API name + what changed + source link.`,
 
     rules: [
-      '- **API Changes:** 8-12 items from version history, MAX 80 lines',
+      `- **API Changes:** ${maxItems(6, 12, enabledSectionCount)} items from version history, MAX ${maxLines(50, 80, enabledSectionCount)} lines`,
       '- Prioritize recent major/minor releases over old patch versions',
       '- Focus on APIs that CHANGED, not general conventions or gotchas',
       '- New APIs get ✨, deprecated/breaking get ⚠️',

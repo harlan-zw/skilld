@@ -1,6 +1,7 @@
 import type { PromptSection, ReferenceWeight, SectionContext } from './types'
+import { maxLines } from './budget'
 
-export function apiSection({ hasReleases, hasChangelog, hasIssues, hasDiscussions }: SectionContext): PromptSection {
+export function apiSection({ hasReleases, hasChangelog, hasIssues, hasDiscussions, enabledSectionCount }: SectionContext): PromptSection {
   // Build reference weights — only include available references
   const referenceWeights: ReferenceWeight[] = [
     { name: 'Docs', path: './.skilld/docs/', score: 10, useFor: 'Primary source — scan all doc pages for export names' },
@@ -45,7 +46,7 @@ useNuxtData, usePreviewMode, prerenderRoutes
 Comma-separated names per group. One line per doc page. Annotate version when APIs are recent additions. For single-doc packages, use a flat comma list.`,
 
     rules: [
-      '- **Doc Map:** names only, grouped by doc page, MAX 25 lines',
+      `- **Doc Map:** names only, grouped by doc page, MAX ${maxLines(15, 25, enabledSectionCount)} lines`,
       '- Skip entirely for packages with fewer than 5 exports or only 1 doc page',
       '- Prioritize new/recent exports over well-established APIs',
       '- No signatures, no descriptions — the linked doc IS the description',

@@ -44,6 +44,8 @@ export interface BuildSkillPromptOptions {
   customPrompt?: CustomPrompt
   /** Resolved feature flags */
   features?: FeaturesConfig
+  /** Total number of enabled sections — adjusts per-section line budgets */
+  enabledSectionCount?: number
 }
 
 /**
@@ -158,7 +160,7 @@ function getSectionDef(section: SkillSection, ctx: SectionContext, customPrompt?
     case 'api-changes': return apiChangesSection(ctx)
     case 'best-practices': return bestPracticesSection(ctx)
     case 'api': return apiSection(ctx)
-    case 'custom': return customPrompt ? customSection(customPrompt) : null
+    case 'custom': return customPrompt ? customSection(customPrompt, ctx.enabledSectionCount) : null
   }
 }
 
@@ -171,7 +173,7 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
   const versionContext = version ? ` v${version}` : ''
   const preamble = buildPreamble({ ...opts, versionContext })
 
-  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, features: opts.features }
+  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, features: opts.features, enabledSectionCount: opts.enabledSectionCount }
   const sectionDef = getSectionDef(section, ctx, customPrompt)
   if (!sectionDef)
     return ''
@@ -218,7 +220,7 @@ Write your final output to the file \`${skillDir}/.skilld/${outputFile}\` using 
 export function buildAllSectionPrompts(opts: BuildSkillPromptOptions & { sections: SkillSection[] }): Map<SkillSection, string> {
   const result = new Map<SkillSection, string>()
   for (const section of opts.sections) {
-    const prompt = buildSectionPrompt({ ...opts, section })
+    const prompt = buildSectionPrompt({ ...opts, section, enabledSectionCount: opts.sections.length })
     if (prompt)
       result.set(section, prompt)
   }
