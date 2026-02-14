@@ -16,7 +16,7 @@ import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { dirname, join } from 'pathe'
-import { agents, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent'
+import { agents, createToolProgress, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent'
 import { generateSkillMd } from '../agent/prompts/skill'
 import {
   hasShippedDocs as checkShippedDocs,
@@ -526,13 +526,7 @@ async function enhanceRegenerated(
     sections,
     customPrompt,
     features,
-    onProgress: ({ type, chunk, section }) => {
-      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
-      if (type === 'reasoning' && chunk.startsWith('['))
-        llmLog.message(`${prefix}${chunk}`)
-      else if (type === 'text')
-        llmLog.message(`${prefix}Writing...`)
-    },
+    onProgress: createToolProgress(llmLog),
   })
 
   if (wasOptimized) {

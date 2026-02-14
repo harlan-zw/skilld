@@ -25,6 +25,80 @@ export { buildAllSectionPrompts, buildSectionPrompt, SECTION_MERGE_ORDER, SECTIO
 export type { CustomPrompt, SkillSection } from '../prompts'
 export type { CliModelConfig, CliName, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './types'
 
+// ── Tool progress display ────────────────────────────────────────────
+
+const TOOL_VERBS: Record<string, string> = {
+  Read: 'Reading',
+  Glob: 'Searching',
+  Grep: 'Searching',
+  Write: 'Writing',
+  Bash: 'Running',
+}
+
+interface ToolProgressLog {
+  message: (msg: string) => void
+}
+
+/** Create a throttled onProgress callback that batches tool calls per section */
+export function createToolProgress(log: ToolProgressLog): (progress: StreamProgress) => void {
+  const pending = new Map<string, { verb: string, path: string, count: number }>()
+  let timer: ReturnType<typeof setTimeout> | null = null
+
+  function flush() {
+    for (const [section, { verb, path, count }] of pending) {
+      const prefix = `\x1B[90m[${section}]\x1B[0m `
+      const suffix = count > 1 ? ` \x1B[90m(+${count - 1})\x1B[0m` : ''
+      log.message(`${prefix}${verb} ${path}${suffix}`)
+    }
+    pending.clear()
+    timer = null
+  }
+
+  return ({ type, chunk, section }) => {
+    if (type === 'text') {
+      log.message(`${section ? `\x1B[90m[${section}]\x1B[0m ` : ''}Writing...`)
+      return
+    }
+    if (type !== 'reasoning' || !chunk.startsWith('['))
+      return
+
+    const key = section ?? ''
+    // Parse tool name and hint from chunk like "[Read: path/file]" or "[Read]"
+    const match = chunk.match(/^\[(\w+)(?:,\s*\w+)*(?::\s*(.+))?\]$/)
+    if (!match)
+      return
+
+    const rawName = match[1]!
+    const hint = match[2] ?? ''
+    const verb = TOOL_VERBS[rawName] ?? rawName
+    const path = hint || '...'
+
+    // Write tool calls flush immediately
+    if (rawName === 'Write') {
+      if (timer) {
+        flush()
+      }
+      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+      log.message(`${prefix}Writing ${path}`)
+      return
+    }
+
+    const entry = pending.get(key)
+    if (entry) {
+      entry.verb = verb
+      entry.path = path
+      entry.count++
+    }
+    else {
+      pending.set(key, { verb, path, count: 1 })
+    }
+
+    if (!timer) {
+      timer = setTimeout(flush, 400)
+    }
+  }
+}
+
 // ── Per-CLI dispatch ─────────────────────────────────────────────────
 
 const CLI_DEFS = [claude, gemini, codex] as const

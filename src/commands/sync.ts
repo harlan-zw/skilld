@@ -10,7 +10,7 @@ import { join, relative } from 'pathe'
 import {
   agents,
   computeSkillDirName,
-
+  createToolProgress,
   detectImportedPackages,
   generateSkillMd,
   getAvailableModels,
@@ -804,13 +804,7 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     sections,
     customPrompt,
     features,
-    onProgress: ({ type, chunk, section }) => {
-      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
-      if (type === 'reasoning' && chunk.startsWith('['))
-        llmLog.message(`${prefix}${chunk}`)
-      else if (type === 'text')
-        llmLog.message(`${prefix}Writing...`)
-    },
+    onProgress: createToolProgress(llmLog),
   })
 
   if (wasOptimized) {

@@ -64,11 +64,6 @@ export function parseLine(line: string): ParsedEvent {
         return { textDelta: evt.delta.text }
       }
 
-      // Tool use starting — get tool name early
-      if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
-        return { toolName: evt.content_block.name }
-      }
-
       return {}
     }
 

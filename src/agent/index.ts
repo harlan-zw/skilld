@@ -7,6 +7,7 @@ export type { CustomPrompt, ModelInfo, OptimizeDocsOptions, OptimizeModel, Optim
 export {
   buildAllSectionPrompts,
   buildSectionPrompt,
+  createToolProgress,
   getAvailableModels,
   getModelLabel,
   getModelName,
