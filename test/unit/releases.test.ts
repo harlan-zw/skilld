@@ -1,6 +1,6 @@
 import type { GitHubRelease } from '../../src/sources/releases'
 import { describe, expect, it } from 'vitest'
-import { isChangelogRedirectPattern, selectReleases } from '../../src/sources/releases'
+import { isChangelogRedirectPattern, isPrerelease, selectReleases } from '../../src/sources/releases'
 
 function makeRelease(tag: string, markdown: string, prerelease = false): GitHubRelease {
   return { id: 1, tag, name: tag, prerelease, createdAt: '2024-01-01T00:00:00Z', publishedAt: '2024-01-01T00:00:00Z', markdown }
@@ -57,6 +57,75 @@ describe('selectReleases', () => {
     expect(selected.length).toBe(2)
     expect(selected[0]?.tag).toBe('pkg-a@1.1.0')
     expect(selected[1]?.tag).toBe('pkg-a@1.0.0')
+  })
+})
+
+  it('includes prereleases when installed version is prerelease (same major.minor)', () => {
+    const mixed = [
+      makeRelease('v6.0.0-beta', 'beta notes', true),
+      makeRelease('v6.0.0-rc.1', 'rc notes', true),
+      makeRelease('v5.8.3', 'stable notes'),
+      makeRelease('v5.8.2', 'stable notes'),
+    ]
+    const selected = selectReleases(mixed, undefined, '6.0.0-beta')
+    expect(selected.map(r => r.tag)).toContain('v6.0.0-beta')
+    expect(selected.map(r => r.tag)).toContain('v6.0.0-rc.1')
+    expect(selected.map(r => r.tag)).toContain('v5.8.3')
+    expect(selected.map(r => r.tag)).toContain('v5.8.2')
+  })
+
+  it('excludes prereleases from different major.minor', () => {
+    const mixed = [
+      makeRelease('v6.0.0-beta', 'beta notes', true),
+      makeRelease('v6.1.0-beta', 'next minor beta', true),
+      makeRelease('v5.9.0-beta', 'old beta', true),
+      makeRelease('v5.8.3', 'stable notes'),
+    ]
+    const selected = selectReleases(mixed, undefined, '6.0.0-beta')
+    expect(selected.map(r => r.tag)).toContain('v6.0.0-beta')
+    expect(selected.map(r => r.tag)).not.toContain('v6.1.0-beta')
+    expect(selected.map(r => r.tag)).not.toContain('v5.9.0-beta')
+  })
+
+  it('excludes all prereleases when installed version is stable', () => {
+    const mixed = [
+      makeRelease('v3.5.0-beta.1', 'beta', true),
+      makeRelease('v3.5.0', 'stable'),
+      makeRelease('v3.4.0', 'older stable'),
+    ]
+    const selected = selectReleases(mixed, undefined, '3.5.0')
+    expect(selected.map(r => r.tag)).not.toContain('v3.5.0-beta.1')
+    expect(selected.map(r => r.tag)).toContain('v3.5.0')
+  })
+
+  it('handles monorepo prerelease tags', () => {
+    const monoReleases = [
+      makeRelease('pkg-a@2.0.0-beta.1', 'beta', true),
+      makeRelease('pkg-a@1.1.0', 'stable'),
+      makeRelease('pkg-b@2.0.0-beta.1', 'other pkg beta', true),
+    ]
+    const selected = selectReleases(monoReleases, 'pkg-a', '2.0.0-beta.1')
+    expect(selected.map(r => r.tag)).toContain('pkg-a@2.0.0-beta.1')
+    expect(selected.map(r => r.tag)).toContain('pkg-a@1.1.0')
+    expect(selected.map(r => r.tag)).not.toContain('pkg-b@2.0.0-beta.1')
+  })
+})
+
+describe('isPrerelease', () => {
+  it('detects prerelease versions', () => {
+    expect(isPrerelease('6.0.0-beta')).toBe(true)
+    expect(isPrerelease('6.0.0-beta.1')).toBe(true)
+    expect(isPrerelease('6.0.0-rc.1')).toBe(true)
+    expect(isPrerelease('1.0.0-alpha')).toBe(true)
+    expect(isPrerelease('v6.0.0-beta')).toBe(true)
+    expect(isPrerelease('1.2.3-dev.20260214')).toBe(true)
+  })
+
+  it('rejects stable versions', () => {
+    expect(isPrerelease('6.0.0')).toBe(false)
+    expect(isPrerelease('v1.2.3')).toBe(false)
+    expect(isPrerelease('latest')).toBe(false)
+    expect(isPrerelease('next')).toBe(false)
   })
 })
 

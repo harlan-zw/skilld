@@ -3,9 +3,9 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { isoDate } from './github-common'
-import { isGhAvailable } from './issues'
-import { $fetch } from './utils'
+import { isoDate } from './github-common.ts'
+import { isGhAvailable } from './issues.ts'
+import { $fetch } from './utils.ts'
 
 export interface GitHubRelease {
   id: number
@@ -79,6 +79,13 @@ function tagMatchesPackage(tag: string, packageName: string): boolean {
   return tag.startsWith(`${packageName}@`) || tag.startsWith(`${packageName}-v`) || tag.startsWith(`${packageName}-`)
 }
 
+/**
+ * Check if a version string contains a prerelease suffix (e.g. 6.0.0-beta, 1.2.3-rc.1)
+ */
+export function isPrerelease(version: string): boolean {
+  return /^\d+\.\d+\.\d+-.+/.test(version.replace(/^v/, ''))
+}
+
 export function compareSemver(a: SemVer, b: SemVer): number {
   if (a.major !== b.major)
     return a.major - b.major
@@ -140,11 +147,9 @@ export function selectReleases(releases: GitHubRelease[], packageName?: string, 
   // Check if this looks like a monorepo (has package-prefixed tags)
   const hasMonorepoTags = packageName && releases.some(r => tagMatchesPackage(r.tag, packageName))
   const installedSv = installedVersion ? parseSemver(installedVersion) : null
+  const installedIsPrerelease = installedVersion ? isPrerelease(installedVersion) : false
 
   const filtered = releases.filter((r) => {
-    if (r.prerelease)
-      return false
-
     const ver = extractVersion(r.tag, hasMonorepoTags ? packageName : undefined)
     if (!ver)
       return false
@@ -157,7 +162,14 @@ export function selectReleases(releases: GitHubRelease[], packageName?: string, 
     if (hasMonorepoTags && packageName && !tagMatchesPackage(r.tag, packageName))
       return false
 
-    // Filter out releases newer than installed version
+    // Prerelease handling: include only when installed is also prerelease and same major.minor
+    if (r.prerelease) {
+      if (!installedIsPrerelease || !installedSv)
+        return false
+      return sv.major === installedSv.major && sv.minor === installedSv.minor
+    }
+
+    // Filter out stable releases newer than installed version
     if (installedSv && compareSemver(sv, installedSv) > 0)
       return false
 
