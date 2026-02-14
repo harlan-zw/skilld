@@ -964,7 +964,7 @@ export const updateCommandDef = defineCommand({
     // Background mode: spawn detached `skilld update` and exit immediately
     if (args.background) {
       const { spawn } = await import('node:child_process')
-      const updateArgs = ['update', ...(args.package ? [args.package] : []), ...(args.agent ? ['--agent', args.agent] : [])]
+      const updateArgs = ['update', ...(args.package ? [args.package] : []), ...(args.agent ? ['--agent', args.agent] : []), ...(args.model ? ['--model', args.model as string] : [])]
       const child = spawn(process.execPath, [process.argv[1], ...updateArgs], {
         cwd,
         detached: true,

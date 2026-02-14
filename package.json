@@ -2,7 +2,7 @@
   "name": "skilld",
   "type": "module",
   "version": "0.7.0",
-  "packageManager": "pnpm@10.29.2",
+  "packageManager": "pnpm@10.29.3",
   "description": "Generate AI agent skills from npm package documentation",
   "author": {
     "name": "Harlan Wilton",
@@ -53,7 +53,7 @@
     "test:run": "vitest run",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
-    "prepare": "skilld --prepare -b || true"
+    "prepare": "skilld update -b --model haiku"
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",

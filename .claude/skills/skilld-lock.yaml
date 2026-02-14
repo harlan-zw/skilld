@@ -1,17 +1,19 @@
 skills:
   bombshell-dev-clack:
     packageName: "@clack/prompts"
-    version: 1.0.0
+    version: 1.0.1
+    packages: "@clack/prompts@1.0.1"
     repo: bombshell-dev/clack
     source: "ungh://bombshell-dev/clack/packages/prompts"
-    syncedAt: 2026-02-13
+    syncedAt: 2026-02-14
     generator: skilld
   unjs-citty:
     packageName: citty
-    version: 0.2.0
+    version: 0.2.1
+    packages: "citty@0.2.1"
     repo: unjs/citty
     source: "ungh://unjs/citty"
-    syncedAt: 2026-02-13
+    syncedAt: 2026-02-14
     generator: skilld
   sindresorhus-log-update:
     packageName: log-update
