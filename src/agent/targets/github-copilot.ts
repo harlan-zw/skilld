@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'pathe'
-import { defineTarget, SPEC_FRONTMATTER } from './base'
+import { defineTarget, SPEC_FRONTMATTER } from './base.ts'
 
 const home = homedir()
 

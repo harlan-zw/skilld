@@ -6,7 +6,7 @@
 import { readFile } from 'node:fs/promises'
 import { globby } from 'globby'
 import { findDynamicImports, findStaticImports } from 'mlly'
-import { detectPresetPackages } from './detect-presets'
+import { detectPresetPackages } from './detect-presets.ts'
 
 export interface PackageUsage {
   name: string

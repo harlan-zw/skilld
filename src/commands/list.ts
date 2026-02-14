@@ -1,7 +1,7 @@
 import { defineCommand } from 'citty'
-import { sharedArgs } from '../cli-helpers'
-import { formatSource, timeAgo } from '../core/formatting'
-import { iterateSkills } from '../core/skills'
+import { sharedArgs } from '../cli-helpers.ts'
+import { formatSource, timeAgo } from '../core/formatting.ts'
+import { iterateSkills } from '../core/skills.ts'
 
 export interface ListOptions {
   global?: boolean

@@ -3,10 +3,10 @@
  */
 
 // Config
-export { CACHE_DIR, getPackageDbPath, REFERENCES_DIR } from './config'
+export { CACHE_DIR, getPackageDbPath, REFERENCES_DIR } from './config.ts'
 
 // Storage operations
-export type { ShippedSkill } from './storage'
+export type { ShippedSkill } from './storage.ts'
 
 export {
   clearAllCache,
@@ -27,9 +27,9 @@ export {
   resolvePkgDir,
   writeSections,
   writeToCache,
-} from './storage'
+} from './storage.ts'
 
 // Types
-export type { CacheConfig, CachedDoc, CachedPackage } from './types'
+export type { CacheConfig, CachedDoc, CachedPackage } from './types.ts'
 // Version utilities
-export { getCacheDir, getCacheKey, getVersionKey } from './version'
+export { getCacheDir, getCacheKey, getVersionKey } from './version.ts'

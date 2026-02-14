@@ -1,8 +1,8 @@
-import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index'
-import type { FeaturesConfig } from '../core/config'
-import type { ProjectState } from '../core/skills'
-import type { ResolveAttempt } from '../sources/index'
-import type { GitSkillSource } from '../sources/git-skills'
+import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index.ts'
+import type { FeaturesConfig } from '../core/config.ts'
+import type { ProjectState } from '../core/skills.ts'
+import type { GitSkillSource } from '../sources/git-skills.ts'
+import type { ResolveAttempt } from '../sources/index.ts'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
@@ -18,8 +18,8 @@ import {
   getModelName,
   linkSkillToAgents,
   optimizeDocs,
-} from '../agent/index'
-import { maxItems, maxLines } from '../agent/prompts/optional/budget'
+} from '../agent/index.ts'
+import { maxItems, maxLines } from '../agent/prompts/optional/budget.ts'
 import {
   ensureCacheDir,
   getCacheDir,
@@ -30,23 +30,23 @@ import {
   linkPkgNamed,
   listReferenceFiles,
   resolvePkgDir,
-} from '../cache/index'
-import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
-import { defaultFeatures, hasCompletedWizard, readConfig, registerProject, updateConfig } from '../core/config'
-import { timedSpinner } from '../core/formatting'
-import { parsePackages, readLock, writeLock } from '../core/lockfile'
-import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared'
-import { getProjectState } from '../core/skills'
-import { shutdownWorker } from '../retriv/pool'
+} from '../cache/index.ts'
+import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
+import { defaultFeatures, hasCompletedWizard, readConfig, registerProject, updateConfig } from '../core/config.ts'
+import { timedSpinner } from '../core/formatting.ts'
+import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
+import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { getProjectState } from '../core/skills.ts'
+import { shutdownWorker } from '../retriv/pool.ts'
+import { parseGitSkillInput } from '../sources/git-skills.ts'
 import {
   fetchPkgDist,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
-} from '../sources/index'
-import { parseGitSkillInput } from '../sources/git-skills'
-import { syncGitSkills } from './sync-git'
-import { syncPackagesParallel } from './sync-parallel'
+} from '../sources/index.ts'
+import { syncGitSkills } from './sync-git.ts'
+import { syncPackagesParallel } from './sync-parallel.ts'
 import {
   detectChangelog,
   fetchAndCacheResources,
@@ -58,8 +58,8 @@ import {
   RESOLVE_STEP_LABELS,
   resolveBaseDir,
   resolveLocalDep,
-} from './sync-shared'
-import { runWizard } from './wizard'
+} from './sync-shared.ts'
+import { runWizard } from './wizard.ts'
 
 function showResolveAttempts(attempts: ResolveAttempt[]): void {
   if (attempts.length === 0)
@@ -408,10 +408,18 @@ export async function selectSkillSections(message = 'Generate SKILL.md with LLM'
     const budgetLines: string[] = []
     for (const s of sections) {
       switch (s) {
-        case 'api-changes': budgetLines.push(`  API changes     ≤${maxLines(50, 80, n)} lines, ${maxItems(6, 12, n)} items`); break
-        case 'best-practices': budgetLines.push(`  Best practices  ≤${maxLines(80, 150, n)} lines, ${maxItems(4, 10, n)} items`); break
-        case 'api': budgetLines.push(`  Doc map         ≤${maxLines(15, 25, n)} lines`); break
-        case 'custom': budgetLines.push(`  Custom          ≤${maxLines(50, 80, n)} lines`); break
+        case 'api-changes':
+          budgetLines.push(`  API changes     ≤${maxLines(50, 80, n)} lines, ${maxItems(6, 12, n)} items`)
+          break
+        case 'best-practices':
+          budgetLines.push(`  Best practices  ≤${maxLines(80, 150, n)} lines, ${maxItems(4, 10, n)} items`)
+          break
+        case 'api':
+          budgetLines.push(`  Doc map         ≤${maxLines(15, 25, n)} lines`)
+          break
+        case 'custom':
+          budgetLines.push(`  Custom          ≤${maxLines(50, 80, n)} lines`)
+          break
       }
     }
     p.log.info(`Budget (${n} sections):\n${budgetLines.join('\n')}`)

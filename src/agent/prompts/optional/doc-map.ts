@@ -1,5 +1,5 @@
-import type { PromptSection, ReferenceWeight, SectionContext } from './types'
-import { maxLines } from './budget'
+import type { PromptSection, ReferenceWeight, SectionContext } from './types.ts'
+import { maxLines } from './budget.ts'
 
 export function apiSection({ hasReleases, hasChangelog, hasIssues, hasDiscussions, enabledSectionCount }: SectionContext): PromptSection {
   // Build reference weights — only include available references

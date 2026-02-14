@@ -9,15 +9,15 @@
  *   .claude/skills/<skill>/SKILL.md -> regenerated from package.json + cache state
  */
 
-import type { AgentType, CustomPrompt, SkillSection } from '../agent/index'
-import type { SkillInfo } from '../core/lockfile'
+import type { AgentType, CustomPrompt, SkillSection } from '../agent/index.ts'
+import type { SkillInfo } from '../core/lockfile.ts'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { dirname, join } from 'pathe'
-import { agents, createToolProgress, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent/index'
-import { generateSkillMd } from '../agent/prompts/skill'
+import { agents, createToolProgress, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent/index.ts'
+import { generateSkillMd } from '../agent/prompts/skill.ts'
 import {
   hasShippedDocs as checkShippedDocs,
   ensureCacheDir,
@@ -32,15 +32,16 @@ import {
   readCachedDocs,
   resolvePkgDir,
   writeToCache,
-} from '../cache/index'
-import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
-import { defaultFeatures, readConfig } from '../core/config'
-import { timedSpinner } from '../core/formatting'
-import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile'
-import { sanitizeMarkdown } from '../core/sanitize'
-import { getSharedSkillsDir } from '../core/shared'
-import { createIndex } from '../retriv/index'
-import { shutdownWorker } from '../retriv/pool'
+} from '../cache/index.ts'
+import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
+import { defaultFeatures, readConfig } from '../core/config.ts'
+import { timedSpinner } from '../core/formatting.ts'
+import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile.ts'
+import { sanitizeMarkdown } from '../core/sanitize.ts'
+import { getSharedSkillsDir } from '../core/shared.ts'
+import { createIndex } from '../retriv/index.ts'
+import { shutdownWorker } from '../retriv/pool.ts'
+import { fetchGitSkills } from '../sources/git-skills.ts'
 import {
   $fetch,
   downloadLlmsDocs,
@@ -52,10 +53,9 @@ import {
   parseGitHubUrl,
   resolveEntryFiles,
   resolvePackageDocs,
-} from '../sources/index'
-import { fetchGitSkills } from '../sources/git-skills'
-import { selectLlmConfig } from './sync'
-import { classifyCachedDoc, indexResources } from './sync-shared'
+} from '../sources/index.ts'
+import { classifyCachedDoc, indexResources } from './sync-shared.ts'
+import { selectLlmConfig } from './sync.ts'
 
 export interface InstallOptions {
   global: boolean

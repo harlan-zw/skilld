@@ -1,15 +1,15 @@
-import type { AgentType } from '../agent/index'
+import type { AgentType } from '../agent/index.ts'
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
-import { agents } from '../agent/index'
-import { CACHE_DIR } from '../cache/index'
-import { isInteractive, sharedArgs } from '../cli-helpers'
-import { getRegisteredProjects, unregisterProject } from '../core/config'
-import { readLock } from '../core/lockfile'
-import { SHARED_SKILLS_DIR } from '../core/shared'
-import { SKILLD_MARKER_END, SKILLD_MARKER_START } from './sync'
+import { agents } from '../agent/index.ts'
+import { CACHE_DIR } from '../cache/index.ts'
+import { isInteractive, sharedArgs } from '../cli-helpers.ts'
+import { getRegisteredProjects, unregisterProject } from '../core/config.ts'
+import { readLock } from '../core/lockfile.ts'
+import { SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { SKILLD_MARKER_END, SKILLD_MARKER_START } from './sync.ts'
 
 /**
  * Remove the skilld marker block from an agent's instruction file.

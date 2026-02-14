@@ -3,7 +3,7 @@
  * Write scoping: relies on cwd being set to .skilld/ (no native --writeable-dirs)
  */
 
-import type { CliModelEntry, ParsedEvent } from './types'
+import type { CliModelEntry, ParsedEvent } from './types.ts'
 
 export const cli = 'gemini' as const
 export const agentId = 'gemini-cli' as const

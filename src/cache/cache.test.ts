@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getCacheDir, getCacheKey, getVersionKey } from './version'
+import { getCacheDir, getCacheKey, getVersionKey } from './version.ts'
 
 describe('getVersionKey', () => {
   it('extracts major.minor from semver', () => {

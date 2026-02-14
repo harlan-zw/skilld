@@ -10,7 +10,7 @@
  * - error / turn.failed → errors
  */
 
-import type { CliModelEntry, ParsedEvent } from './types'
+import type { CliModelEntry, ParsedEvent } from './types.ts'
 import { join } from 'pathe'
 
 export const cli = 'codex' as const

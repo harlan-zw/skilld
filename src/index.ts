@@ -18,15 +18,15 @@ export {
   readCachedDocs,
   REFERENCES_DIR,
   writeToCache,
-} from './cache/index'
-export type { CacheConfig, CachedDoc, CachedPackage } from './cache/index'
+} from './cache/index.ts'
+export type { CacheConfig, CachedDoc, CachedPackage } from './cache/index.ts'
 
 // Search
 export {
   createIndex,
   search,
   searchSnippets,
-} from './retriv/index'
+} from './retriv/index.ts'
 export type {
   Document,
   IndexConfig,
@@ -34,7 +34,7 @@ export type {
   SearchOptions,
   SearchResult,
   SearchSnippet,
-} from './retriv/index'
+} from './retriv/index.ts'
 
 // Doc resolver
 export {
@@ -46,7 +46,7 @@ export {
   parseMarkdownLinks,
   readLocalDependencies,
   resolvePackageDocs,
-} from './sources/index'
+} from './sources/index.ts'
 export type {
   FetchedDoc,
   LlmsContent,
@@ -54,4 +54,4 @@ export type {
   LocalDependency,
   NpmPackageInfo,
   ResolvedPackage,
-} from './sources/index'
+} from './sources/index.ts'

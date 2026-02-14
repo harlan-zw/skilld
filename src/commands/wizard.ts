@@ -1,9 +1,9 @@
-import type { FeaturesConfig } from '../core/config'
+import type { FeaturesConfig } from '../core/config.ts'
 import { execSync } from 'node:child_process'
 import * as p from '@clack/prompts'
-import { getAvailableModels } from '../agent/index'
-import { isInteractive } from '../cli-helpers'
-import { defaultFeatures, updateConfig } from '../core/config'
+import { getAvailableModels } from '../agent/index.ts'
+import { isInteractive } from '../cli-helpers.ts'
+import { defaultFeatures, updateConfig } from '../core/config.ts'
 
 function hasGhCli(): boolean {
   if (process.env.SKILLD_NO_GH)

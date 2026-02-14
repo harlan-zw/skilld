@@ -1,6 +1,6 @@
-import type { FeaturesConfig } from '../../core/config'
-import type { CustomPrompt, SkillSection } from '../prompts'
-import type { AgentType } from '../types'
+import type { FeaturesConfig } from '../../core/config.ts'
+import type { CustomPrompt, SkillSection } from '../prompts/index.ts'
+import type { AgentType } from '../types.ts'
 
 export interface ParsedEvent {
   /** Token-level text delta */

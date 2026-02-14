@@ -3,7 +3,7 @@
  * These are string literals in config arrays, not imports — the import scanner misses them.
  */
 
-import type { PackageUsage } from './detect-imports'
+import type { PackageUsage } from './detect-imports.ts'
 import { readFile } from 'node:fs/promises'
 import { parseSync } from 'oxc-parser'
 import { join } from 'pathe'

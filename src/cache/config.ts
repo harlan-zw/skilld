@@ -4,7 +4,7 @@
 
 import { homedir } from 'node:os'
 import { join } from 'pathe'
-import { getCacheKey } from './version'
+import { getCacheKey } from './version.ts'
 
 /** Global cache directory */
 export const CACHE_DIR = join(homedir(), '.skilld')

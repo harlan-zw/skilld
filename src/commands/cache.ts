@@ -6,8 +6,8 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
-import { CACHE_DIR } from '../cache/index'
-import { clearEmbeddingCache } from '../retriv/embedding-cache'
+import { CACHE_DIR } from '../cache/index.ts'
+import { clearEmbeddingCache } from '../retriv/embedding-cache.ts'
 
 const LLM_CACHE_DIR = join(CACHE_DIR, 'llm-cache')
 const LLM_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000

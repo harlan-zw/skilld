@@ -2,10 +2,10 @@
  * Skill generation prompt - minimal, agent explores via tools
  */
 
-import type { FeaturesConfig } from '../../core/config'
-import type { CustomPrompt, PromptSection, SectionContext } from './optional'
+import type { FeaturesConfig } from '../../core/config.ts'
+import type { CustomPrompt, PromptSection, SectionContext } from './optional/index.ts'
 import { dirname } from 'pathe'
-import { apiChangesSection, apiSection, bestPracticesSection, customSection } from './optional'
+import { apiChangesSection, apiSection, bestPracticesSection, customSection } from './optional/index.ts'
 
 export type SkillSection = 'api-changes' | 'best-practices' | 'api' | 'custom'
 

@@ -2,19 +2,19 @@
  * Agent targets registry — all supported agents and their skill conventions
  */
 
-import type { AgentType } from '../types'
-import type { AgentTarget } from './types'
-import { amp } from './amp'
-import { claudeCode } from './claude-code'
-import { cline } from './cline'
-import { codex } from './codex'
-import { cursor } from './cursor'
-import { geminiCli } from './gemini-cli'
-import { githubCopilot } from './github-copilot'
-import { goose } from './goose'
-import { opencode } from './opencode'
-import { roo } from './roo'
-import { windsurf } from './windsurf'
+import type { AgentType } from '../types.ts'
+import type { AgentTarget } from './types.ts'
+import { amp } from './amp.ts'
+import { claudeCode } from './claude-code.ts'
+import { cline } from './cline.ts'
+import { codex } from './codex.ts'
+import { cursor } from './cursor.ts'
+import { geminiCli } from './gemini-cli.ts'
+import { githubCopilot } from './github-copilot.ts'
+import { goose } from './goose.ts'
+import { opencode } from './opencode.ts'
+import { roo } from './roo.ts'
+import { windsurf } from './windsurf.ts'
 
 export const targets: Record<AgentType, AgentTarget> = {
   'claude-code': claudeCode,

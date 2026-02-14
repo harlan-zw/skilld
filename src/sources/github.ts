@@ -2,13 +2,13 @@
  * GitHub/ungh README resolution + versioned docs
  */
 
-import type { LlmsLink } from './types'
+import type { LlmsLink } from './types.ts'
 import { spawnSync } from 'node:child_process'
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { isGhAvailable } from './issues'
-import { getDocOverride } from './package-registry'
-import { $fetch, extractBranchHint, fetchText, parseGitHubUrl } from './utils'
+import { isGhAvailable } from './issues.ts'
+import { getDocOverride } from './package-registry.ts'
+import { $fetch, extractBranchHint, fetchText, parseGitHubUrl } from './utils.ts'
 
 /** Minimum git-doc file count to prefer over llms.txt */
 export const MIN_GIT_DOCS = 5

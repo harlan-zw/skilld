@@ -1,9 +1,9 @@
-import type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet } from './types'
+import type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet } from './types.ts'
 import { createRetriv } from 'retriv'
 import { autoChunker } from 'retriv/chunkers/auto'
 import sqlite from 'retriv/db/sqlite'
 import { transformersJs } from 'retriv/embeddings/transformers-js'
-import { cachedEmbeddings } from './embedding-cache'
+import { cachedEmbeddings } from './embedding-cache.ts'
 
 export type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet }
 
@@ -41,7 +41,7 @@ export async function createIndex(
   config: IndexConfig,
 ): Promise<void> {
   // Dynamic import justified: search/searchSnippets shouldn't pull in worker_threads
-  const { createIndexInWorker } = await import('./pool')
+  const { createIndexInWorker } = await import('./pool.ts')
   return createIndexInWorker(documents, config)
 }
 

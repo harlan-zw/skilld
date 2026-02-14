@@ -8,8 +8,8 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import pLimit from 'p-limit'
 import { resolve } from 'pathe'
-import { yamlParseKV } from '../core/yaml'
-import { $fetch, normalizeRepoUrl, parseGitHubUrl } from './utils'
+import { yamlParseKV } from '../core/yaml.ts'
+import { $fetch, normalizeRepoUrl, parseGitHubUrl } from './utils.ts'
 
 export interface GitSkillSource {
   type: 'github' | 'gitlab' | 'git-ssh' | 'local'

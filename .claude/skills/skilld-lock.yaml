@@ -25,6 +25,7 @@ skills:
   microsoft-typescript:
     packageName: typescript
     version: 6.0.0-beta
+    packages: "typescript@6.0.0-beta"
     repo: microsoft/TypeScript
     source: "ungh://microsoft/TypeScript"
     syncedAt: 2026-02-14

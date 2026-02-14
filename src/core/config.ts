@@ -1,8 +1,8 @@
-import type { OptimizeModel } from '../agent/index'
+import type { OptimizeModel } from '../agent/index.ts'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'pathe'
-import { yamlEscape, yamlParseKV, yamlUnescape } from './yaml'
+import { yamlEscape, yamlParseKV, yamlUnescape } from './yaml.ts'
 
 export interface FeaturesConfig {
   search: boolean

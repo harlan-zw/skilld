@@ -58,7 +58,6 @@ describe('selectReleases', () => {
     expect(selected[0]?.tag).toBe('pkg-a@1.1.0')
     expect(selected[1]?.tag).toBe('pkg-a@1.0.0')
   })
-})
 
   it('includes prereleases when installed version is prerelease (same major.minor)', () => {
     const mixed = [

@@ -1,5 +1,5 @@
-import type { IndexConfig, Document as RetrivDocument } from './types'
-import type { WorkerMessage, WorkerResponse } from './worker'
+import type { IndexConfig, Document as RetrivDocument } from './types.ts'
+import type { WorkerMessage, WorkerResponse } from './worker.ts'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'

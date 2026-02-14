@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubUrl } from './utils'
+import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubUrl } from './utils.ts'
 
 describe('isGitHubRepoUrl', () => {
   it('returns true for github.com URLs', () => {

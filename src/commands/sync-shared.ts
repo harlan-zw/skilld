@@ -1,9 +1,9 @@
-import type { AgentType } from '../agent/index'
-import type { FeaturesConfig } from '../core/config'
-import type { ResolvedPackage, ResolveStep } from '../sources/index'
+import type { AgentType } from '../agent/index.ts'
+import type { FeaturesConfig } from '../core/config.ts'
+import type { ResolvedPackage, ResolveStep } from '../sources/index.ts'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join, resolve } from 'pathe'
-import { agents } from '../agent/index'
+import { agents } from '../agent/index.ts'
 import {
   CACHE_DIR,
   clearCache,
@@ -18,12 +18,12 @@ import {
   readCachedDocs,
   resolvePkgDir,
   writeToCache,
-} from '../cache/index'
-import { defaultFeatures, readConfig, registerProject } from '../core/config'
-import { parsePackages, readLock, writeLock } from '../core/lockfile'
-import { sanitizeMarkdown } from '../core/sanitize'
-import { getSharedSkillsDir } from '../core/shared'
-import { createIndex } from '../retriv/index'
+} from '../cache/index.ts'
+import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
+import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
+import { sanitizeMarkdown } from '../core/sanitize.ts'
+import { getSharedSkillsDir } from '../core/shared.ts'
+import { createIndex } from '../retriv/index.ts'
 import {
   $fetch,
   downloadLlmsDocs,
@@ -47,7 +47,7 @@ import {
   parseGitHubUrl,
   resolveEntryFiles,
   resolveLocalPackageDocs,
-} from '../sources/index'
+} from '../sources/index.ts'
 
 export const RESOLVE_STEP_LABELS: Record<ResolveStep, string> = {
   'npm': 'npm registry',

@@ -3,27 +3,27 @@
  * Each CLI (claude, gemini, codex) has its own buildArgs + parseLine in separate files
  */
 
-import type { SkillSection } from '../prompts'
-import type { AgentType } from '../types'
-import type { CliModelConfig, CliName, OptimizeDocsOptions, OptimizeModel, OptimizeResult, ParsedEvent, SectionResult, StreamProgress, ValidationWarning } from './types'
+import type { SkillSection } from '../prompts/index.ts'
+import type { AgentType } from '../types.ts'
+import type { CliModelConfig, CliName, OptimizeDocsOptions, OptimizeModel, OptimizeResult, ParsedEvent, SectionResult, StreamProgress, ValidationWarning } from './types.ts'
 import { exec, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { promisify } from 'node:util'
 import { join } from 'pathe'
-import { readCachedSection, writeSections } from '../../cache'
-import { sanitizeMarkdown } from '../../core/sanitize'
-import { detectInstalledAgents } from '../detect'
-import { buildAllSectionPrompts, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts'
-import { agents } from '../registry'
-import * as claude from './claude'
-import * as codex from './codex'
-import * as gemini from './gemini'
+import { readCachedSection, writeSections } from '../../cache/index.ts'
+import { sanitizeMarkdown } from '../../core/sanitize.ts'
+import { detectInstalledAgents } from '../detect.ts'
+import { buildAllSectionPrompts, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts/index.ts'
+import { agents } from '../registry.ts'
+import * as claude from './claude.ts'
+import * as codex from './codex.ts'
+import * as gemini from './gemini.ts'
 
-export { buildAllSectionPrompts, buildSectionPrompt, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts'
-export type { CustomPrompt, SkillSection } from '../prompts'
-export type { CliModelConfig, CliName, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './types'
+export { buildAllSectionPrompts, buildSectionPrompt, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts/index.ts'
+export type { CustomPrompt, SkillSection } from '../prompts/index.ts'
+export type { CliModelConfig, CliName, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, StreamProgress } from './types.ts'
 
 // ── Tool progress display ────────────────────────────────────────────
 
@@ -64,7 +64,7 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
 
     const key = section ?? ''
     // Parse tool name and hint from chunk like "[Read: path/file]" or "[Read]"
-    const match = chunk.match(/^\[(\w+)(?:,\s*\w+)*(?::\s*(.+))?\]$/)
+    const match = chunk.match(/^\[(\w+)(?:,\s\w+)*(?::\s(.+))?\]$/)
     if (!match)
       return
 
@@ -140,7 +140,7 @@ export function getModelLabel(id: OptimizeModel): string {
   return `${agentName} · ${config.name}`
 }
 
-export async function getAvailableModels(): Promise<import('./types').ModelInfo[]> {
+export async function getAvailableModels(): Promise<import('./types.ts').ModelInfo[]> {
   const execAsync = promisify(exec)
 
   const installedAgents = detectInstalledAgents()

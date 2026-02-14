@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-import type { PackageUsage } from './agent/detect-imports'
+import type { PackageUsage } from './agent/detect-imports.ts'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
-import { detectImportedPackages } from './agent/index'
-import { formatStatus, getRepoHint, isInteractive, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers'
-import { configCommand, interactiveSearch, removeCommand, runWizard, statusCommand, syncCommand } from './commands/index'
-import { getProjectState, hasCompletedWizard, isOutdated, readConfig } from './core/index'
-import { timedSpinner } from './core/formatting'
-import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index'
+import { detectImportedPackages } from './agent/index.ts'
+import { formatStatus, getRepoHint, isInteractive, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers.ts'
+import { configCommand, interactiveSearch, removeCommand, runWizard, statusCommand, syncCommand } from './commands/index.ts'
+import { timedSpinner } from './core/formatting.ts'
+import { getProjectState, hasCompletedWizard, isOutdated, readConfig } from './core/index.ts'
+import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index.ts'
 
-import { version } from './version'
+import { version } from './version.ts'
 
 // Suppress node:sqlite ExperimentalWarning (loaded lazily by retriv)
 const _emit = process.emit
@@ -159,16 +159,16 @@ const main = defineCommand({
     agent: sharedArgs.agent,
   },
   subCommands: {
-    add: () => import('./commands/sync').then(m => m.addCommandDef),
-    update: () => import('./commands/sync').then(m => m.updateCommandDef),
-    info: () => import('./commands/status').then(m => m.infoCommandDef),
-    list: () => import('./commands/list').then(m => m.listCommandDef),
-    config: () => import('./commands/config').then(m => m.configCommandDef),
-    remove: () => import('./commands/remove').then(m => m.removeCommandDef),
-    install: () => import('./commands/install').then(m => m.installCommandDef),
-    uninstall: () => import('./commands/uninstall').then(m => m.uninstallCommandDef),
-    search: () => import('./commands/search').then(m => m.searchCommandDef),
-    cache: () => import('./commands/cache').then(m => m.cacheCommandDef),
+    add: () => import('./commands/sync.ts').then(m => m.addCommandDef),
+    update: () => import('./commands/sync.ts').then(m => m.updateCommandDef),
+    info: () => import('./commands/status.ts').then(m => m.infoCommandDef),
+    list: () => import('./commands/list.ts').then(m => m.listCommandDef),
+    config: () => import('./commands/config.ts').then(m => m.configCommandDef),
+    remove: () => import('./commands/remove.ts').then(m => m.removeCommandDef),
+    install: () => import('./commands/install.ts').then(m => m.installCommandDef),
+    uninstall: () => import('./commands/uninstall.ts').then(m => m.uninstallCommandDef),
+    search: () => import('./commands/search.ts').then(m => m.searchCommandDef),
+    cache: () => import('./commands/cache.ts').then(m => m.cacheCommandDef),
   },
   async run({ args }) {
     // Guard: citty always calls parent run() after subcommand dispatch.

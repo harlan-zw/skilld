@@ -2,9 +2,9 @@
  * llms.txt fetching and parsing
  */
 
-import type { FetchedDoc, LlmsContent, LlmsLink } from './types'
+import type { FetchedDoc, LlmsContent, LlmsLink } from './types.ts'
 import pLimit from 'p-limit'
-import { fetchText, verifyUrl } from './utils'
+import { fetchText, verifyUrl } from './utils.ts'
 
 /**
  * Check for llms.txt at a docs URL, returns the llms.txt URL if found

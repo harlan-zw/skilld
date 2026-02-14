@@ -1,5 +1,5 @@
-import type { CustomPrompt, PromptSection } from './types'
-import { maxLines } from './budget'
+import type { CustomPrompt, PromptSection } from './types.ts'
+import { maxLines } from './budget.ts'
 
 export function customSection({ heading, body }: CustomPrompt, enabledSectionCount?: number): PromptSection {
   return {

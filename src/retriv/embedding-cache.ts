@@ -3,7 +3,7 @@ import type { Embedding } from 'retriv'
 import { rmSync } from 'node:fs'
 import { join } from 'pathe'
 import { cachedEmbeddings as retrivCached } from 'retriv/embeddings/cached'
-import { CACHE_DIR } from '../cache/index'
+import { CACHE_DIR } from '../cache/index.ts'
 
 interface EmbeddingConfig {
   resolve: () => Promise<{ embedder: (texts: string[]) => Promise<Embedding[]>, dimensions: number, maxTokens?: number }>

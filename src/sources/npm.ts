@@ -2,17 +2,17 @@
  * NPM registry lookup
  */
 
-import type { LocalDependency, NpmPackageInfo, ResolveAttempt, ResolvedPackage, ResolveResult } from './types'
+import type { LocalDependency, NpmPackageInfo, ResolveAttempt, ResolvedPackage, ResolveResult } from './types.ts'
 import { spawnSync } from 'node:child_process'
 import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs'
 import { Writable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
 import { resolvePathSync } from 'mlly'
 import { basename, dirname, join, resolve } from 'pathe'
-import { getCacheDir } from '../cache/version'
-import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo, validateGitDocsWithLlms } from './github'
-import { fetchLlmsTxt, fetchLlmsUrl } from './llms'
-import { $fetch, isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl } from './utils'
+import { getCacheDir } from '../cache/version.ts'
+import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo, validateGitDocsWithLlms } from './github.ts'
+import { fetchLlmsTxt, fetchLlmsUrl } from './llms.ts'
+import { $fetch, isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl } from './utils.ts'
 
 /**
  * Search npm registry for packages matching a query.

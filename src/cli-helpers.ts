@@ -3,15 +3,15 @@
  * Extracted to avoid circular deps between cli.ts and commands/*.ts.
  */
 
-import type { AgentType, OptimizeModel } from './agent/index'
-import type { ProjectState } from './core/skills'
+import type { AgentType, OptimizeModel } from './agent/index.ts'
+import type { ProjectState } from './core/skills.ts'
 import { existsSync, readFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { join } from 'pathe'
 import { detectCurrentAgent } from 'unagent/env'
-import { agents, detectInstalledAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent/index'
-import { readConfig, updateConfig } from './core/config'
-import { version } from './version'
+import { agents, detectInstalledAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent/index.ts'
+import { readConfig, updateConfig } from './core/config.ts'
+import { version } from './version.ts'
 
 export type { AgentType, OptimizeModel }
 

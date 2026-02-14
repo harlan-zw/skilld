@@ -2,7 +2,7 @@
  * Types for agent target definitions
  */
 
-import type { AgentType } from '../types'
+import type { AgentType } from '../types.ts'
 
 export interface FrontmatterField {
   /** Field name in YAML frontmatter */

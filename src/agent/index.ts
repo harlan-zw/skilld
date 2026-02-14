@@ -2,7 +2,7 @@
  * Agent module - detection, installation, and skill optimization
  */
 
-export type { CustomPrompt, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, SkillSection, StreamProgress } from './clis'
+export type { CustomPrompt, ModelInfo, OptimizeDocsOptions, OptimizeModel, OptimizeResult, SkillSection, StreamProgress } from './clis/index.ts'
 // CLI optimization
 export {
   buildAllSectionPrompts,
@@ -14,24 +14,24 @@ export {
   optimizeDocs,
   SECTION_MERGE_ORDER,
   SECTION_OUTPUT_FILES,
-} from './clis'
-// Detection
-export { detectInstalledAgents, detectTargetAgent, getAgentVersion } from './detect'
+} from './clis/index.ts'
 // Import detection
-export { detectImportedPackages } from './detect-imports'
+export { detectImportedPackages } from './detect-imports.ts'
+// Detection
+export { detectInstalledAgents, detectTargetAgent, getAgentVersion } from './detect.ts'
 
 // Installation
-export { computeSkillDirName, installSkillForAgents, linkSkillToAgents, sanitizeName, unlinkSkillFromAgents } from './install'
+export { computeSkillDirName, installSkillForAgents, linkSkillToAgents, sanitizeName, unlinkSkillFromAgents } from './install.ts'
 
 // Skill generation
-export { generateSkillMd } from './prompts'
+export { generateSkillMd } from './prompts/index.ts'
 
-export type { SkillOptions } from './prompts'
+export type { SkillOptions } from './prompts/index.ts'
 // Registry
-export { agents } from './registry'
+export { agents } from './registry.ts'
 
 // Targets
-export type { AgentTarget, FrontmatterField } from './targets'
+export type { AgentTarget, FrontmatterField } from './targets/index.ts'
 
 // Types
-export type { AgentType, SkillMetadata } from './types'
+export type { AgentType, SkillMetadata } from './types.ts'

@@ -1,8 +1,8 @@
-import type { SearchFilter, SearchSnippet } from '../retriv/index'
+import type { SearchFilter, SearchSnippet } from '../retriv/index.ts'
 import { createLogUpdate } from 'log-update'
-import { formatCompactSnippet, highlightTerms, sanitizeMarkdown } from '../core/index'
-import { closePool, openPool, searchPooled } from '../retriv/index'
-import { findPackageDbs, parseFilterPrefix } from './search'
+import { formatCompactSnippet, highlightTerms, sanitizeMarkdown } from '../core/index.ts'
+import { closePool, openPool, searchPooled } from '../retriv/index.ts'
+import { findPackageDbs, parseFilterPrefix } from './search.ts'
 
 const FILTER_CYCLE = [undefined, 'docs', 'issues', 'releases'] as const
 type FilterLabel = typeof FILTER_CYCLE[number]

@@ -2,12 +2,12 @@
  * Cache storage operations
  */
 
-import type { CachedDoc, CachedPackage } from './types'
+import type { CachedDoc, CachedPackage } from './types.ts'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'pathe'
-import { sanitizeMarkdown } from '../core/sanitize'
-import { REFERENCES_DIR } from './config'
-import { getCacheDir } from './version'
+import { sanitizeMarkdown } from '../core/sanitize.ts'
+import { REFERENCES_DIR } from './config.ts'
+import { getCacheDir } from './version.ts'
 
 /** Safely create a symlink, validating target is under REFERENCES_DIR */
 function safeSymlink(target: string, linkPath: string): void {

@@ -1,4 +1,4 @@
-import type { FeaturesConfig } from '../../../core/config'
+import type { FeaturesConfig } from '../../../core/config.ts'
 
 export interface ReferenceWeight {
   name: string

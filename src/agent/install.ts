@@ -2,12 +2,12 @@
  * Skill installation - write skills to agent directories
  */
 
-import type { AgentType } from './types'
+import type { AgentType } from './types.ts'
 import { existsSync, lstatSync, mkdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'pathe'
-import { repairMarkdown, sanitizeMarkdown } from '../core/sanitize'
-import { detectInstalledAgents } from './detect'
-import { agents } from './registry'
+import { repairMarkdown, sanitizeMarkdown } from '../core/sanitize.ts'
+import { detectInstalledAgents } from './detect.ts'
+import { agents } from './registry.ts'
 
 /**
  * Sanitize skill name for filesystem

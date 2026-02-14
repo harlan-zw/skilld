@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractSections, normalizeLlmsLinks, parseMarkdownLinks } from './llms'
+import { extractSections, normalizeLlmsLinks, parseMarkdownLinks } from './llms.ts'
 
 describe('parseMarkdownLinks', () => {
   it('extracts markdown links ending in .md', () => {

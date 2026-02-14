@@ -1,5 +1,5 @@
-import type { PromptSection, ReferenceWeight, SectionContext } from './types'
-import { maxItems, maxLines } from './budget'
+import type { PromptSection, ReferenceWeight, SectionContext } from './types.ts'
+import { maxItems, maxLines } from './budget.ts'
 
 export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasIssues, hasDiscussions, features, enabledSectionCount }: SectionContext): PromptSection {
   const [, major, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []

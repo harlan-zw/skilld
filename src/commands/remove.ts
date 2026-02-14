@@ -1,14 +1,14 @@
-import type { AgentType } from '../agent/index'
-import type { ProjectState, SkillEntry } from '../core/skills'
+import type { AgentType } from '../agent/index.ts'
+import type { ProjectState, SkillEntry } from '../core/skills.ts'
 import { existsSync, rmSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { unlinkSkillFromAgents } from '../agent/index'
-import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
-import { readConfig } from '../core/config'
-import { removeLockEntry } from '../core/lockfile'
-import { getSharedSkillsDir } from '../core/shared'
-import { getProjectState, getSkillsDir, iterateSkills } from '../core/skills'
+import { unlinkSkillFromAgents } from '../agent/index.ts'
+import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
+import { readConfig } from '../core/config.ts'
+import { removeLockEntry } from '../core/lockfile.ts'
+import { getSharedSkillsDir } from '../core/shared.ts'
+import { getProjectState, getSkillsDir, iterateSkills } from '../core/skills.ts'
 
 export interface RemoveOptions {
   packages?: string[]

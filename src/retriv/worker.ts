@@ -1,10 +1,10 @@
-import type { IndexConfig, Document as RetrivDocument } from './types'
+import type { IndexConfig, Document as RetrivDocument } from './types.ts'
 import { parentPort } from 'node:worker_threads'
 import { createRetriv } from 'retriv'
 import { autoChunker } from 'retriv/chunkers/auto'
 import sqlite from 'retriv/db/sqlite'
 import { transformersJs } from 'retriv/embeddings/transformers-js'
-import { cachedEmbeddings } from './embedding-cache'
+import { cachedEmbeddings } from './embedding-cache.ts'
 
 export interface WorkerIndexMessage {
   type: 'index'

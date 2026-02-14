@@ -1,5 +1,5 @@
-import type { SearchSnippet } from '../retriv/index'
-import type { ProjectState } from './skills'
+import type { SearchSnippet } from '../retriv/index.ts'
+import type { ProjectState } from './skills.ts'
 import * as p from '@clack/prompts'
 
 export function timeAgo(iso?: string): string {

@@ -1,10 +1,10 @@
-import type { FeaturesConfig } from '../core/config'
+import type { FeaturesConfig } from '../core/config.ts'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { agents, getAvailableModels } from '../agent/index'
-import { getInstalledGenerators, introLine, requireInteractive } from '../cli-helpers'
-import { defaultFeatures, readConfig, updateConfig } from '../core/config'
-import { getProjectState } from '../core/skills'
+import { agents, getAvailableModels } from '../agent/index.ts'
+import { getInstalledGenerators, introLine, requireInteractive } from '../cli-helpers.ts'
+import { defaultFeatures, readConfig, updateConfig } from '../core/config.ts'
+import { getProjectState } from '../core/skills.ts'
 
 export async function configCommand(): Promise<void> {
   const config = readConfig()

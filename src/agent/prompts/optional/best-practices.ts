@@ -1,5 +1,5 @@
-import type { PromptSection, ReferenceWeight, SectionContext } from './types'
-import { maxItems, maxLines } from './budget'
+import type { PromptSection, ReferenceWeight, SectionContext } from './types.ts'
+import { maxItems, maxLines } from './budget.ts'
 
 export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, features, enabledSectionCount }: SectionContext): PromptSection {
   const searchHints: string[] = []

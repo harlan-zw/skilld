@@ -8,5 +8,5 @@
  * Sources are linked in each target's `docs` field.
  */
 
-export { targets } from './registry'
-export type { AgentTarget, FrontmatterField } from './types'
+export { targets } from './registry.ts'
+export type { AgentTarget, FrontmatterField } from './types.ts'

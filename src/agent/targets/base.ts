@@ -4,7 +4,7 @@
  * and common frontmatter fields from the agentskills.io spec.
  */
 
-import type { AgentTarget, FrontmatterField } from './types'
+import type { AgentTarget, FrontmatterField } from './types.ts'
 
 /** Common frontmatter fields from agentskills.io spec */
 export const SPEC_FRONTMATTER: Record<string, FrontmatterField> = {

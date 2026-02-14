@@ -2,11 +2,11 @@
  * SKILL.md file generation
  */
 
-import type { FeaturesConfig } from '../../core/config'
-import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize'
-import { yamlEscape } from '../../core/yaml'
-import { getFilePatterns } from '../../sources/package-registry'
-import { sanitizeName } from '../install'
+import type { FeaturesConfig } from '../../core/config.ts'
+import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize.ts'
+import { yamlEscape } from '../../core/yaml.ts'
+import { getFilePatterns } from '../../sources/package-registry.ts'
+import { sanitizeName } from '../install.ts'
 
 export interface SkillOptions {
   name: string
@@ -183,7 +183,9 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
   const globHint = patterns?.length ? ` or working with ${patterns.join(', ')} files` : ''
 
   // Strip angle brackets from npm description (forbidden in frontmatter per Agent Skills spec)
-  const cleanDesc = pkgDescription?.replace(/[<>]/g, '').replace(/\.?\s*$/, '')
+  // Cap at 200 chars so the npm description doesn't crowd out our triggering prompt
+  const rawDesc = pkgDescription?.replace(/[<>]/g, '').replace(/\.?\s*$/, '')
+  const cleanDesc = rawDesc && rawDesc.length > 200 ? `${rawDesc.slice(0, 197)}...` : rawDesc
 
   const editHint = globHint
     ? `editing${globHint} or code importing`

@@ -1,11 +1,11 @@
-import type { AgentType } from '../agent/index'
-import type { SkillInfo } from './lockfile'
+import type { AgentType } from '../agent/index.ts'
+import type { SkillInfo } from './lockfile.ts'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'pathe'
-import { agents } from '../agent/index'
-import { readLocalDependencies } from '../sources/index'
-import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile'
-import { getSharedSkillsDir } from './shared'
+import { agents } from '../agent/index.ts'
+import { readLocalDependencies } from '../sources/index.ts'
+import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile.ts'
+import { getSharedSkillsDir } from './shared.ts'
 
 export interface SkillEntry {
   name: string

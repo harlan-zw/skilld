@@ -1,25 +1,25 @@
-export { cacheCleanCommand } from './cache'
-export { configCommand } from './config'
+export { cacheCleanCommand } from './cache.ts'
+export { configCommand } from './config.ts'
 
-export { installCommand } from './install'
-export type { InstallOptions } from './install'
+export { installCommand } from './install.ts'
+export type { InstallOptions } from './install.ts'
 
-export { listCommand } from './list'
-export type { ListOptions } from './list'
+export { listCommand } from './list.ts'
+export type { ListOptions } from './list.ts'
 
-export { removeCommand } from './remove'
-export type { RemoveOptions } from './remove'
+export { removeCommand } from './remove.ts'
+export type { RemoveOptions } from './remove.ts'
 
-export { searchCommand } from './search'
-export { interactiveSearch } from './search-interactive'
-export { statusCommand } from './status'
+export { interactiveSearch } from './search-interactive.ts'
+export { searchCommand } from './search.ts'
+export { statusCommand } from './status.ts'
 
-export type { StatusOptions } from './status'
+export type { StatusOptions } from './status.ts'
 
-export { selectModel, syncCommand } from './sync'
-export type { SyncOptions } from './sync'
+export { selectModel, syncCommand } from './sync.ts'
+export type { SyncOptions } from './sync.ts'
 
-export { uninstallCommand } from './uninstall'
-export type { UninstallOptions } from './uninstall'
+export { uninstallCommand } from './uninstall.ts'
+export type { UninstallOptions } from './uninstall.ts'
 
-export { runWizard } from './wizard'
+export { runWizard } from './wizard.ts'

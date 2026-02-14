@@ -5,18 +5,18 @@
  * copied directly, no doc resolution or LLM generation.
  */
 
-import type { AgentType } from '../agent/index'
-import type { GitSkillSource } from '../sources/git-skills'
+import type { AgentType } from '../agent/index.ts'
+import type { GitSkillSource } from '../sources/git-skills.ts'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { dirname, join } from 'pathe'
-import { agents } from '../agent/index'
-import { CACHE_DIR } from '../cache/index'
-import { registerProject } from '../core/config'
-import { timedSpinner } from '../core/formatting'
-import { writeLock } from '../core/lockfile'
-import { sanitizeMarkdown } from '../core/sanitize'
-import { fetchGitSkills } from '../sources/git-skills'
+import { agents } from '../agent/index.ts'
+import { CACHE_DIR } from '../cache/index.ts'
+import { registerProject } from '../core/config.ts'
+import { timedSpinner } from '../core/formatting.ts'
+import { writeLock } from '../core/lockfile.ts'
+import { sanitizeMarkdown } from '../core/sanitize.ts'
+import { fetchGitSkills } from '../sources/git-skills.ts'
 
 export interface GitSyncOptions {
   source: GitSkillSource

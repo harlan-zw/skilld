@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'pathe'
-import { yamlEscape, yamlParseKV } from './yaml'
+import { yamlEscape, yamlParseKV } from './yaml.ts'
 
 export interface SkillInfo {
   packageName?: string

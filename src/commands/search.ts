@@ -1,15 +1,15 @@
-import type { SearchFilter } from '../retriv/index'
+import type { SearchFilter } from '../retriv/index.ts'
 import { existsSync, readdirSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { detectCurrentAgent } from 'unagent/env'
-import { agents, detectTargetAgent } from '../agent/index'
-import { getPackageDbPath, REFERENCES_DIR } from '../cache/index'
-import { isInteractive } from '../cli-helpers'
-import { formatSnippet, readLock, sanitizeMarkdown } from '../core/index'
-import { getSharedSkillsDir } from '../core/shared'
-import { searchSnippets } from '../retriv/index'
+import { agents, detectTargetAgent } from '../agent/index.ts'
+import { getPackageDbPath, REFERENCES_DIR } from '../cache/index.ts'
+import { isInteractive } from '../cli-helpers.ts'
+import { formatSnippet, readLock, sanitizeMarkdown } from '../core/index.ts'
+import { getSharedSkillsDir } from '../core/shared.ts'
+import { searchSnippets } from '../retriv/index.ts'
 
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
 export function findPackageDbs(packageFilter?: string): string[] {
@@ -172,7 +172,7 @@ export const searchCommandDef = defineCommand({
       console.error('Error: `skilld search` requires a query in non-interactive mode.\n  Usage: skilld search "query"')
       process.exit(1)
     }
-    const { interactiveSearch } = await import('./search-interactive')
+    const { interactiveSearch } = await import('./search-interactive.ts')
     return interactiveSearch(args.package || undefined)
   },
 })

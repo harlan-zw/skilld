@@ -2,9 +2,9 @@
  * Agent detection - identify installed and active agents
  */
 
-import type { AgentType } from './types'
+import type { AgentType } from './types.ts'
 import { spawnSync } from 'node:child_process'
-import { agents } from './registry'
+import { agents } from './registry.ts'
 
 /**
  * Detect which agents are installed on the system

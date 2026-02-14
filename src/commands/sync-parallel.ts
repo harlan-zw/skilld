@@ -1,6 +1,6 @@
-import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index'
-import type { FeaturesConfig } from '../core/config'
-import type { ResolvedPackage } from '../sources/index'
+import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index.ts'
+import type { FeaturesConfig } from '../core/config.ts'
+import type { ResolvedPackage } from '../sources/index.ts'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import logUpdate from 'log-update'
@@ -15,7 +15,7 @@ import {
   linkSkillToAgents,
   optimizeDocs,
 
-} from '../agent/index'
+} from '../agent/index.ts'
 import {
   ensureCacheDir,
   getCacheDir,
@@ -26,20 +26,19 @@ import {
   linkPkgNamed,
   listReferenceFiles,
   resolvePkgDir,
-} from '../cache/index'
-import { defaultFeatures, readConfig, registerProject } from '../core/config'
-import { formatDuration } from '../core/formatting'
-import { parsePackages, readLock, writeLock } from '../core/lockfile'
-import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared'
-import { shutdownWorker } from '../retriv/pool'
+} from '../cache/index.ts'
+import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
+import { formatDuration } from '../core/formatting.ts'
+import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
+import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
-} from '../sources/index'
+} from '../sources/index.ts'
 
-import { ensureAgentInstructions, ensureGitignore, selectLlmConfig } from './sync'
 import {
   detectChangelog,
   fetchAndCacheResources,
@@ -51,7 +50,8 @@ import {
   RESOLVE_STEP_LABELS,
   resolveBaseDir,
   resolveLocalDep,
-} from './sync-shared'
+} from './sync-shared.ts'
+import { ensureAgentInstructions, ensureGitignore, selectLlmConfig } from './sync.ts'
 
 type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'exploring' | 'thinking' | 'generating' | 'done' | 'error'
 
