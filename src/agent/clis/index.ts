@@ -48,12 +48,18 @@ interface ToolProgressLog {
 export function createToolProgress(log: ToolProgressLog): (progress: StreamProgress) => void {
   const pending = new Map<string, { verb: string, path: string, count: number }>()
   let timer: ReturnType<typeof setTimeout> | null = null
+  let lastEmitted = ''
 
   function flush() {
+    const parts: string[] = []
     for (const [section, { verb, path, count }] of pending) {
-      const prefix = `\x1B[90m[${section}]\x1B[0m `
       const suffix = count > 1 ? ` \x1B[90m(+${count - 1})\x1B[0m` : ''
-      log.message(`${prefix}${verb} ${path}${suffix}`)
+      parts.push(`\x1B[90m[${section}]\x1B[0m ${verb} ${path}${suffix}`)
+    }
+    const msg = parts.join('  ')
+    if (msg && msg !== lastEmitted) {
+      log.message(msg)
+      lastEmitted = msg
     }
     pending.clear()
     timer = null
@@ -199,7 +205,7 @@ function resolveReferenceDirs(skillDir: string): string[] {
     return []
   return readdirSync(refsDir)
     .map(entry => join(refsDir, entry))
-    .filter(p => lstatSync(p).isSymbolicLink())
+    .filter(p => lstatSync(p).isSymbolicLink() && existsSync(p))
     .map(p => realpathSync(p))
 }
 
@@ -646,6 +652,12 @@ function cleanSectionOutput(content: string): string {
   }
 
   cleaned = sanitizeMarkdown(cleaned)
+
+  // Reject content that lacks any section structure — likely leaked LLM reasoning/narration
+  // Valid sections always contain headings (##) or item markers (⚠️ ✅ ✨)
+  if (!/^##\s/m.test(cleaned) && !/[⚠️✅✨]/.test(cleaned)) {
+    return ''
+  }
 
   return cleaned
 }
