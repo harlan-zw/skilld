@@ -98,6 +98,7 @@ export interface ParallelSyncConfig {
   force?: boolean
   debug?: boolean
   concurrency?: number
+  mode?: 'add' | 'update'
 }
 
 /** Data passed from phase 1 (base skill) to phase 2 (LLM enhancement) */
@@ -148,7 +149,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
     const doneCount = [...states.values()].filter(s => s.status === 'done').length
     const errorCount = [...states.values()].filter(s => s.status === 'error').length
-    const header = `\x1B[1mSyncing ${packages.length} packages\x1B[0m (${doneCount} done${errorCount > 0 ? `, ${errorCount} failed` : ''})\n`
+    const verb = config.mode === 'update' ? 'Updating' : 'Syncing'
+    const header = `\x1B[1m${verb} ${packages.length} packages\x1B[0m (${doneCount} done${errorCount > 0 ? `, ${errorCount} failed` : ''})\n`
 
     logUpdate(header + lines.join('\n'))
   }
@@ -202,7 +204,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     }
   }
 
-  const skillMsg = `Created ${successfulPkgs.length} base skills${shippedPkgs.length > 1 ? ` (Skipping ${shippedPkgs.length})` : ''}`
+  const pastVerb = config.mode === 'update' ? 'Updated' : 'Created'
+  const skillMsg = `${pastVerb} ${successfulPkgs.length} base skills${shippedPkgs.length > 1 ? ` (Skipping ${shippedPkgs.length})` : ''}`
   p.log.success(skillMsg)
 
   for (const [, data] of skillData) {
@@ -248,7 +251,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
   await shutdownWorker()
 
-  p.outro(`Synced ${successfulPkgs.length}/${packages.length} packages`)
+  p.outro(`${pastVerb} ${successfulPkgs.length}/${packages.length} packages`)
 }
 
 type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: string) => void
@@ -418,7 +421,7 @@ async function syncBaseSkill(
     registerProject(cwd)
   }
 
-  update(packageName, 'done', 'Base skill created', versionKey)
+  update(packageName, 'done', config.mode === 'update' ? 'Skill updated' : 'Base skill created', versionKey)
 
   return {
     resolved,

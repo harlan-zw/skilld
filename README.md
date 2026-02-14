@@ -81,7 +81,7 @@ However, always be cautious when using skills from untrusted sources.
 
 ### Do skills update when my deps update?
 
-Yes. Run `skilld update` to regenerate outdated skills, or add `skilld --prepare -b` to your prepare script and they regenerate in the background whenever you install packages.
+Yes. Run `skilld update` to regenerate outdated skills, or add `skilld update -b` to your prepare script and they regenerate in the background whenever you install packages.
 
 ## Installation
 
@@ -102,7 +102,7 @@ Add to `package.json` to keep skills fresh on install:
 ```json
 {
   "scripts": {
-    "prepare": "skilld --prepare -b"
+    "prepare": "skilld update -b"
   }
 }
 ```
@@ -169,8 +169,6 @@ skilld config
 | `--force` | `-f` | `false` | Ignore all caches, re-fetch docs and regenerate |
 | `--model`      | `-m` | config default | LLM model for skill generation (sonnet, haiku, opus, etc.) |
 | `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
-| `--prepare`    |      | `false`        | Non-interactive sync for prepare hook (outdated only) |
-| `--background` | `-b` | `false`        | Run `--prepare` in a detached background process |
 
 ## The Landscape
 

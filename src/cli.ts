@@ -1,7 +1,5 @@
 #!/usr/bin/env node
-import type { AgentType } from './agent'
 import type { PackageUsage } from './agent/detect-imports'
-import { spawn } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
@@ -145,28 +143,6 @@ async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> 
   return result
 }
 
-/** Non-interactive sync for pnpm prepare hook. Syncs outdated skills only, no LLM, exits 0 always. */
-async function prepareSync(cwd: string, agentFlag?: AgentType): Promise<void> {
-  const agent = resolveAgent(agentFlag)
-
-  if (!agent)
-    return
-
-  const state = await getProjectState(cwd)
-  if (state.outdated.length === 0) {
-    p.log.success('Skills up to date')
-    return
-  }
-
-  const packages = state.outdated.map(s => s.packageName || s.name)
-  await syncCommand(state, {
-    packages,
-    global: false,
-    agent,
-    yes: true,
-  })
-}
-
 // ── Subcommands (lazy-loaded) ──
 
 const SUBCOMMAND_NAMES = ['add', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache']
@@ -180,17 +156,6 @@ const main = defineCommand({
     description: 'Sync package documentation for agentic use',
   },
   args: {
-    prepare: {
-      type: 'boolean',
-      description: 'Non-interactive sync for pnpm prepare hook (outdated only, no LLM, always exits 0)',
-      default: false,
-    },
-    background: {
-      type: 'boolean',
-      alias: 'b',
-      description: 'Run --prepare in background (detached process)',
-      default: false,
-    },
     agent: sharedArgs.agent,
   },
   subCommands: {
@@ -213,22 +178,6 @@ const main = defineCommand({
       return
 
     const cwd = process.cwd()
-
-    // Prepare mode — pnpm prepare hook: sync outdated only, no LLM, no prompts, always exit 0
-    if (args.prepare) {
-      // Background mode: spawn detached process and exit immediately
-      if (args.background) {
-        const child = spawn(process.execPath, [process.argv[1], '--prepare', ...(args.agent ? ['--agent', args.agent] : [])], {
-          cwd,
-          detached: true,
-          stdio: 'ignore',
-        })
-        child.unref()
-        return
-      }
-      await prepareSync(cwd, args.agent as AgentType | undefined).catch(() => {})
-      return
-    }
 
     // Bare `skilld` — interactive menu (requires TTY)
     if (!isInteractive()) {

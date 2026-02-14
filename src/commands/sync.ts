@@ -206,6 +206,7 @@ export interface SyncOptions {
   yes: boolean
   force?: boolean
   debug?: boolean
+  mode?: 'add' | 'update'
 }
 
 export async function syncCommand(state: ProjectState, opts: SyncOptions): Promise<void> {
@@ -221,6 +222,7 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
         yes: opts.yes,
         force: opts.force,
         debug: opts.debug,
+        mode: opts.mode,
       })
     }
 
@@ -246,6 +248,7 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
       yes: opts.yes,
       force: opts.force,
       debug: opts.debug,
+      mode: opts.mode,
     })
   }
 
@@ -465,6 +468,7 @@ interface SyncConfig {
   yes: boolean
   force?: boolean
   debug?: boolean
+  mode?: 'add' | 'update'
 }
 
 async function syncSinglePackage(packageName: string, config: SyncConfig): Promise<void> {
@@ -709,7 +713,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   })
   writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
 
-  p.log.success(`Created base skill: ${relative(cwd, skillDir)}`)
+  p.log.success(config.mode === 'update' ? `Updated skill: ${relative(cwd, skillDir)}` : `Created base skill: ${relative(cwd, skillDir)}`)
 
   // Ask about LLM optimization (skip if -y flag, skipLlm config, or model already specified)
   const globalConfig = readConfig()
@@ -757,7 +761,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
 
   await shutdownWorker()
 
-  p.outro(`Synced ${packageName} to ${relative(cwd, skillDir)}`)
+  p.outro(config.mode === 'update' ? `Updated ${packageName}` : `Synced ${packageName} to ${relative(cwd, skillDir)}`)
 }
 
 interface EnhanceOptions {
@@ -929,21 +933,48 @@ export const updateCommandDef = defineCommand({
       description: 'Package(s) to update (space or comma-separated). Without args, syncs all outdated.',
       required: false,
     },
+    background: {
+      type: 'boolean',
+      alias: 'b',
+      description: 'Run in background (detached process, non-interactive)',
+      default: false,
+    },
     ...sharedArgs,
   },
   async run({ args }) {
     const cwd = process.cwd()
+
+    // Background mode: spawn detached `skilld update` and exit immediately
+    if (args.background) {
+      const { spawn } = await import('node:child_process')
+      const updateArgs = ['update', ...(args.package ? [args.package] : []), ...(args.agent ? ['--agent', args.agent] : [])]
+      const child = spawn(process.execPath, [process.argv[1], ...updateArgs], {
+        cwd,
+        detached: true,
+        stdio: 'ignore',
+      })
+      child.unref()
+      return
+    }
+
+    const silent = !isInteractive()
+
     let agent = resolveAgent(args.agent)
     if (!agent) {
+      if (silent)
+        return
       agent = await promptForAgent()
       if (!agent)
         return
     }
 
-    const state = await getProjectState(cwd)
-    const generators = getInstalledGenerators()
     const config = readConfig()
-    p.intro(introLine({ state, generators, modelId: config.model }))
+    const state = await getProjectState(cwd)
+
+    if (!silent) {
+      const generators = getInstalledGenerators()
+      p.intro(introLine({ state, generators, modelId: config.model }))
+    }
 
     // Specific packages
     if (args.package) {
@@ -952,10 +983,11 @@ export const updateCommandDef = defineCommand({
         packages,
         global: args.global,
         agent,
-        model: args.model as OptimizeModel | undefined,
-        yes: args.yes,
+        model: (args.model as OptimizeModel | undefined) || (silent ? config.model : undefined),
+        yes: args.yes || silent,
         force: args.force,
         debug: args.debug,
+        mode: 'update',
       })
     }
 
@@ -970,10 +1002,11 @@ export const updateCommandDef = defineCommand({
       packages,
       global: args.global,
       agent,
-      model: args.model as OptimizeModel | undefined,
-      yes: args.yes,
+      model: (args.model as OptimizeModel | undefined) || (silent ? config.model : undefined),
+      yes: args.yes || silent,
       force: args.force,
       debug: args.debug,
+      mode: 'update',
     })
   },
 })
