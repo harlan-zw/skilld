@@ -158,6 +158,14 @@ const REPO_REGISTRY: Record<string, RepoEntry> = {
     packages: {
       typescript: { primary: true, filePatterns: ['*.ts', '*.tsx', '*.mts', '*.cts'] },
     },
+    blogReleases: [
+      { version: '6.0', url: 'https://devblogs.microsoft.com/typescript/announcing-typescript-6-0-beta/', date: '2026-02-11', title: 'Announcing TypeScript 6.0 Beta' },
+      { version: '5.9', url: 'https://devblogs.microsoft.com/typescript/announcing-typescript-5-9/', date: '2025-08-01', title: 'Announcing TypeScript 5.9' },
+      { version: '5.8', url: 'https://devblogs.microsoft.com/typescript/announcing-typescript-5-8/', date: '2025-02-28', title: 'Announcing TypeScript 5.8' },
+      { version: '5.7', url: 'https://devblogs.microsoft.com/typescript/announcing-typescript-5-7/', date: '2024-11-22', title: 'Announcing TypeScript 5.7' },
+      { version: '5.6', url: 'https://devblogs.microsoft.com/typescript/announcing-typescript-5-6/', date: '2024-09-09', title: 'Announcing TypeScript 5.6' },
+      { version: '5.5', url: 'https://devblogs.microsoft.com/typescript/announcing-typescript-5-5/', date: '2024-06-20', title: 'Announcing TypeScript 5.5' },
+    ],
   },
 
   'jashkenas/coffeescript': {
