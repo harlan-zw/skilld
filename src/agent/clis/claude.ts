@@ -32,6 +32,8 @@ export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]
     '--include-partial-messages',
     '--allowedTools',
     allowedTools,
+    '--disallowedTools',
+    'WebSearch WebFetch Task',
     '--add-dir',
     skillDir,
     ...symlinkDirs.flatMap(d => ['--add-dir', d]),
