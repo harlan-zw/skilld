@@ -1,11 +1,12 @@
 /**
  * GitHub discussions fetching via gh CLI GraphQL
  * Prioritizes Q&A and Help categories, includes accepted answers
+ * Comment quality filtering, smart truncation, noise removal
  */
 
 import { spawnSync } from 'node:child_process'
-import { BOT_USERS, buildFrontmatter, isoDate } from './github-common'
-import { isGhAvailable } from './issues'
+import { BOT_USERS, buildFrontmatter, isoDate } from './github-common.ts'
+import { isGhAvailable } from './issues.ts'
 
 /** Categories most useful for skill generation (in priority order) */
 const HIGH_VALUE_CATEGORIES = new Set([
@@ -24,6 +25,8 @@ const LOW_VALUE_CATEGORIES = new Set([
 export interface DiscussionComment {
   body: string
   author: string
+  reactions: number
+  isMaintainer?: boolean
 }
 
 export interface GitHubDiscussion {
@@ -39,9 +42,64 @@ export interface GitHubDiscussion {
   topComments: DiscussionComment[]
 }
 
+/** Noise patterns in comments — filter these out */
+const COMMENT_NOISE_RE = /^(?:\+1|👍|same here|any update|bump|following|is there any progress|when will this|me too|i have the same|same issue|thanks|thank you)[\s!?.]*$/i
+
+/** Check if body contains a code block */
+function hasCodeBlock(text: string): boolean {
+  return /```[\s\S]*?```/.test(text) || /`[^`]+`/.test(text)
+}
+
+/**
+ * Smart body truncation — preserves code blocks and error messages.
+ * Instead of slicing at a char limit, finds a safe break point.
+ */
+function truncateBody(body: string, limit: number): string {
+  if (body.length <= limit)
+    return body
+
+  // Find code block boundaries so we don't cut mid-block
+  const codeBlockRe = /```[\s\S]*?```/g
+  let lastSafeEnd = limit
+  let match: RegExpExecArray | null
+
+  // eslint-disable-next-line no-cond-assign
+  while ((match = codeBlockRe.exec(body)) !== null) {
+    const blockStart = match.index
+    const blockEnd = blockStart + match[0].length
+
+    if (blockStart < limit && blockEnd > limit) {
+      if (blockEnd <= limit + 500) {
+        lastSafeEnd = blockEnd
+      }
+      else {
+        lastSafeEnd = blockStart
+      }
+      break
+    }
+  }
+
+  // Try to break at a paragraph boundary
+  const slice = body.slice(0, lastSafeEnd)
+  const lastParagraph = slice.lastIndexOf('\n\n')
+  if (lastParagraph > lastSafeEnd * 0.6)
+    return `${slice.slice(0, lastParagraph)}\n\n...`
+
+  return `${slice}...`
+}
+
+/**
+ * Score a comment for quality. Higher = more useful for skill generation.
+ * Maintainers 3x, code blocks 2x, reactions linear.
+ */
+function scoreComment(c: { body: string, reactions: number, isMaintainer?: boolean }): number {
+  return (c.isMaintainer ? 3 : 1) * (hasCodeBlock(c.body) ? 2 : 1) * (1 + c.reactions)
+}
+
 /**
  * Fetch discussions from a GitHub repo using gh CLI GraphQL.
  * Prioritizes Q&A and Help categories. Includes accepted answer body for answered discussions.
+ * Fetches extra comments and scores them for quality.
  */
 export async function fetchGitHubDiscussions(
   owner: string,
@@ -65,7 +123,8 @@ export async function fetchGitHubDiscussions(
   try {
     // Fetch more to compensate for filtering
     const fetchCount = Math.min(limit * 3, 80)
-    const query = `query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { discussions(first: ${fetchCount}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number title body category { name } createdAt url upvoteCount comments(first: 3) { totalCount nodes { body author { login } } } answer { body } author { login } } } } }`
+    // Fetch 10 comments per discussion so we can filter noise and pick best
+    const query = `query($owner: String!, $repo: String!) { repository(owner: $owner, name: $repo) { discussions(first: ${fetchCount}, orderBy: {field: CREATED_AT, direction: DESC}) { nodes { number title body category { name } createdAt url upvoteCount comments(first: 10) { totalCount nodes { body author { login } authorAssociation reactions { totalCount } } } answer { body author { login } authorAssociation } author { login } } } } }`
 
     const { stdout: result } = spawnSync('gh', ['api', 'graphql', '-f', `query=${query}`, '-f', `owner=${owner}`, '-f', `repo=${repo}`], {
       encoding: 'utf-8',
@@ -85,20 +144,45 @@ export async function fetchGitHubDiscussions(
         const cat = (d.category?.name || '').toLowerCase()
         return !LOW_VALUE_CATEGORIES.has(cat)
       })
-      .map((d: any) => ({
-        number: d.number,
-        title: d.title,
-        body: d.body || '',
-        category: d.category?.name || '',
-        createdAt: d.createdAt,
-        url: d.url,
-        upvoteCount: d.upvoteCount || 0,
-        comments: d.comments?.totalCount || 0,
-        answer: d.answer?.body || undefined,
-        topComments: (d.comments?.nodes || [])
+      .map((d: any) => {
+        // Process answer — tag maintainer status
+        let answer: string | undefined
+        if (d.answer?.body) {
+          const isMaintainer = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(d.answer.authorAssociation)
+          const author = d.answer.author?.login
+          const tag = isMaintainer && author ? `**@${author}** [maintainer]:\n\n` : ''
+          answer = `${tag}${d.answer.body}`
+        }
+
+        // Process comments — filter noise, score for quality, take best 3
+        const comments: DiscussionComment[] = (d.comments?.nodes || [])
           .filter((c: any) => c.author && !BOT_USERS.has(c.author.login))
-          .map((c: any) => ({ body: c.body || '', author: c.author.login })),
-      }))
+          .filter((c: any) => !COMMENT_NOISE_RE.test((c.body || '').trim()))
+          .map((c: any) => {
+            const isMaintainer = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(c.authorAssociation)
+            return {
+              body: c.body || '',
+              author: c.author.login,
+              reactions: c.reactions?.totalCount || 0,
+              isMaintainer,
+            }
+          })
+          .sort((a: DiscussionComment, b: DiscussionComment) => scoreComment(b) - scoreComment(a))
+          .slice(0, 3)
+
+        return {
+          number: d.number,
+          title: d.title,
+          body: d.body || '',
+          category: d.category?.name || '',
+          createdAt: d.createdAt,
+          url: d.url,
+          upvoteCount: d.upvoteCount || 0,
+          comments: d.comments?.totalCount || 0,
+          answer,
+          topComments: comments,
+        }
+      })
       // Prioritize high-value categories, then sort by engagement
       .sort((a: GitHubDiscussion, b: GitHubDiscussion) => {
         const aHigh = HIGH_VALUE_CATEGORIES.has(a.category.toLowerCase()) ? 1 : 0
@@ -135,27 +219,19 @@ export function formatDiscussionAsMarkdown(d: GitHubDiscussion): string {
   const lines = [fm, '', `# ${d.title}`]
 
   if (d.body) {
-    const body = d.body.length > bodyLimit
-      ? `${d.body.slice(0, bodyLimit)}...`
-      : d.body
-    lines.push('', body)
+    lines.push('', truncateBody(d.body, bodyLimit))
   }
 
   if (d.answer) {
-    const answerLimit = 1000
-    const answer = d.answer.length > answerLimit
-      ? `${d.answer.slice(0, answerLimit)}...`
-      : d.answer
-    lines.push('', '---', '', '## Accepted Answer', '', answer)
+    lines.push('', '---', '', '## Accepted Answer', '', truncateBody(d.answer, 1000))
   }
   else if (d.topComments.length > 0) {
     // No accepted answer — include top comments as context
     lines.push('', '---', '', '## Top Comments')
     for (const c of d.topComments) {
-      const commentBody = c.body.length > 600
-        ? `${c.body.slice(0, 600)}...`
-        : c.body
-      lines.push('', `**@${c.author}:**`, '', commentBody)
+      const reactions = c.reactions > 0 ? ` (+${c.reactions})` : ''
+      const maintainer = c.isMaintainer ? ' [maintainer]' : ''
+      lines.push('', `**@${c.author}**${maintainer}${reactions}:`, '', truncateBody(c.body, 600))
     }
   }
 
