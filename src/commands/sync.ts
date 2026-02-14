@@ -19,6 +19,7 @@ import {
   linkSkillToAgents,
   optimizeDocs,
 } from '../agent'
+import { maxItems, maxLines } from '../agent/prompts/optional/budget'
 import {
   ensureCacheDir,
   getCacheDir,
@@ -381,6 +382,7 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
 export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'api-changes']
 
 export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: CustomPrompt, cancelled: boolean }> {
+  p.log.info('More sections = less budget each. Fewer sections = deeper coverage.')
   const selected = await p.multiselect({
     message,
     options: [
@@ -399,6 +401,21 @@ export async function selectSkillSections(message = 'Generate SKILL.md with LLM'
   const sections = selected as SkillSection[]
   if (sections.length === 0)
     return { sections: [], cancelled: false }
+
+  // Show per-section budget based on selection count
+  if (sections.length > 1) {
+    const n = sections.length
+    const budgetLines: string[] = []
+    for (const s of sections) {
+      switch (s) {
+        case 'api-changes': budgetLines.push(`  API changes     ≤${maxLines(50, 80, n)} lines, ${maxItems(6, 12, n)} items`); break
+        case 'best-practices': budgetLines.push(`  Best practices  ≤${maxLines(80, 150, n)} lines, ${maxItems(4, 10, n)} items`); break
+        case 'api': budgetLines.push(`  Doc map         ≤${maxLines(15, 25, n)} lines`); break
+        case 'custom': budgetLines.push(`  Custom          ≤${maxLines(50, 80, n)} lines`); break
+      }
+    }
+    p.log.info(`Budget (${n} sections):\n${budgetLines.join('\n')}`)
+  }
 
   let customPrompt: CustomPrompt | undefined
   if (sections.includes('custom')) {
