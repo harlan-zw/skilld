@@ -31,7 +31,7 @@ import {
   resolvePkgDir,
 } from '../cache'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
-import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config'
+import { defaultFeatures, hasCompletedWizard, readConfig, registerProject, updateConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared'
@@ -58,6 +58,7 @@ import {
   resolveBaseDir,
   resolveLocalDep,
 } from './sync-shared'
+import { runWizard } from './wizard'
 
 function showResolveAttempts(attempts: ResolveAttempt[]): void {
   if (attempts.length === 0)
@@ -871,6 +872,10 @@ export const addCommandDef = defineCommand({
       if (!agent)
         return
     }
+
+    // First-time setup — configure features + LLM model
+    if (!hasCompletedWizard())
+      await runWizard()
 
     // Collect raw inputs (don't split URLs on slashes/spaces yet)
     const rawInputs = [...new Set(
