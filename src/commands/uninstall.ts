@@ -8,7 +8,7 @@ import { CACHE_DIR } from '../cache/index.ts'
 import { isInteractive, sharedArgs } from '../cli-helpers.ts'
 import { getRegisteredProjects, unregisterProject } from '../core/config.ts'
 import { readLock } from '../core/lockfile.ts'
-import { SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { mapInsert, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { SKILLD_MARKER_END, SKILLD_MARKER_START } from './sync.ts'
 
 /**
@@ -217,9 +217,8 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
   if (untrackedByDir.size > 0) {
     const groupedUntracked = new Map<string, Set<string>>()
     for (const [_dir, { label, skills }] of untrackedByDir) {
-      if (!groupedUntracked.has(label))
-        groupedUntracked.set(label, new Set())
-      for (const s of skills) groupedUntracked.get(label)!.add(s)
+      const set = mapInsert(groupedUntracked, label, () => new Set())
+      for (const s of skills) set.add(s)
     }
 
     const totalUntracked = [...groupedUntracked.values()].reduce((sum, s) => sum + s.size, 0)
@@ -240,9 +239,7 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
     const [prefix, name] = item.label.includes(': ')
       ? item.label.split(': ', 2)
       : ['other', item.label]
-    if (!groups.has(prefix))
-      groups.set(prefix, [])
-    groups.get(prefix)!.push({ name, version: item.version })
+    mapInsert(groups, prefix, () => []).push({ name, version: item.version })
   }
 
   const formatGroup = (items: Array<{ name: string, version?: string }>) =>

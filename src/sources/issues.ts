@@ -6,6 +6,7 @@
 
 import { spawnSync } from 'node:child_process'
 
+import { mapInsert } from '../core/shared.ts'
 import { BOT_USERS, buildFrontmatter, isoDate } from './github-common.ts'
 
 export type IssueType = 'bug' | 'question' | 'docs' | 'feature' | 'other'
@@ -166,9 +167,7 @@ export function freshnessScore(reactions: number, createdAt: string): number {
 function applyTypeQuotas(issues: GitHubIssue[], limit: number): GitHubIssue[] {
   const byType = new Map<IssueType, GitHubIssue[]>()
   for (const issue of issues) {
-    const list = byType.get(issue.type) || []
-    list.push(issue)
-    byType.set(issue.type, list)
+    mapInsert(byType, issue.type, () => []).push(issue)
   }
 
   // Sort each group by score
@@ -516,9 +515,7 @@ export function formatIssueAsMarkdown(issue: GitHubIssue): string {
 export function generateIssueIndex(issues: GitHubIssue[]): string {
   const byType = new Map<IssueType, GitHubIssue[]>()
   for (const issue of issues) {
-    const list = byType.get(issue.type) || []
-    list.push(issue)
-    byType.set(issue.type, list)
+    mapInsert(byType, issue.type, () => []).push(issue)
   }
 
   const typeLabels: Record<IssueType, string> = {

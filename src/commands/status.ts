@@ -11,8 +11,8 @@ import { sharedArgs } from '../cli-helpers.ts'
 import { defaultFeatures, hasConfig, readConfig } from '../core/config.ts'
 import { formatSource, timeAgo } from '../core/formatting.ts'
 import { parsePackages } from '../core/lockfile.ts'
+import { getSharedSkillsDir, mapInsert } from '../core/shared.ts'
 
-import { getSharedSkillsDir } from '../core/shared.ts'
 import { iterateSkills } from '../core/skills.ts'
 import { version as skilldVersion } from '../version.ts'
 
@@ -61,9 +61,8 @@ async function countEmbeddings(packageName: string, version?: string): Promise<n
     return null
   try {
     const { DatabaseSync } = await import('node:sqlite')
-    const db = new DatabaseSync(dbPath, { open: true, readOnly: true })
+    using db = new DatabaseSync(dbPath, { open: true, readOnly: true })
     const row = db.prepare('SELECT count(*) as cnt FROM vector_metadata').get() as { cnt: number } | undefined
-    db.close()
     return row?.cnt ?? null
   }
   catch {
@@ -177,17 +176,13 @@ export async function statusCommand(opts: StatusOptions = {}): Promise<void> {
     const key = skill.info?.packageName || skill.name
     const map = skill.scope === 'local' ? localPkgs : globalPkgs
 
-    if (!map.has(key)) {
-      map.set(key, {
-        name: skill.name,
-        info: skill.info || {},
-        agents: new Set([skill.agent]),
-        scope: skill.scope,
-      })
-    }
-    else {
-      map.get(key)!.agents.add(skill.agent)
-    }
+    const entry = mapInsert(map, key, () => ({
+      name: skill.name,
+      info: skill.info || {},
+      agents: new Set<AgentType>(),
+      scope: skill.scope,
+    }))
+    entry.agents.add(skill.agent)
   }
 
   const buildPackageLines = async (pkgs: Map<string, TrackedPackage>): Promise<string[]> => {

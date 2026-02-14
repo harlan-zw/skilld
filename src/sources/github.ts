@@ -6,6 +6,7 @@ import type { LlmsLink } from './types.ts'
 import { spawnSync } from 'node:child_process'
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { mapInsert } from '../core/shared.ts'
 import { isGhAvailable } from './issues.ts'
 import { getDocOverride } from './package-registry.ts'
 import { $fetch, extractBranchHint, fetchText, parseGitHubUrl } from './utils.ts'
@@ -211,9 +212,7 @@ function discoverDocFiles(allFiles: string[]): DiscoveredDocs | null {
       continue
 
     const prefix = file.slice(0, docsIdx + '/docs/'.length)
-    const group = docsGroups.get(prefix) || []
-    group.push(file)
-    docsGroups.set(prefix, group)
+    mapInsert(docsGroups, prefix, () => []).push(file)
   }
 
   if (docsGroups.size > 0) {
@@ -239,9 +238,7 @@ function discoverDocFiles(allFiles: string[]): DiscoveredDocs | null {
       continue
 
     const dir = file.slice(0, lastSlash + 1)
-    const group = dirGroups.get(dir) || []
-    group.push(file)
-    dirGroups.set(dir, group)
+    mapInsert(dirGroups, dir, () => []).push(file)
   }
 
   if (dirGroups.size === 0)

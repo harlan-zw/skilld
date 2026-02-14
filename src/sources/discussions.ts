@@ -5,6 +5,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { mapInsert } from '../core/shared.ts'
 import { BOT_USERS, buildFrontmatter, isoDate } from './github-common.ts'
 import { isGhAvailable } from './issues.ts'
 
@@ -246,9 +247,7 @@ export function generateDiscussionIndex(discussions: GitHubDiscussion[]): string
   const byCategory = new Map<string, GitHubDiscussion[]>()
   for (const d of discussions) {
     const cat = d.category || 'Uncategorized'
-    const list = byCategory.get(cat) || []
-    list.push(d)
-    byCategory.set(cat, list)
+    mapInsert(byCategory, cat, () => []).push(d)
   }
 
   const answered = discussions.filter(d => d.answer).length

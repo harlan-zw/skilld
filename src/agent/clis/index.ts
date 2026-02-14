@@ -14,6 +14,7 @@ import { promisify } from 'node:util'
 import { join } from 'pathe'
 import { readCachedSection, writeSections } from '../../cache/index.ts'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
+import { mapInsert } from '../../core/shared.ts'
 import { detectInstalledAgents } from '../detect.ts'
 import { buildAllSectionPrompts, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts/index.ts'
 import { agents } from '../registry.ts'
@@ -109,15 +110,10 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       return
     }
 
-    const entry = pending.get(key)
-    if (entry) {
-      entry.verb = verb
-      entry.path = path
-      entry.count++
-    }
-    else {
-      pending.set(key, { verb, path, count: 1 })
-    }
+    const entry = mapInsert(pending, key, () => ({ verb, path, count: 0 }))
+    entry.verb = verb
+    entry.path = path
+    entry.count++
 
     if (!timer) {
       timer = setTimeout(flush, 400)
@@ -655,7 +651,7 @@ function cleanSectionOutput(content: string): string {
 
   // Reject content that lacks any section structure — likely leaked LLM reasoning/narration
   // Valid sections always contain headings (##) or item markers (⚠️ ✅ ✨)
-  if (!/^##\s/m.test(cleaned) && !/[⚠️✅✨]/.test(cleaned)) {
+  if (!/^##\s/m.test(cleaned) && !/⚠️|✅|✨/.test(cleaned)) {
     return ''
   }
 
