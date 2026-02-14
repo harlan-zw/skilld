@@ -53,7 +53,7 @@
     "test:run": "vitest run",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
-    "prepare": "skilld update -b --model haiku"
+    "prepare": "obuild --stub && (skilld update -b --model haiku || true)"
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",

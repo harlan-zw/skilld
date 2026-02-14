@@ -27,7 +27,7 @@ catalogs:
     p-limit: ^7.3.0
     retriv: ^0.10.0
     sqlite-vec: ^0.1.6
-    typescript: ^5.9.3
+    typescript: beta
   dev-build:
     '@types/node': ^25.2.3
     obuild: ^0.4.27

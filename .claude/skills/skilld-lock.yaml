@@ -22,3 +22,10 @@ skills:
     source: "https://raw.githubusercontent.com/sindresorhus/log-update/main/readme.md"
     syncedAt: 2026-02-13
     generator: skilld
+  microsoft-typescript:
+    packageName: typescript
+    version: 6.0.0-beta
+    repo: microsoft/TypeScript
+    source: "ungh://microsoft/TypeScript"
+    syncedAt: 2026-02-14
+    generator: skilld

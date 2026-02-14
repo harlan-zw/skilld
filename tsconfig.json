@@ -11,7 +11,6 @@
     "declaration": true,
     "declarationMap": true,
     "noEmit": true,
-    "esModuleInterop": true,
     "skipLibCheck": true
   },
   "include": ["src"],
