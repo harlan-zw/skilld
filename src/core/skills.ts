@@ -1,9 +1,9 @@
-import type { AgentType } from '../agent'
+import type { AgentType } from '../agent/index'
 import type { SkillInfo } from './lockfile'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'pathe'
-import { agents } from '../agent'
-import { readLocalDependencies } from '../sources'
+import { agents } from '../agent/index'
+import { readLocalDependencies } from '../sources/index'
 import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile'
 import { getSharedSkillsDir } from './shared'
 

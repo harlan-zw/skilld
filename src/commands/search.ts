@@ -1,15 +1,15 @@
-import type { SearchFilter } from '../retriv'
+import type { SearchFilter } from '../retriv/index'
 import { existsSync, readdirSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { detectCurrentAgent } from 'unagent/env'
-import { agents, detectTargetAgent } from '../agent'
-import { getPackageDbPath, REFERENCES_DIR } from '../cache'
+import { agents, detectTargetAgent } from '../agent/index'
+import { getPackageDbPath, REFERENCES_DIR } from '../cache/index'
 import { isInteractive } from '../cli-helpers'
-import { formatSnippet, readLock, sanitizeMarkdown } from '../core'
+import { formatSnippet, readLock, sanitizeMarkdown } from '../core/index'
 import { getSharedSkillsDir } from '../core/shared'
-import { searchSnippets } from '../retriv'
+import { searchSnippets } from '../retriv/index'
 
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
 export function findPackageDbs(packageFilter?: string): string[] {

@@ -1,7 +1,7 @@
-import type { SearchFilter, SearchSnippet } from '../retriv'
+import type { SearchFilter, SearchSnippet } from '../retriv/index'
 import { createLogUpdate } from 'log-update'
-import { formatCompactSnippet, highlightTerms, sanitizeMarkdown } from '../core'
-import { closePool, openPool, searchPooled } from '../retriv'
+import { formatCompactSnippet, highlightTerms, sanitizeMarkdown } from '../core/index'
+import { closePool, openPool, searchPooled } from '../retriv/index'
 import { findPackageDbs, parseFilterPrefix } from './search'
 
 const FILTER_CYCLE = [undefined, 'docs', 'issues', 'releases'] as const

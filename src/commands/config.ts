@@ -1,7 +1,7 @@
 import type { FeaturesConfig } from '../core/config'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { agents, getAvailableModels } from '../agent'
+import { agents, getAvailableModels } from '../agent/index'
 import { getInstalledGenerators, introLine, requireInteractive } from '../cli-helpers'
 import { defaultFeatures, readConfig, updateConfig } from '../core/config'
 import { getProjectState } from '../core/skills'

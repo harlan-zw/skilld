@@ -1,4 +1,4 @@
-import type { SearchSnippet } from '../retriv'
+import type { SearchSnippet } from '../retriv/index'
 import type { ProjectState } from './skills'
 import * as p from '@clack/prompts'
 

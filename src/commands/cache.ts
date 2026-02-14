@@ -6,7 +6,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
-import { CACHE_DIR } from '../cache'
+import { CACHE_DIR } from '../cache/index'
 import { clearEmbeddingCache } from '../retriv/embedding-cache'
 
 const LLM_CACHE_DIR = join(CACHE_DIR, 'llm-cache')

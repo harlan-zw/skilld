@@ -1,7 +1,7 @@
 import type { FeaturesConfig } from '../core/config'
 import { execSync } from 'node:child_process'
 import * as p from '@clack/prompts'
-import { getAvailableModels } from '../agent'
+import { getAvailableModels } from '../agent/index'
 import { isInteractive } from '../cli-helpers'
 import { defaultFeatures, updateConfig } from '../core/config'
 

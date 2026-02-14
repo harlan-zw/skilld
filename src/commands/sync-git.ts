@@ -5,13 +5,13 @@
  * copied directly, no doc resolution or LLM generation.
  */
 
-import type { AgentType } from '../agent'
+import type { AgentType } from '../agent/index'
 import type { GitSkillSource } from '../sources/git-skills'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { dirname, join } from 'pathe'
-import { agents } from '../agent'
-import { CACHE_DIR } from '../cache'
+import { agents } from '../agent/index'
+import { CACHE_DIR } from '../cache/index'
 import { registerProject } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { writeLock } from '../core/lockfile'

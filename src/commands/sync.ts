@@ -1,7 +1,7 @@
-import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent'
+import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index'
 import type { FeaturesConfig } from '../core/config'
 import type { ProjectState } from '../core/skills'
-import type { ResolveAttempt } from '../sources'
+import type { ResolveAttempt } from '../sources/index'
 import type { GitSkillSource } from '../sources/git-skills'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
@@ -18,7 +18,7 @@ import {
   getModelName,
   linkSkillToAgents,
   optimizeDocs,
-} from '../agent'
+} from '../agent/index'
 import { maxItems, maxLines } from '../agent/prompts/optional/budget'
 import {
   ensureCacheDir,
@@ -30,7 +30,7 @@ import {
   linkPkgNamed,
   listReferenceFiles,
   resolvePkgDir,
-} from '../cache'
+} from '../cache/index'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
 import { defaultFeatures, hasCompletedWizard, readConfig, registerProject, updateConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
@@ -43,7 +43,7 @@ import {
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
-} from '../sources'
+} from '../sources/index'
 import { parseGitSkillInput } from '../sources/git-skills'
 import { syncGitSkills } from './sync-git'
 import { syncPackagesParallel } from './sync-parallel'

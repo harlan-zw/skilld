@@ -1,4 +1,4 @@
-import type { OptimizeModel } from '../agent'
+import type { OptimizeModel } from '../agent/index'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'pathe'

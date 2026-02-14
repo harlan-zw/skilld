@@ -26,7 +26,7 @@ export {
   createIndex,
   search,
   searchSnippets,
-} from './retriv'
+} from './retriv/index'
 export type {
   Document,
   IndexConfig,
@@ -34,7 +34,7 @@ export type {
   SearchOptions,
   SearchResult,
   SearchSnippet,
-} from './retriv'
+} from './retriv/index'
 
 // Doc resolver
 export {
@@ -46,7 +46,7 @@ export {
   parseMarkdownLinks,
   readLocalDependencies,
   resolvePackageDocs,
-} from './sources'
+} from './sources/index'
 export type {
   FetchedDoc,
   LlmsContent,
@@ -54,4 +54,4 @@ export type {
   LocalDependency,
   NpmPackageInfo,
   ResolvedPackage,
-} from './sources'
+} from './sources/index'

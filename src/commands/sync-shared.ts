@@ -1,9 +1,9 @@
-import type { AgentType } from '../agent'
+import type { AgentType } from '../agent/index'
 import type { FeaturesConfig } from '../core/config'
-import type { ResolvedPackage, ResolveStep } from '../sources'
+import type { ResolvedPackage, ResolveStep } from '../sources/index'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join, resolve } from 'pathe'
-import { agents } from '../agent'
+import { agents } from '../agent/index'
 import {
   CACHE_DIR,
   clearCache,
@@ -18,12 +18,12 @@ import {
   readCachedDocs,
   resolvePkgDir,
   writeToCache,
-} from '../cache'
+} from '../cache/index'
 import { defaultFeatures, readConfig, registerProject } from '../core/config'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
 import { sanitizeMarkdown } from '../core/sanitize'
 import { getSharedSkillsDir } from '../core/shared'
-import { createIndex } from '../retriv'
+import { createIndex } from '../retriv/index'
 import {
   $fetch,
   downloadLlmsDocs,
@@ -47,7 +47,7 @@ import {
   parseGitHubUrl,
   resolveEntryFiles,
   resolveLocalPackageDocs,
-} from '../sources'
+} from '../sources/index'
 
 export const RESOLVE_STEP_LABELS: Record<ResolveStep, string> = {
   'npm': 'npm registry',

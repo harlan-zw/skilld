@@ -9,14 +9,14 @@
  *   .claude/skills/<skill>/SKILL.md -> regenerated from package.json + cache state
  */
 
-import type { AgentType, CustomPrompt, SkillSection } from '../agent'
+import type { AgentType, CustomPrompt, SkillSection } from '../agent/index'
 import type { SkillInfo } from '../core/lockfile'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { dirname, join } from 'pathe'
-import { agents, createToolProgress, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent'
+import { agents, createToolProgress, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent/index'
 import { generateSkillMd } from '../agent/prompts/skill'
 import {
   hasShippedDocs as checkShippedDocs,
@@ -32,14 +32,14 @@ import {
   readCachedDocs,
   resolvePkgDir,
   writeToCache,
-} from '../cache'
+} from '../cache/index'
 import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers'
 import { defaultFeatures, readConfig } from '../core/config'
 import { timedSpinner } from '../core/formatting'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile'
 import { sanitizeMarkdown } from '../core/sanitize'
 import { getSharedSkillsDir } from '../core/shared'
-import { createIndex } from '../retriv'
+import { createIndex } from '../retriv/index'
 import { shutdownWorker } from '../retriv/pool'
 import {
   $fetch,
@@ -52,7 +52,7 @@ import {
   parseGitHubUrl,
   resolveEntryFiles,
   resolvePackageDocs,
-} from '../sources'
+} from '../sources/index'
 import { fetchGitSkills } from '../sources/git-skills'
 import { selectLlmConfig } from './sync'
 import { classifyCachedDoc, indexResources } from './sync-shared'

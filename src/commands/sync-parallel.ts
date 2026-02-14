@@ -1,6 +1,6 @@
-import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent'
+import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index'
 import type { FeaturesConfig } from '../core/config'
-import type { ResolvedPackage } from '../sources'
+import type { ResolvedPackage } from '../sources/index'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import logUpdate from 'log-update'
@@ -15,7 +15,7 @@ import {
   linkSkillToAgents,
   optimizeDocs,
 
-} from '../agent'
+} from '../agent/index'
 import {
   ensureCacheDir,
   getCacheDir,
@@ -26,7 +26,7 @@ import {
   linkPkgNamed,
   listReferenceFiles,
   resolvePkgDir,
-} from '../cache'
+} from '../cache/index'
 import { defaultFeatures, readConfig, registerProject } from '../core/config'
 import { formatDuration } from '../core/formatting'
 import { parsePackages, readLock, writeLock } from '../core/lockfile'
@@ -37,7 +37,7 @@ import {
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
-} from '../sources'
+} from '../sources/index'
 
 import { ensureAgentInstructions, ensureGitignore, selectLlmConfig } from './sync'
 import {
