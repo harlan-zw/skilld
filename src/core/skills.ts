@@ -116,10 +116,9 @@ export function isOutdated(skill: SkillEntry, depVersion: string): boolean {
   if (!skill.info?.version)
     return true
 
-  const skillMajorMinor = skill.info.version.split('.').slice(0, 2).join('.')
-  const depMajorMinor = depVersion.replace(/^[\^~]/, '').split('.').slice(0, 2).join('.')
+  const depClean = depVersion.replace(/^[\^~]/, '')
 
-  return skillMajorMinor !== depMajorMinor
+  return skill.info.version !== depClean
 }
 
 export async function getProjectState(cwd: string = process.cwd()): Promise<ProjectState> {
