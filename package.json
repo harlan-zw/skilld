@@ -1,7 +1,7 @@
 {
   "name": "skilld",
   "type": "module",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "packageManager": "pnpm@10.29.3",
   "description": "Generate AI agent skills from npm package documentation",
   "author": {
