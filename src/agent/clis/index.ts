@@ -28,11 +28,16 @@ export type { CliModelConfig, CliName, ModelInfo, OptimizeDocsOptions, OptimizeM
 // ── Tool progress display ────────────────────────────────────────────
 
 const TOOL_VERBS: Record<string, string> = {
+  // Claude
   Read: 'Reading',
   Glob: 'Searching',
   Grep: 'Searching',
   Write: 'Writing',
   Bash: 'Running',
+  // Gemini
+  read_file: 'Reading',
+  glob_tool: 'Searching',
+  write_file: 'Writing',
 }
 
 interface ToolProgressLog {
@@ -70,8 +75,23 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
 
     const rawName = match[1]!
     const hint = match[2] ?? ''
-    const verb = TOOL_VERBS[rawName] ?? rawName
-    const path = hint || '...'
+    let verb = TOOL_VERBS[rawName] ?? rawName
+    let path = hint || '...'
+
+    // Bash: show skilld search queries nicely, truncate other commands
+    if (rawName === 'Bash' && hint) {
+      const searchMatch = hint.match(/skilld search\s+"([^"]+)"/)
+      if (searchMatch) {
+        verb = 'skilld search:'
+        path = searchMatch[1]!
+      }
+      else {
+        path = hint.length > 60 ? `${hint.slice(0, 57)}...` : hint
+      }
+    }
+    else {
+      path = shortenPath(path)
+    }
 
     // Write tool calls flush immediately
     if (rawName === 'Write') {
@@ -297,7 +317,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
 
         if (evt.toolName) {
           const hint = evt.toolHint
-            ? `[${evt.toolName}: ${shortenPath(evt.toolHint)}]`
+            ? `[${evt.toolName}: ${evt.toolHint}]`
             : `[${evt.toolName}]`
           onProgress?.({ chunk: hint, type: 'reasoning', text: '', reasoning: hint, section })
         }
