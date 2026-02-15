@@ -11,6 +11,7 @@ catalog:
   mdream: ^0.15.3
   ofetch: ^1.5.1
   pathe: ^2.0.3
+  std-env: ^3.10.0
   tsx: ^4.21.0
   unagent: ^0.0.8
 

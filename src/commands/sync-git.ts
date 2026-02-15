@@ -17,6 +17,7 @@ import { timedSpinner } from '../core/formatting.ts'
 import { writeLock } from '../core/lockfile.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { fetchGitSkills } from '../sources/git-skills.ts'
+import { track } from '../telemetry.ts'
 
 export interface GitSyncOptions {
   source: GitSkillSource
@@ -108,6 +109,18 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
 
   if (!isGlobal)
     registerProject(cwd)
+
+  // Track telemetry (skip local sources)
+  if (source.type !== 'local' && source.owner && source.repo) {
+    track({
+      event: 'install',
+      source: `${source.owner}/${source.repo}`,
+      skills: selected.map(s => s.name).join(','),
+      agents: agent,
+      ...(isGlobal && { global: '1' as const }),
+      sourceType: source.type,
+    })
+  }
 
   const names = selected.map(s => `\x1B[36m${s.name}\x1B[0m`).join(', ')
   p.log.success(`Installed ${names}`)

@@ -192,6 +192,19 @@ Several approaches exist for steering agent knowledge. Each fills a different ni
 - **[skills-npm](https://github.com/antfu/skills-npm)**: the ideal end-state: zero-token skills shipped by the package author, but requires every maintainer to opt in.
 - **skilld**: generates version-aware skills from existing docs, changelogs, issues, and discussions. Works for any package without author opt-in.
 
+## Telemetry
+
+Skilld sends anonymous install events to [skills.sh](https://skills.sh/) so skills can be discovered and ranked. No personal information is collected.
+
+Telemetry is automatically disabled in CI environments.
+
+To opt out, set either environment variable:
+
+```bash
+DISABLE_TELEMETRY=1
+DO_NOT_TRACK=1
+```
+
 ## Related
 
 - [skills-npm](https://github.com/antfu/skills-npm) - Convention for shipping agent skills in npm packages

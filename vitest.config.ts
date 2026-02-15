@@ -2,6 +2,9 @@ import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
+    env: {
+      DISABLE_TELEMETRY: '1',
+    },
     globals: true,
     reporters: 'dot',
     projects: [

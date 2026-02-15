@@ -18,6 +18,9 @@ catalogs:
     pathe:
       specifier: ^2.0.3
       version: 2.0.3
+    std-env:
+      specifier: ^3.10.0
+      version: 3.10.0
     tsx:
       specifier: ^4.21.0
       version: 4.21.0
@@ -129,6 +132,9 @@ importers:
       sqlite-vec:
         specifier: catalog:deps
         version: 0.1.6
+      std-env:
+        specifier: 'catalog:'
+        version: 3.10.0
       typescript:
         specifier: catalog:deps
         version: 6.0.0-beta

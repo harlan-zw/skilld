@@ -70,6 +70,7 @@
     "pathe": "catalog:",
     "retriv": "catalog:deps",
     "sqlite-vec": "catalog:deps",
+    "std-env": "catalog:",
     "typescript": "catalog:deps",
     "unagent": "catalog:"
   },
