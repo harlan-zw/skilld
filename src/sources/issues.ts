@@ -102,17 +102,29 @@ const DOCS_LABELS = new Set([
 ])
 
 /**
+ * Check if a label contains any keyword from a set.
+ * Handles emoji-prefixed labels like ":sparkles: feature request" or ":lady_beetle: bug".
+ */
+function labelMatchesAny(label: string, keywords: Set<string>): boolean {
+  for (const keyword of keywords) {
+    if (label === keyword || label.includes(keyword))
+      return true
+  }
+  return false
+}
+
+/**
  * Classify an issue by its labels into a type useful for skill generation
  */
 export function classifyIssue(labels: string[]): IssueType {
   const lower = labels.map(l => l.toLowerCase())
-  if (lower.some(l => BUG_LABELS.has(l)))
+  if (lower.some(l => labelMatchesAny(l, BUG_LABELS)))
     return 'bug'
-  if (lower.some(l => QUESTION_LABELS.has(l)))
+  if (lower.some(l => labelMatchesAny(l, QUESTION_LABELS)))
     return 'question'
-  if (lower.some(l => DOCS_LABELS.has(l)))
+  if (lower.some(l => labelMatchesAny(l, DOCS_LABELS)))
     return 'docs'
-  if (lower.some(l => FEATURE_LABELS.has(l)))
+  if (lower.some(l => labelMatchesAny(l, FEATURE_LABELS)))
     return 'feature'
   return 'other'
 }
@@ -122,7 +134,7 @@ export function classifyIssue(labels: string[]): IssueType {
  */
 function isNoiseIssue(issue: { labels: string[], title: string, body: string }): boolean {
   const lower = issue.labels.map(l => l.toLowerCase())
-  if (lower.some(l => NOISE_LABELS.has(l)))
+  if (lower.some(l => labelMatchesAny(l, NOISE_LABELS)))
     return true
   // Tracking/umbrella issues — low signal for skill generation
   if (issue.title.startsWith('☂️') || issue.title.startsWith('[META]') || issue.title.startsWith('[Tracking]'))
@@ -152,12 +164,13 @@ export function isNonTechnical(issue: { body: string, title: string, reactions: 
 
 /**
  * Freshness-weighted score: reactions * decay(age_in_years)
- * A 2024 issue with 50 reactions outranks a 2014 issue with 500.
+ * Steep decay so recent issues dominate over old high-reaction ones.
+ * At 0.6: 1yr=0.63x, 2yr=0.45x, 4yr=0.29x, 6yr=0.22x
  */
 export function freshnessScore(reactions: number, createdAt: string): number {
   const ageMs = Date.now() - new Date(createdAt).getTime()
   const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000)
-  return reactions * (1 / (1 + ageYears * 0.3))
+  return reactions * (1 / (1 + ageYears * 0.6))
 }
 
 /**
