@@ -1,7 +1,7 @@
 import type { AgentType } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import type { ResolvedPackage, ResolveStep } from '../sources/index.ts'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { join, resolve } from 'pathe'
 import { agents } from '../agent/index.ts'
 import {
@@ -623,4 +623,52 @@ export async function indexResources(opts: {
       }
     },
   })
+}
+
+/**
+ * Eject references: copy cached files as real files into references/ dir.
+ * Used for portable skills (git repos, sharing). Replaces symlinks with copies.
+ * Does NOT copy pkg files — those reference node_modules directly.
+ */
+export function ejectReferences(skillDir: string, packageName: string, cwd: string, version: string, docsType: string, features?: FeaturesConfig): void {
+  const f = features ?? readConfig().features ?? defaultFeatures
+  const cacheDir = getCacheDir(packageName, version)
+  const refsDir = join(skillDir, 'references')
+
+  // Copy cached docs (skip pkg — eject is for portable sharing, pkg references node_modules)
+  if (!hasShippedDocs(packageName, cwd, version) && docsType !== 'readme')
+    copyCachedSubdir(cacheDir, refsDir, 'docs')
+
+  if (f.issues)
+    copyCachedSubdir(cacheDir, refsDir, 'issues')
+  if (f.discussions)
+    copyCachedSubdir(cacheDir, refsDir, 'discussions')
+  if (f.releases)
+    copyCachedSubdir(cacheDir, refsDir, 'releases')
+}
+
+/** Recursively copy a cached subdirectory into the references dir */
+function copyCachedSubdir(cacheDir: string, refsDir: string, subdir: string): void {
+  const srcDir = join(cacheDir, subdir)
+  if (!existsSync(srcDir))
+    return
+
+  const destDir = join(refsDir, subdir)
+  mkdirSync(destDir, { recursive: true })
+
+  function walk(dir: string, rel: string) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const srcPath = join(dir, entry.name)
+      const destPath = join(destDir, rel ? `${rel}/${entry.name}` : entry.name)
+      if (entry.isDirectory()) {
+        mkdirSync(destPath, { recursive: true })
+        walk(srcPath, rel ? `${rel}/${entry.name}` : entry.name)
+      }
+      else {
+        copyFileSync(srcPath, destPath)
+      }
+    }
+  }
+
+  walk(srcDir, '')
 }

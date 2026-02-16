@@ -85,10 +85,11 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
     // Sanitize and write SKILL.md
     writeFileSync(join(skillDir, 'SKILL.md'), sanitizeMarkdown(skill.content))
 
-    // Write supporting files to .skilld/ subdir
+    // Write supporting files directly in skill dir (not under .skilld/)
+    // so SKILL.md relative paths like ./references/docs/guide.md resolve correctly
     if (skill.files.length > 0) {
       for (const f of skill.files) {
-        const filePath = join(skillDir, '.skilld', f.path)
+        const filePath = join(skillDir, f.path)
         mkdirSync(dirname(filePath), { recursive: true })
         writeFileSync(filePath, f.content)
       }

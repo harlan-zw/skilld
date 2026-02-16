@@ -167,7 +167,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         mkdirSync(skillDir, { recursive: true })
         writeFileSync(join(skillDir, 'SKILL.md'), sanitizeMarkdown(match.content))
         for (const f of match.files) {
-          const filePath = join(skillDir, '.skilld', f.path)
+          const filePath = join(skillDir, f.path)
           mkdirSync(dirname(filePath), { recursive: true })
           writeFileSync(filePath, f.content)
         }

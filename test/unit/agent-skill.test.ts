@@ -116,6 +116,61 @@ describe('agent/skill', () => {
       expect(descLine).toMatch(/description:.*Progressive JavaScript Framework.*ALWAYS use when/)
     })
 
+    // ── Eject mode tests ──
+
+    it('uses ./references/ paths when eject is true', () => {
+      const result = generateSkillMd({
+        name: 'vue',
+        version: '3.4.0',
+        relatedSkills: [],
+        hasIssues: true,
+        hasReleases: true,
+        eject: true,
+      })
+
+      expect(result).toContain('./references/issues/_INDEX.md')
+      expect(result).toContain('./references/releases/_INDEX.md')
+      expect(result).not.toContain('.skilld')
+    })
+
+    it('uses ./.skilld/ paths when eject is false', () => {
+      const result = generateSkillMd({
+        name: 'vue',
+        version: '3.4.0',
+        relatedSkills: [],
+        hasIssues: true,
+        hasReleases: true,
+      })
+
+      expect(result).toContain('./.skilld/issues/_INDEX.md')
+      expect(result).toContain('./.skilld/releases/_INDEX.md')
+    })
+
+    it('omits pkg references in eject mode', () => {
+      const result = generateSkillMd({
+        name: 'vue',
+        version: '3.4.0',
+        relatedSkills: [],
+        pkgFiles: ['README.md'],
+        eject: true,
+      })
+
+      expect(result).not.toContain('package.json')
+      expect(result).not.toContain('pkg/README.md')
+    })
+
+    it('omits search block in eject mode', () => {
+      const result = generateSkillMd({
+        name: 'vue',
+        version: '3.4.0',
+        relatedSkills: [],
+        features: { search: true, issues: false, discussions: false, releases: false },
+        eject: true,
+      })
+
+      expect(result).not.toContain('skilld search')
+    })
+
     it('omits version if not provided', () => {
       const result = generateSkillMd({ name: 'pkg', relatedSkills: [] })
       expect(result).not.toContain('version:')

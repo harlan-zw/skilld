@@ -39,11 +39,13 @@ export interface SkillOptions {
   repoUrl?: string
   /** Resolved feature flags */
   features?: FeaturesConfig
+  /** Eject mode: use ./references/ paths instead of ./.skilld/ for portable skills */
+  eject?: boolean
 }
 
 export function generateSkillMd(opts: SkillOptions): string {
   const header = generatePackageHeader(opts)
-  const search = opts.features?.search !== false ? generateSearchBlock(opts.name, opts.hasIssues, opts.hasReleases) : ''
+  const search = !opts.eject && opts.features?.search !== false ? generateSearchBlock(opts.name, opts.hasIssues, opts.hasReleases) : ''
   const content = opts.body
     ? search ? `${header}\n\n${search}\n\n${opts.body}` : `${header}\n\n${opts.body}`
     : search ? `${header}\n\n${search}` : header
@@ -73,7 +75,7 @@ function formatRelativeDate(isoDate: string): string {
   return `${years} year${years === 1 ? '' : 's'} ago`
 }
 
-function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, pkgFiles, packages }: SkillOptions): string {
+function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, pkgFiles, packages, eject }: SkillOptions): string {
   let title = `# ${name}`
   if (repoUrl) {
     const url = repoUrl.startsWith('http') ? repoUrl : `https://github.com/${repoUrl}`
@@ -111,22 +113,25 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
 
   // References with context hints (progressive disclosure — describe what each contains)
   lines.push('')
+  const refBase = eject ? './references' : './.skilld'
   const refs: string[] = []
-  refs.push(`[package.json](./.skilld/pkg/package.json) — exports, entry points`)
-  if (packages && packages.length > 1) {
-    for (const pkg of packages) {
-      const shortName = pkg.name.split('/').pop()!.toLowerCase()
-      refs.push(`[pkg-${shortName}](./.skilld/pkg-${shortName}/package.json)`)
+  if (!eject) {
+    refs.push(`[package.json](${refBase}/pkg/package.json) — exports, entry points`)
+    if (packages && packages.length > 1) {
+      for (const pkg of packages) {
+        const shortName = pkg.name.split('/').pop()!.toLowerCase()
+        refs.push(`[pkg-${shortName}](${refBase}/pkg-${shortName}/package.json)`)
+      }
     }
+    if (pkgFiles?.includes('README.md'))
+      refs.push(`[README](${refBase}/pkg/README.md) — setup, basic usage`)
   }
-  if (pkgFiles?.includes('README.md'))
-    refs.push(`[README](./.skilld/pkg/README.md) — setup, basic usage`)
   if (hasIssues)
-    refs.push(`[GitHub Issues](./.skilld/issues/_INDEX.md) — bugs, workarounds, edge cases`)
+    refs.push(`[GitHub Issues](${refBase}/issues/_INDEX.md) — bugs, workarounds, edge cases`)
   if (hasDiscussions)
-    refs.push(`[GitHub Discussions](./.skilld/discussions/_INDEX.md) — Q&A, patterns, recipes`)
+    refs.push(`[GitHub Discussions](${refBase}/discussions/_INDEX.md) — Q&A, patterns, recipes`)
   if (hasReleases)
-    refs.push(`[Releases](./.skilld/releases/_INDEX.md) — changelog, breaking changes, new APIs`)
+    refs.push(`[Releases](${refBase}/releases/_INDEX.md) — changelog, breaking changes, new APIs`)
 
   if (refs.length > 0)
     lines.push(`**References:** ${refs.join(' • ')}`)

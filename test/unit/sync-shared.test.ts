@@ -10,6 +10,7 @@ vi.mock('node:fs', async () => {
     readFileSync: vi.fn(),
     mkdirSync: vi.fn(),
     rmSync: vi.fn(),
+    copyFileSync: vi.fn(),
   }
 })
 
@@ -84,7 +85,7 @@ vi.mock('../../src/agent', () => ({
   },
 }))
 
-const { existsSync, readFileSync, rmSync } = await import('node:fs')
+const { existsSync, readFileSync, rmSync, mkdirSync, copyFileSync, readdirSync } = await import('node:fs')
 const { getCacheDir, getPackageDbPath, readCachedDocs, writeToCache, clearCache } = await import('../../src/cache')
 const { $fetch, fetchGitDocs, fetchGitHubIssues, fetchGitHubDiscussions, fetchLlmsTxt, fetchReadmeContent, fetchReleaseNotes, downloadLlmsDocs, isGhAvailable, isShallowGitDocs, resolveEntryFiles, resolveLocalPackageDocs } = await import('../../src/sources')
 const { registerProject } = await import('../../src/core/config')
@@ -102,6 +103,7 @@ const {
   forceClearCache,
   handleShippedSkills,
   resolveBaseDir,
+  ejectReferences,
 } = await import('../../src/commands/sync-shared')
 
 describe('sync-shared', () => {
@@ -706,6 +708,68 @@ describe('sync-shared', () => {
 
     it('returns cache skills dir when global', () => {
       expect(resolveBaseDir('/cwd', 'claude-code', true)).toContain('skills')
+    })
+  })
+
+  // ── 10. ejectReferences ──
+
+  describe('ejectReferences', () => {
+    beforeEach(() => {
+      vi.resetAllMocks()
+      vi.mocked(getCacheDir).mockReturnValue('/mock-cache/references/vue@3.4.0')
+    })
+
+    it('copies cached docs to references/docs/', () => {
+      vi.mocked(existsSync).mockImplementation((p: any) => {
+        const s = String(p)
+        return s.includes('/docs') && !s.includes('shipped')
+      })
+      vi.mocked(readdirSync).mockReturnValue([
+        { name: 'guide.md', isDirectory: () => false, isFile: () => true, isBlockDevice: () => false, isCharacterDevice: () => false, isFIFO: () => false, isSocket: () => false, isSymbolicLink: () => false, parentPath: '', path: '' },
+      ] as any)
+      vi.mocked(resolvePkgDir).mockReturnValue(null)
+
+      ejectReferences('/skill', 'vue', '/cwd', '3.4.0', 'docs')
+
+      expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining('references/docs'), expect.anything())
+      expect(copyFileSync).toHaveBeenCalled()
+    })
+
+    it('copies issues when feature enabled', () => {
+      vi.mocked(existsSync).mockImplementation((p: any) => {
+        const s = String(p)
+        return s.includes('/issues')
+      })
+      vi.mocked(readdirSync).mockReturnValue([
+        { name: '_INDEX.md', isDirectory: () => false, isFile: () => true, isBlockDevice: () => false, isCharacterDevice: () => false, isFIFO: () => false, isSocket: () => false, isSymbolicLink: () => false, parentPath: '', path: '' },
+      ] as any)
+      vi.mocked(resolvePkgDir).mockReturnValue(null)
+
+      ejectReferences('/skill', 'vue', '/cwd', '3.4.0', 'docs', { search: false, issues: true, discussions: false, releases: false })
+
+      expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining('references/issues'), expect.anything())
+      expect(copyFileSync).toHaveBeenCalled()
+    })
+
+    it('skips docs when docsType is readme', () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(resolvePkgDir).mockReturnValue(null)
+
+      ejectReferences('/skill', 'vue', '/cwd', '3.4.0', 'readme')
+
+      expect(copyFileSync).not.toHaveBeenCalled()
+    })
+
+    it('does not copy pkg files', () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readdirSync).mockReturnValue([])
+      vi.mocked(resolvePkgDir).mockReturnValue('/node_modules/vue')
+
+      ejectReferences('/skill', 'vue', '/cwd', '3.4.0', 'docs')
+
+      // Should not create a pkg directory or copy package.json
+      const mkdirCalls = vi.mocked(mkdirSync).mock.calls.map(c => String(c[0]))
+      expect(mkdirCalls.some(c => c.includes('references/pkg'))).toBe(false)
     })
   })
 })

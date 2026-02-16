@@ -6,7 +6,7 @@ import type { ResolveAttempt } from '../sources/index.ts'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { join, relative } from 'pathe'
+import { join, relative, resolve } from 'pathe'
 import {
   agents,
   computeSkillDirName,
@@ -49,6 +49,7 @@ import { syncGitSkills } from './sync-git.ts'
 import { syncPackagesParallel } from './sync-parallel.ts'
 import {
   detectChangelog,
+  ejectReferences,
   fetchAndCacheResources,
   findRelatedSkills,
   forceClearCache,
@@ -208,6 +209,8 @@ export interface SyncOptions {
   force?: boolean
   debug?: boolean
   mode?: 'add' | 'update'
+  /** Eject mode: copy references as real files instead of symlinking */
+  eject?: boolean | string
 }
 
 export async function syncCommand(state: ProjectState, opts: SyncOptions): Promise<void> {
@@ -494,6 +497,7 @@ interface SyncConfig {
   force?: boolean
   debug?: boolean
   mode?: 'add' | 'update'
+  eject?: boolean | string
 }
 
 async function syncSinglePackage(packageName: string, config: SyncConfig): Promise<void> {
@@ -585,7 +589,8 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
 
   const baseDir = resolveBaseDir(cwd, config.agent, config.global)
   const skillDirName = computeSkillDirName(packageName, resolved.repoUrl)
-  const skillDir = join(baseDir, skillDirName)
+  // Eject path override: use specified directory instead of agent skills dir
+  const skillDir = typeof config.eject === 'string' ? resolve(cwd, config.eject) : join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
 
   // ── Merge mode: skill dir already exists with a different primary package ──
@@ -673,11 +678,16 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   for (const w of resources.warnings)
     p.log.warn(`\x1B[33m${w}\x1B[0m`)
 
-  // Create symlinks
-  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features)
+  // Create symlinks or copy files (eject mode)
+  if (config.eject) {
+    ejectReferences(skillDir, packageName, cwd, version, resources.docsType, features)
+  }
+  else {
+    linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features)
+  }
 
-  // ── Phase 2: Search index ──
-  if (features.search) {
+  // ── Phase 2: Search index (skip in eject mode — not portable) ──
+  if (features.search && !config.eject) {
     const idxSpin = timedSpinner()
     idxSpin.start('Creating search index')
     await indexResources({
@@ -700,8 +710,9 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   // Write base SKILL.md (no LLM needed)
   const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
 
-  // Also create named symlink for this package
-  linkPkgNamed(skillDir, packageName, cwd, version)
+  // Also create named symlink for this package (skip in eject mode)
+  if (!config.eject)
+    linkPkgNamed(skillDir, packageName, cwd, version)
 
   writeLock(baseDir, skillDirName, {
     packageName,
@@ -716,6 +727,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   const updatedLock = readLock(baseDir)?.skills[skillDirName]
   const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
 
+  const isEject = !!config.eject
   const baseSkillMd = generateSkillMd({
     name: packageName,
     version,
@@ -735,6 +747,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     packages: allPackages.length > 1 ? allPackages : undefined,
     repoUrl: resolved.repoUrl,
     features,
+    eject: isEject,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
 
@@ -767,26 +780,31 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
         customPrompt: llmConfig.customPrompt,
         packages: allPackages.length > 1 ? allPackages : undefined,
         features,
+        eject: isEject,
       })
     }
   }
 
-  // Link shared dir to per-agent dirs
-  const shared = !config.global && getSharedSkillsDir(cwd)
-  if (shared)
-    linkSkillToAgents(skillDirName, shared, cwd)
+  // Skip agent integration in eject mode (no symlinks, no gitignore, no instructions)
+  if (!isEject) {
+    // Link shared dir to per-agent dirs
+    const shared = !config.global && getSharedSkillsDir(cwd)
+    if (shared)
+      linkSkillToAgents(skillDirName, shared, cwd)
 
-  // Register project in global config (for uninstall tracking)
-  if (!config.global) {
-    registerProject(cwd)
+    // Register project in global config (for uninstall tracking)
+    if (!config.global) {
+      registerProject(cwd)
+    }
+
+    await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[config.agent].skillsDir, cwd, config.global)
+    await ensureAgentInstructions(config.agent, cwd, config.global)
   }
-
-  await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[config.agent].skillsDir, cwd, config.global)
-  await ensureAgentInstructions(config.agent, cwd, config.global)
 
   await shutdownWorker()
 
-  p.outro(config.mode === 'update' ? `Updated ${packageName}` : `Synced ${packageName} to ${relative(cwd, skillDir)}`)
+  const ejectMsg = isEject ? ' (ejected)' : ''
+  p.outro(config.mode === 'update' ? `Updated ${packageName}${ejectMsg}` : `Synced ${packageName} to ${relative(cwd, skillDir)}${ejectMsg}`)
 }
 
 interface EnhanceOptions {
@@ -810,10 +828,11 @@ interface EnhanceOptions {
   customPrompt?: CustomPrompt
   packages?: Array<{ name: string }>
   features?: FeaturesConfig
+  eject?: boolean
 }
 
 async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
-  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features } = opts
+  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject } = opts
 
   const llmLog = p.taskLog({ title: `Agent exploring ${packageName}` })
   const docFiles = listReferenceFiles(skillDir)
@@ -873,6 +892,7 @@ async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
       packages,
       repoUrl: resolved.repoUrl,
       features,
+      eject,
     })
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
@@ -890,6 +910,12 @@ export const addCommandDef = defineCommand({
       type: 'positional',
       description: 'Package(s) to sync (space or comma-separated, e.g., vue nuxt pinia)',
       required: true,
+    },
+    eject: {
+      type: 'string',
+      alias: 'e',
+      description: 'Eject skill with references as real files (portable, no symlinks). Optional path override.',
+      required: false,
     },
     ...sharedArgs,
   },
@@ -945,6 +971,7 @@ export const addCommandDef = defineCommand({
         yes: args.yes,
         force: args.force,
         debug: args.debug,
+        eject: args.eject !== undefined ? (args.eject || true) : undefined,
       })
     }
   },
