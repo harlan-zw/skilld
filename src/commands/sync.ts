@@ -593,8 +593,8 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   const skillDir = typeof config.eject === 'string' ? resolve(cwd, config.eject) : join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
 
-  // ── Merge mode: skill dir already exists with a different primary package ──
-  const existingLock = readLock(baseDir)?.skills[skillDirName]
+  // ── Merge mode: skill dir already exists with a different primary package (skip in eject) ──
+  const existingLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
   const isMerge = existingLock && existingLock.packageName !== packageName
 
   if (isMerge) {
@@ -714,17 +714,20 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   if (!config.eject)
     linkPkgNamed(skillDir, packageName, cwd, version)
 
-  writeLock(baseDir, skillDirName, {
-    packageName,
-    version,
-    repo: repoSlug,
-    source: resources.docSource,
-    syncedAt: new Date().toISOString().split('T')[0],
-    generator: 'skilld',
-  })
+  // Skip lockfile in eject mode — no agent skills dir to write to
+  if (!config.eject) {
+    writeLock(baseDir, skillDirName, {
+      packageName,
+      version,
+      repo: repoSlug,
+      source: resources.docSource,
+      syncedAt: new Date().toISOString().split('T')[0],
+      generator: 'skilld',
+    })
+  }
 
   // Read back merged packages from lockfile for SKILL.md generation
-  const updatedLock = readLock(baseDir)?.skills[skillDirName]
+  const updatedLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
   const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
 
   const isEject = !!config.eject
