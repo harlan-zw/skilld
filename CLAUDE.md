@@ -35,6 +35,9 @@ skilld search "query" # Search indexed docs
 skilld search "query" -p nuxt  # Search filtered by package
 skilld cache             # Clean expired LLM cache entries
 skilld add owner/repo    # Add pre-authored skills from git repo
+skilld eject vue              # Eject skill (portable, no symlinks)
+skilld eject vue --name vue   # Eject with custom skill dir name
+skilld eject vue --out ./dir/ # Eject to custom path
 ```
 
 ## Architecture
@@ -96,7 +99,7 @@ References are global/static; SKILL.md is per-project (different conventions). C
 - **Version comparison** — `isOutdated()` compares exact versions
 - **Tests** — vitest projects (unit + e2e), `globals: true`, tests in `test/unit/` and `test/e2e/`, fs mocked via `vi.mock('node:fs')`. E2E tests include preset workflows (nuxt, vue, react, svelte, etc.) in `test/e2e/preset-*.test.ts`
 - **Build** — `obuild` bundles multiple entry points (cli, index, types, cache, retriv, agent, sources) as subpath exports
-- **CLI modes** — `skilld update -b` for pnpm prepare hooks (background, non-interactive, auto-uses configured model). `--eject` publishes skills with references as real files. `--debug` saves raw LLM output to `logs/`
+- **CLI modes** — `skilld update -b` for pnpm prepare hooks (background, non-interactive, auto-uses configured model). `skilld eject` exports portable skills with references as real files. `--debug` saves raw LLM output to `logs/`
 - **First-run wizard** — `src/commands/wizard.ts` handles agent/model config and package selection on first run
 - **E2E agent tests** — `test/e2e-agents/` validates skill generation across multiple agents via `generate-matrix.ts` and `generate-pipeline.ts`
 

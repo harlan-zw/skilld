@@ -158,6 +158,7 @@ skilld config
 | `skilld remove`         | Remove installed skills |
 | `skilld uninstall`      | Remove all skilld data |
 | `skilld cache`          | Cache management (clean expired LLM cache entries) |
+| `skilld eject <pkg>`    | Eject skill as portable directory (no symlinks) |
 
 ### Eject
 
@@ -165,10 +166,13 @@ Export a skill as a portable, self-contained directory with references copied as
 
 ```bash
 # Eject to the default skill directory
-skilld add vue --eject
+skilld eject vue
+
+# Custom skill directory name
+skilld eject vue --name vue
 
 # Eject to a custom path
-skilld add vue --eject ./skills/vue/
+skilld eject vue --out ./skills/vue/
 ```
 
 The ejected skill contains `SKILL.md` plus a `references/` directory with docs, issues, and releases as real files. Share it via `skilld add owner/repo` — consumers get fully functional skills with no LLM cost.
@@ -182,7 +186,8 @@ The ejected skill contains `SKILL.md` plus a `references/` directory with docs, 
 | `--yes` | `-y` | `false` | Skip prompts, use defaults |
 | `--force` | `-f` | `false` | Ignore all caches, re-fetch docs and regenerate |
 | `--model`      | `-m` | config default | LLM model for skill generation (sonnet, haiku, opus, etc.) |
-| `--eject`      | `-e` |                | Eject skill with references as real files (optional path override) |
+| `--name`       | `-n` |                | Custom skill directory name (eject only) |
+| `--out`        | `-o` |                | Output directory path override (eject only) |
 | `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
 
 ## The Landscape
