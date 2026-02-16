@@ -9,7 +9,7 @@ import { detectImportedPackages } from './agent/index.ts'
 import { formatStatus, getRepoHint, isInteractive, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers.ts'
 import { configCommand, interactiveSearch, removeCommand, runWizard, statusCommand, syncCommand } from './commands/index.ts'
 import { timedSpinner } from './core/formatting.ts'
-import { getProjectState, hasCompletedWizard, isOutdated, readConfig } from './core/index.ts'
+import { getProjectState, hasCompletedWizard, isOutdated, readConfig, semverGt } from './core/index.ts'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index.ts'
 
 import { version } from './version.ts'
@@ -211,7 +211,7 @@ const main = defineCommand({
         tasks.push(
           fetchNpmRegistryMeta('skilld', version).then((meta) => {
             const latestTag = meta.distTags?.latest
-            if (latestTag && latestTag.version !== version)
+            if (latestTag && semverGt(latestTag.version, version))
               selfUpdate = { latest: latestTag.version, releasedAt: latestTag.releasedAt }
           }).catch(() => {}),
         )

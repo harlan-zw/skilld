@@ -69,6 +69,7 @@
     "p-limit": "catalog:deps",
     "pathe": "catalog:",
     "retriv": "catalog:deps",
+    "semver": "catalog:",
     "sqlite-vec": "catalog:deps",
     "std-env": "catalog:",
     "typescript": "catalog:deps",
@@ -77,6 +78,7 @@
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev-lint",
     "@types/node": "catalog:dev-build",
+    "@types/semver": "catalog:",
     "@vitest/coverage-v8": "catalog:dev-test",
     "bumpp": "catalog:",
     "evalite": "catalog:dev-test",

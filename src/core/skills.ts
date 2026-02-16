@@ -5,7 +5,7 @@ import { join } from 'pathe'
 import { agents } from '../agent/index.ts'
 import { readLocalDependencies } from '../sources/index.ts'
 import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile.ts'
-import { getSharedSkillsDir } from './shared.ts'
+import { getSharedSkillsDir, semverGt } from './shared.ts'
 
 export interface SkillEntry {
   name: string
@@ -118,7 +118,7 @@ export function isOutdated(skill: SkillEntry, depVersion: string): boolean {
 
   const depClean = depVersion.replace(/^[\^~]/, '')
 
-  return skill.info.version !== depClean
+  return semverGt(depClean, skill.info.version)
 }
 
 export async function getProjectState(cwd: string = process.cwd()): Promise<ProjectState> {
