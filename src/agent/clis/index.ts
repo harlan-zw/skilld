@@ -10,11 +10,11 @@ import { exec, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import { join } from 'pathe'
 import { readCachedSection, writeSections } from '../../cache/index.ts'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
-import { mapInsert } from '../../core/shared.ts'
 import { detectInstalledAgents } from '../detect.ts'
 import { buildAllSectionPrompts, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts/index.ts'
 import { agents } from '../registry.ts'
@@ -47,78 +47,56 @@ interface ToolProgressLog {
   message: (msg: string) => void
 }
 
-/** Create a throttled onProgress callback that batches tool calls per section */
+/** Create a progress callback that emits one line per tool call, Claude Code style */
 export function createToolProgress(log: ToolProgressLog): (progress: StreamProgress) => void {
-  const pending = new Map<string, { verb: string, path: string, count: number }>()
-  let timer: ReturnType<typeof setTimeout> | null = null
-  let lastEmitted = ''
+  let lastMsg = ''
+  let repeatCount = 0
 
-  function flush() {
-    const parts: string[] = []
-    for (const [section, { verb, path, count }] of pending) {
-      const suffix = count > 1 ? ` \x1B[90m(+${count - 1})\x1B[0m` : ''
-      parts.push(`\x1B[90m[${section}]\x1B[0m ${verb} ${path}${suffix}`)
+  function emit(msg: string) {
+    if (msg === lastMsg) {
+      repeatCount++
+      log.message(`${msg} \x1B[90m(+${repeatCount})\x1B[0m`)
     }
-    const msg = parts.join('  ')
-    if (msg && msg !== lastEmitted) {
+    else {
+      lastMsg = msg
+      repeatCount = 0
       log.message(msg)
-      lastEmitted = msg
     }
-    pending.clear()
-    timer = null
   }
 
   return ({ type, chunk, section }) => {
     if (type === 'text') {
-      log.message(`${section ? `\x1B[90m[${section}]\x1B[0m ` : ''}Writing...`)
+      emit(`${section ? `\x1B[90m[${section}]\x1B[0m ` : ''}Writing...`)
       return
     }
     if (type !== 'reasoning' || !chunk.startsWith('['))
       return
 
-    const key = section ?? ''
-    // Parse tool name and hint from chunk like "[Read: path/file]" or "[Read]"
-    const match = chunk.match(/^\[(\w+)(?:,\s\w+)*(?::\s(.+))?\]$/)
+    // Parse individual tool names and hints from "[Read: path]" or "[Read, Glob: path1, path2]"
+    const match = chunk.match(/^\[([^:[\]]+)(?::\s(.+))?\]$/)
     if (!match)
       return
 
-    const rawName = match[1]!
-    const hint = match[2] ?? ''
-    let verb = TOOL_VERBS[rawName] ?? rawName
-    let path = hint || '...'
+    const names = match[1]!.split(',').map(n => n.trim())
+    const hints = match[2]?.split(',').map(h => h.trim()) ?? []
 
-    // Bash: show skilld search queries nicely, truncate other commands
-    if (rawName === 'Bash' && hint) {
-      const searchMatch = hint.match(/skilld search\s+"([^"]+)"/)
-      if (searchMatch) {
-        verb = 'skilld search:'
-        path = searchMatch[1]!
+    for (let i = 0; i < names.length; i++) {
+      const rawName = names[i]!
+      const hint = hints[i] ?? hints[0] ?? ''
+      const verb = TOOL_VERBS[rawName] ?? rawName
+      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+
+      if (rawName === 'Bash' && hint) {
+        const searchMatch = hint.match(/skilld search\s+"([^"]+)"/)
+        if (searchMatch)
+          emit(`${prefix}Searching \x1B[36m"${searchMatch[1]}"\x1B[0m`)
+        else
+          emit(`${prefix}Running ${hint.length > 50 ? `${hint.slice(0, 47)}...` : hint}`)
       }
       else {
-        path = hint.length > 60 ? `${hint.slice(0, 57)}...` : hint
+        const path = shortenPath(hint || '...')
+        emit(`${prefix}${verb} \x1B[90m${path}\x1B[0m`)
       }
-    }
-    else {
-      path = shortenPath(path)
-    }
-
-    // Write tool calls flush immediately
-    if (rawName === 'Write') {
-      if (timer) {
-        flush()
-      }
-      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
-      log.message(`${prefix}Writing ${path}`)
-      return
-    }
-
-    const entry = mapInsert(pending, key, () => ({ verb, path, count: 0 }))
-    entry.verb = verb
-    entry.path = path
-    entry.count++
-
-    if (!timer) {
-      timer = setTimeout(flush, 400)
     }
   }
 }
@@ -373,17 +351,20 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
       // Prefer file written by LLM, fall back to Write tool content (if denied), then accumulated stdout
       const raw = (existsSync(outputPath) ? readFileSync(outputPath, 'utf-8') : lastWriteContent || accumulatedText).trim()
 
-      // Write debug logs: raw stream + raw text output
-      if (debug) {
-        const logsDir = join(skilldDir, 'logs')
+      // Always write stderr on failure; write all logs in debug mode
+      const logsDir = join(skilldDir, 'logs')
+      const logName = section.toUpperCase().replace(/-/g, '_')
+      if (debug || (stderr && (!raw || code !== 0))) {
         mkdirSync(logsDir, { recursive: true })
-        const logName = section.toUpperCase().replace(/-/g, '_')
+        if (stderr)
+          writeFileSync(join(logsDir, `${logName}.stderr.log`), stderr)
+      }
+      if (debug) {
+        mkdirSync(logsDir, { recursive: true })
         if (rawLines.length)
           writeFileSync(join(logsDir, `${logName}.jsonl`), rawLines.join('\n'))
         if (raw)
           writeFileSync(join(logsDir, `${logName}.md`), raw)
-        if (stderr)
-          writeFileSync(join(logsDir, `${logName}.stderr.log`), stderr)
       }
 
       if (!raw && code !== 0) {
@@ -481,14 +462,26 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
   // Prepare .skilld/ dir and snapshot before spawns
   const skilldDir = join(skillDir, '.skilld')
   mkdirSync(skilldDir, { recursive: true })
+
+  // Pre-flight: warn about broken symlinks in .skilld/ (avoids wasting tokens on missing refs)
+  for (const entry of readdirSync(skilldDir)) {
+    const entryPath = join(skilldDir, entry)
+    try {
+      if (lstatSync(entryPath).isSymbolicLink() && !existsSync(entryPath))
+        onProgress?.({ chunk: `[warn: broken symlink .skilld/${entry}]`, type: 'reasoning', text: '', reasoning: '' })
+    }
+    catch {}
+  }
+
   const preExistingFiles = new Set(readdirSync(skilldDir))
 
-  // Spawn uncached sections in parallel
+  // Spawn uncached sections with staggered starts to avoid rate-limit collisions
+  const STAGGER_MS = 3000
   const spawnResults = uncachedSections.length > 0
     ? await Promise.allSettled(
-        uncachedSections.map(({ section, prompt }) => {
+        uncachedSections.map(({ section, prompt }, i) => {
           const outputFile = SECTION_OUTPUT_FILES[section]
-          return optimizeSection({
+          const run = () => optimizeSection({
             section,
             prompt,
             outputFile,
@@ -500,37 +493,67 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
             debug,
             preExistingFiles,
           })
+          // Stagger: first section starts immediately, rest delayed
+          if (i === 0)
+            return run()
+          return delay(i * STAGGER_MS).then(run)
         }),
       )
     : []
 
-  // Collect all results
+  // Collect results, retry failed sections once
   const allResults: SectionResult[] = [...cachedResults]
   let totalUsage: { input: number, output: number } | undefined
   let totalCost = 0
+  const retryQueue: Array<{ index: number, section: SkillSection, prompt: string }> = []
 
   for (let i = 0; i < spawnResults.length; i++) {
     const r = spawnResults[i]!
     const { section, prompt } = uncachedSections[i]!
-    if (r.status === 'fulfilled') {
-      const result = r.value
-      allResults.push(result)
-      // Cache successful results
-      if (result.wasOptimized && !noCache) {
-        setCache(prompt, model, section, result.content)
-      }
-      if (result.usage) {
+    if (r.status === 'fulfilled' && r.value.wasOptimized) {
+      allResults.push(r.value)
+      if (r.value.usage) {
         totalUsage = totalUsage ?? { input: 0, output: 0 }
-        totalUsage.input += result.usage.input
-        totalUsage.output += result.usage.output
+        totalUsage.input += r.value.usage.input
+        totalUsage.output += r.value.usage.output
       }
-      if (result.cost != null) {
-        totalCost += result.cost
-      }
+      if (r.value.cost != null)
+        totalCost += r.value.cost
+      if (!noCache)
+        setCache(prompt, model, section, r.value.content)
     }
     else {
-      allResults.push({ section, content: '', wasOptimized: false, error: String(r.reason) })
+      retryQueue.push({ index: i, section, prompt })
     }
+  }
+
+  // Retry failed sections once (sequential to avoid rate limits)
+  for (const { section, prompt } of retryQueue) {
+    onProgress?.({ chunk: `[${section}: retrying...]`, type: 'reasoning', text: '', reasoning: '', section })
+    await delay(STAGGER_MS)
+    const result = await optimizeSection({
+      section,
+      prompt,
+      outputFile: SECTION_OUTPUT_FILES[section],
+      skillDir,
+      model,
+      packageName,
+      onProgress,
+      timeout,
+      debug,
+      preExistingFiles,
+    }).catch((err: Error) => ({ section, content: '', wasOptimized: false, error: err.message }) as SectionResult)
+
+    allResults.push(result)
+    if (result.wasOptimized && !noCache)
+      setCache(prompt, model, section, result.content)
+    if (result.usage) {
+      totalUsage = totalUsage ?? { input: 0, output: 0 }
+      totalUsage.input += result.usage.input
+      totalUsage.output += result.usage.output
+    }
+    if (result.cost != null)
+      totalCost += result.cost
   }
 
   // Write successful sections to global references dir for cross-project reuse
