@@ -596,8 +596,12 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
 
   const baseDir = resolveBaseDir(cwd, config.agent, config.global)
   const skillDirName = config.name ? sanitizeName(config.name) : computeSkillDirName(packageName, resolved.repoUrl)
-  // Eject path override: use specified directory instead of agent skills dir
-  const skillDir = typeof config.eject === 'string' ? resolve(cwd, config.eject) : join(baseDir, skillDirName)
+  // Eject path override: default to ./skills/<name>, or use specified directory
+  const skillDir = config.eject
+    ? typeof config.eject === 'string'
+      ? resolve(cwd, config.eject)
+      : join(cwd, 'skills', skillDirName)
+    : join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
 
   // ── Merge mode: skill dir already exists with a different primary package (skip in eject) ──
@@ -1010,12 +1014,8 @@ export const ejectCommandDef = defineCommand({
   },
   async run({ args }) {
     const cwd = process.cwd()
-    let agent = resolveAgent(args.agent)
-    if (!agent) {
-      agent = await promptForAgent()
-      if (!agent)
-        return
-    }
+    // Eject skips agent detection — output goes to ./skills/<name> by default
+    const agent = resolveAgent(args.agent) || 'claude-code'
 
     if (!hasCompletedWizard())
       await runWizard()
