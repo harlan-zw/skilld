@@ -46,6 +46,9 @@ CLI tool that generates AI agent skills from NPM package documentation. Requires
 - `.claude/skills/<pkg>/SKILL.md` - Generated skill files (project-level)
 - `src/commands/` - CLI subcommands routed via citty `subCommands` in cli.ts
 - `src/agent/` - Agent registry, detection, LLM spawning, skill generation
+  - `clis/` - LLM CLI integrations (claude, codex, gemini)
+  - `prompts/` - Skill generation prompt templates; `optional/` for toggleable sections (api-changes, best-practices, types, etc.)
+  - `targets/` - Per-agent target definitions
 - `src/sources/` - Doc fetching (npm registry, llms.txt, GitHub via ungh.cc)
 - `src/cache/` - Reference caching with symlinks to `~/.skilld/references/`
 - `src/retriv/` - Vector search with sqlite-vec + @huggingface/transformers embeddings
@@ -58,7 +61,7 @@ CLI tool that generates AI agent skills from NPM package documentation. Requires
 4. `llms.txt` at package homepage → parse and download linked .md files
 5. GitHub README via ungh proxy → fallback
 
-Resolution tracked via `ResolveAttempt[]` array for debugging failures.
+Resolution tracked via `ResolveAttempt[]` array for debugging failures. Blog release posts (curated in `src/sources/blog-presets.ts`) supplement docs for major version announcements.
 
 **Git skills (`src/sources/git-skills.ts`, `src/commands/sync-git.ts`):**
 Installs pre-authored skills from git repos. Accepts `owner/repo`, full URLs, SSH, or local paths. Clones/pulls into `~/.skilld/git-skills/`, copies `skills/` directory contents. Part of skills-npm ecosystem compatibility.
@@ -89,12 +92,13 @@ References are global/static; SKILL.md is per-project (different conventions). C
 - **Markdown sanitization** — `src/core/sanitize.ts` strips prompt injection vectors (zero-width chars, HTML comments, agent directive tags, external images/links, base64 blobs, directive patterns). Code-fence-aware via state machine
 - **Let errors propagate** — fetch errors return `null`, resolution tracks attempts in `ResolveAttempt[]`
 - **Parallelization** — `p-limit` for concurrency, batch downloads (20 at a time), `sync-parallel.ts` for multi-package
-- **Overrides** — `src/sources/overrides.ts` maps package names → `{ owner, repo, path, ref?, homepage? }` for packages with broken npm metadata
+- **Package registry** — `src/sources/package-registry.ts` unified registry keyed by `owner/repo`, consolidates doc overrides, blog presets, and file patterns for packages with broken/missing npm metadata
 - **Version comparison** — `isOutdated()` compares exact versions
 - **Tests** — vitest projects (unit + e2e), `globals: true`, tests in `test/unit/` and `test/e2e/`, fs mocked via `vi.mock('node:fs')`. E2E tests include preset workflows (nuxt, vue, react, svelte, etc.) in `test/e2e/preset-*.test.ts`
 - **Build** — `obuild` bundles multiple entry points (cli, index, types, cache, retriv, agent, sources) as subpath exports
-- **CLI modes** — `skilld update -b` for pnpm prepare hooks (background, non-interactive, auto-uses configured model)
+- **CLI modes** — `skilld update -b` for pnpm prepare hooks (background, non-interactive, auto-uses configured model). `--eject` publishes skills with references as real files. `--debug` saves raw LLM output to `logs/`
 - **First-run wizard** — `src/commands/wizard.ts` handles agent/model config and package selection on first run
+- **E2E agent tests** — `test/e2e-agents/` validates skill generation across multiple agents via `generate-matrix.ts` and `generate-pipeline.ts`
 
 <!-- skilld -->
 Before modifying code, evaluate each installed skill against the current task.
