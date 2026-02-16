@@ -289,10 +289,17 @@ function fetchIssuesByState(
   state: 'open' | 'closed',
   count: number,
   releasedAt?: string,
+  fromDate?: string,
 ): GitHubIssue[] {
   const fetchCount = Math.min(count * 3, 100)
   let datePart = ''
-  if (state === 'closed') {
+  if (fromDate) {
+    // Explicit lower bound: only issues from this date onward
+    datePart = state === 'closed'
+      ? `+closed:>=${fromDate}`
+      : `+created:>=${fromDate}`
+  }
+  else if (state === 'closed') {
     if (releasedAt) {
       // For older versions, include issues closed up to 6 months after release
       const date = new Date(releasedAt)
@@ -459,6 +466,7 @@ export async function fetchGitHubIssues(
   repo: string,
   limit = 30,
   releasedAt?: string,
+  fromDate?: string,
 ): Promise<GitHubIssue[]> {
   if (!isGhAvailable())
     return []
@@ -468,8 +476,8 @@ export async function fetchGitHubIssues(
 
   try {
     // Fetch more than needed so type quotas have a pool to draw from
-    const open = fetchIssuesByState(owner, repo, 'open', Math.min(openCount * 2, 100), releasedAt)
-    const closed = fetchIssuesByState(owner, repo, 'closed', Math.min(closedCount * 2, 50), releasedAt)
+    const open = fetchIssuesByState(owner, repo, 'open', Math.min(openCount * 2, 100), releasedAt, fromDate)
+    const closed = fetchIssuesByState(owner, repo, 'closed', Math.min(closedCount * 2, 50), releasedAt, fromDate)
     const all = [...open, ...closed]
     const selected = applyTypeQuotas(all, limit)
     enrichWithComments(owner, repo, selected)

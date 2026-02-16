@@ -173,6 +173,9 @@ skilld eject vue --name vue
 
 # Eject to a custom path
 skilld eject vue --out ./skills/vue/
+
+# Only collect releases/issues/discussions since a date
+skilld eject vue --from 2025-07-01
 ```
 
 The ejected skill contains `SKILL.md` plus a `references/` directory with docs, issues, and releases as real files. Share it via `skilld add owner/repo` — consumers get fully functional skills with no LLM cost.
@@ -188,6 +191,7 @@ The ejected skill contains `SKILL.md` plus a `references/` directory with docs, 
 | `--model`      | `-m` | config default | LLM model for skill generation (sonnet, haiku, opus, etc.) |
 | `--name`       | `-n` |                | Custom skill directory name (eject only) |
 | `--out`        | `-o` |                | Output directory path override (eject only) |
+| `--from`       |      |                | Collect releases/issues/discussions from this date (YYYY-MM-DD, eject only) |
 | `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
 
 ## The Landscape

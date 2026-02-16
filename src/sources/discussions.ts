@@ -107,6 +107,7 @@ export async function fetchGitHubDiscussions(
   repo: string,
   limit = 20,
   releasedAt?: string,
+  fromDate?: string,
 ): Promise<GitHubDiscussion[]> {
   if (!isGhAvailable())
     return []
@@ -114,7 +115,8 @@ export async function fetchGitHubDiscussions(
   // GraphQL discussions endpoint doesn't support date filtering,
   // so we fetch latest N and filter client-side. Skip entirely
   // if the cutoff is in the past — results would be empty anyway.
-  if (releasedAt) {
+  // (Skip this check when fromDate is set — we'll filter client-side below)
+  if (!fromDate && releasedAt) {
     const cutoff = new Date(releasedAt)
     cutoff.setMonth(cutoff.getMonth() + 6)
     if (cutoff < new Date())
@@ -139,12 +141,14 @@ export async function fetchGitHubDiscussions(
     if (!Array.isArray(nodes))
       return []
 
+    const fromTs = fromDate ? new Date(fromDate).getTime() : null
     const discussions = nodes
       .filter((d: any) => d.author && !BOT_USERS.has(d.author.login))
       .filter((d: any) => {
         const cat = (d.category?.name || '').toLowerCase()
         return !LOW_VALUE_CATEGORIES.has(cat)
       })
+      .filter((d: any) => !fromTs || new Date(d.createdAt).getTime() >= fromTs)
       .map((d: any) => {
         // Process answer — tag maintainer status
         let answer: string | undefined

@@ -35,9 +35,10 @@ skilld search "query" # Search indexed docs
 skilld search "query" -p nuxt  # Search filtered by package
 skilld cache             # Clean expired LLM cache entries
 skilld add owner/repo    # Add pre-authored skills from git repo
-skilld eject vue              # Eject skill (portable, no symlinks)
-skilld eject vue --name vue   # Eject with custom skill dir name
-skilld eject vue --out ./dir/ # Eject to custom path
+skilld eject vue                    # Eject skill (portable, no symlinks)
+skilld eject vue --name vue         # Eject with custom skill dir name
+skilld eject vue --out ./dir/       # Eject to custom path
+skilld eject vue --from 2025-07-01  # Only releases/issues since date
 ```
 
 ## Architecture

@@ -143,11 +143,12 @@ async function fetchAllReleases(owner: string, repo: string): Promise<GitHubRele
  * Falls back to generic tags (v1.2.3) only if no package-specific found.
  * If installedVersion is provided, filters out releases newer than it.
  */
-export function selectReleases(releases: GitHubRelease[], packageName?: string, installedVersion?: string): GitHubRelease[] {
+export function selectReleases(releases: GitHubRelease[], packageName?: string, installedVersion?: string, fromDate?: string): GitHubRelease[] {
   // Check if this looks like a monorepo (has package-prefixed tags)
   const hasMonorepoTags = packageName && releases.some(r => tagMatchesPackage(r.tag, packageName))
   const installedSv = installedVersion ? parseSemver(installedVersion) : null
   const installedIsPrerelease = installedVersion ? isPrerelease(installedVersion) : false
+  const fromTs = fromDate ? new Date(fromDate).getTime() : null
 
   const filtered = releases.filter((r) => {
     const ver = extractVersion(r.tag, hasMonorepoTags ? packageName : undefined)
@@ -161,6 +162,13 @@ export function selectReleases(releases: GitHubRelease[], packageName?: string, 
     // Monorepo: only include tags for this package
     if (hasMonorepoTags && packageName && !tagMatchesPackage(r.tag, packageName))
       return false
+
+    // Date lower bound: skip releases published before fromDate
+    if (fromTs) {
+      const pubDate = r.publishedAt || r.createdAt
+      if (pubDate && new Date(pubDate).getTime() < fromTs)
+        return false
+    }
 
     // Prerelease handling: include only when installed is also prerelease and same major.minor
     if (r.prerelease) {
@@ -176,7 +184,7 @@ export function selectReleases(releases: GitHubRelease[], packageName?: string, 
     return true
   })
 
-  return filtered
+  const sorted = filtered
     .sort((a, b) => {
       const verA = extractVersion(a.tag, hasMonorepoTags ? packageName : undefined)
       const verB = extractVersion(b.tag, hasMonorepoTags ? packageName : undefined)
@@ -184,7 +192,9 @@ export function selectReleases(releases: GitHubRelease[], packageName?: string, 
         return 0
       return compareSemver(parseSemver(verB)!, parseSemver(verA)!)
     })
-    .slice(0, 20)
+
+  // No cap when fromDate is set — include all matching releases
+  return fromDate ? sorted : sorted.slice(0, 20)
 }
 
 /**
@@ -311,9 +321,10 @@ export async function fetchReleaseNotes(
   installedVersion: string,
   gitRef?: string,
   packageName?: string,
+  fromDate?: string,
 ): Promise<CachedDoc[]> {
   const releases = await fetchAllReleases(owner, repo)
-  const selected = selectReleases(releases, packageName, installedVersion)
+  const selected = selectReleases(releases, packageName, installedVersion, fromDate)
 
   if (selected.length > 0) {
     // Detect changelog-redirect pattern: short stubs that just link to CHANGELOG.md

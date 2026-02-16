@@ -273,6 +273,8 @@ export async function fetchAndCacheResources(opts: {
   version: string
   useCache: boolean
   features?: FeaturesConfig
+  /** Lower-bound date for release/issue/discussion collection (ISO date) */
+  from?: string
   onProgress: (message: string) => void
 }): Promise<FetchResult> {
   const { packageName, resolved, version, useCache, onProgress } = opts
@@ -441,7 +443,7 @@ export async function fetchAndCacheResources(opts: {
     const gh = parseGitHubUrl(resolved.repoUrl)
     if (gh) {
       onProgress('Fetching issues via GitHub API')
-      const issues = await fetchGitHubIssues(gh.owner, gh.repo, 30, resolved.releasedAt).catch(() => [])
+      const issues = await fetchGitHubIssues(gh.owner, gh.repo, 30, resolved.releasedAt, opts.from).catch(() => [])
       if (issues.length > 0) {
         onProgress(`Caching ${issues.length} issues`)
         writeToCache(packageName, version, issues.map(issue => ({
@@ -469,7 +471,7 @@ export async function fetchAndCacheResources(opts: {
     const gh = parseGitHubUrl(resolved.repoUrl)
     if (gh) {
       onProgress('Fetching discussions via GitHub API')
-      const discussions = await fetchGitHubDiscussions(gh.owner, gh.repo, 20, resolved.releasedAt).catch(() => [])
+      const discussions = await fetchGitHubDiscussions(gh.owner, gh.repo, 20, resolved.releasedAt, opts.from).catch(() => [])
       if (discussions.length > 0) {
         onProgress(`Caching ${discussions.length} discussions`)
         writeToCache(packageName, version, discussions.map(d => ({
@@ -497,7 +499,7 @@ export async function fetchAndCacheResources(opts: {
     const gh = parseGitHubUrl(resolved.repoUrl)
     if (gh) {
       onProgress('Fetching releases via GitHub API')
-      const releaseDocs = await fetchReleaseNotes(gh.owner, gh.repo, version, resolved.gitRef, packageName).catch(() => [])
+      const releaseDocs = await fetchReleaseNotes(gh.owner, gh.repo, version, resolved.gitRef, packageName, opts.from).catch(() => [])
 
       // Fetch blog releases into same releases/ dir
       let blogDocs: Array<{ path: string, content: string }> = []

@@ -3,7 +3,7 @@ import type { FeaturesConfig } from '../core/config.ts'
 import type { ProjectState } from '../core/skills.ts'
 import type { GitSkillSource } from '../sources/git-skills.ts'
 import type { ResolveAttempt } from '../sources/index.ts'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
@@ -214,6 +214,8 @@ export interface SyncOptions {
   eject?: boolean | string
   /** Override the computed skill directory name */
   name?: string
+  /** Lower-bound date for release/issue/discussion collection (ISO date, e.g. "2025-07-01") */
+  from?: string
 }
 
 export async function syncCommand(state: ProjectState, opts: SyncOptions): Promise<void> {
@@ -502,6 +504,7 @@ interface SyncConfig {
   mode?: 'add' | 'update'
   eject?: boolean | string
   name?: string
+  from?: string
 }
 
 async function syncSinglePackage(packageName: string, config: SyncConfig): Promise<void> {
@@ -664,6 +667,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
     version,
     useCache,
     features,
+    from: config.from,
     onProgress: msg => resSpin.message(msg),
   })
   const resParts: string[] = []
@@ -682,13 +686,8 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   for (const w of resources.warnings)
     p.log.warn(`\x1B[33m${w}\x1B[0m`)
 
-  // Create symlinks or copy files (eject mode)
-  if (config.eject) {
-    ejectReferences(skillDir, packageName, cwd, version, resources.docsType, features)
-  }
-  else {
-    linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features)
-  }
+  // Create symlinks (LLM needs .skilld/ to read docs, even in eject mode)
+  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features)
 
   // ── Phase 2: Search index (skip in eject mode — not portable) ──
   if (features.search && !config.eject) {
@@ -790,6 +789,14 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
         eject: isEject,
       })
     }
+  }
+
+  // Eject: clean up transient .skilld/ symlinks → copy as real files
+  if (isEject) {
+    const skilldDir = join(skillDir, '.skilld')
+    if (existsSync(skilldDir) && !config.debug)
+      rmSync(skilldDir, { recursive: true, force: true })
+    ejectReferences(skillDir, packageName, cwd, version, resources.docsType, features)
   }
 
   // Skip agent integration in eject mode (no symlinks, no gitignore, no instructions)
@@ -995,6 +1002,10 @@ export const ejectCommandDef = defineCommand({
       alias: 'o',
       description: 'Output directory path override',
     },
+    from: {
+      type: 'string',
+      description: 'Collect releases/issues/discussions from this date onward (YYYY-MM-DD)',
+    },
     ...sharedArgs,
   },
   async run({ args }) {
@@ -1021,6 +1032,7 @@ export const ejectCommandDef = defineCommand({
       debug: args.debug,
       eject: args.out || true,
       name: args.name,
+      from: args.from,
     })
   },
 })
