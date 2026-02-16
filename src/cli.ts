@@ -145,7 +145,7 @@ async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> 
 
 // ── Subcommands (lazy-loaded) ──
 
-const SUBCOMMAND_NAMES = ['add', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache']
+const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache']
 
 // ── Main command ──
 
@@ -160,6 +160,7 @@ const main = defineCommand({
   },
   subCommands: {
     add: () => import('./commands/sync.ts').then(m => m.addCommandDef),
+    eject: () => import('./commands/sync.ts').then(m => m.ejectCommandDef),
     update: () => import('./commands/sync.ts').then(m => m.updateCommandDef),
     info: () => import('./commands/status.ts').then(m => m.infoCommandDef),
     list: () => import('./commands/list.ts').then(m => m.listCommandDef),

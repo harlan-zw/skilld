@@ -18,6 +18,7 @@ import {
   getModelName,
   linkSkillToAgents,
   optimizeDocs,
+  sanitizeName,
 } from '../agent/index.ts'
 import { maxItems, maxLines } from '../agent/prompts/optional/budget.ts'
 import {
@@ -211,6 +212,8 @@ export interface SyncOptions {
   mode?: 'add' | 'update'
   /** Eject mode: copy references as real files instead of symlinking */
   eject?: boolean | string
+  /** Override the computed skill directory name */
+  name?: string
 }
 
 export async function syncCommand(state: ProjectState, opts: SyncOptions): Promise<void> {
@@ -498,6 +501,7 @@ interface SyncConfig {
   debug?: boolean
   mode?: 'add' | 'update'
   eject?: boolean | string
+  name?: string
 }
 
 async function syncSinglePackage(packageName: string, config: SyncConfig): Promise<void> {
@@ -588,7 +592,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   ensureCacheDir()
 
   const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-  const skillDirName = computeSkillDirName(packageName, resolved.repoUrl)
+  const skillDirName = config.name ? sanitizeName(config.name) : computeSkillDirName(packageName, resolved.repoUrl)
   // Eject path override: use specified directory instead of agent skills dir
   const skillDir = typeof config.eject === 'string' ? resolve(cwd, config.eject) : join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
@@ -834,7 +838,7 @@ interface EnhanceOptions {
   eject?: boolean
 }
 
-async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
+export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
   const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject } = opts
 
   const llmLog = p.taskLog({ title: `Agent exploring ${packageName}` })
@@ -914,12 +918,6 @@ export const addCommandDef = defineCommand({
       description: 'Package(s) to sync (space or comma-separated, e.g., vue nuxt pinia)',
       required: true,
     },
-    eject: {
-      type: 'string',
-      alias: 'e',
-      description: 'Eject skill with references as real files (portable, no symlinks). Optional path override.',
-      required: false,
-    },
     ...sharedArgs,
   },
   async run({ args }) {
@@ -974,9 +972,56 @@ export const addCommandDef = defineCommand({
         yes: args.yes,
         force: args.force,
         debug: args.debug,
-        eject: args.eject !== undefined ? (args.eject || true) : undefined,
       })
     }
+  },
+})
+
+export const ejectCommandDef = defineCommand({
+  meta: { name: 'eject', description: 'Eject skill with references as real files (portable, no symlinks)' },
+  args: {
+    package: {
+      type: 'positional',
+      description: 'Package to eject',
+      required: true,
+    },
+    name: {
+      type: 'string',
+      alias: 'n',
+      description: 'Custom skill directory name (default: derived from package)',
+    },
+    out: {
+      type: 'string',
+      alias: 'o',
+      description: 'Output directory path override',
+    },
+    ...sharedArgs,
+  },
+  async run({ args }) {
+    const cwd = process.cwd()
+    let agent = resolveAgent(args.agent)
+    if (!agent) {
+      agent = await promptForAgent()
+      if (!agent)
+        return
+    }
+
+    if (!hasCompletedWizard())
+      await runWizard()
+
+    const state = await getProjectState(cwd)
+    p.intro(introLine({ state }))
+    return syncCommand(state, {
+      packages: [args.package],
+      global: args.global,
+      agent,
+      model: args.model as OptimizeModel | undefined,
+      yes: args.yes,
+      force: args.force,
+      debug: args.debug,
+      eject: args.out || true,
+      name: args.name,
+    })
   },
 })
 
