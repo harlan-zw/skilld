@@ -653,7 +653,7 @@ export function cleanSectionOutput(content: string): string {
     const inner = wrapMatch[1]!.trim()
     // For bare ``` wrappers (no markdown/md tag), verify inner looks like section output
     const isExplicitWrapper = /^```(?:markdown|md)/.test(cleaned)
-    if (isExplicitWrapper || /^##\s/m.test(inner) || /[⚠✅✨]/.test(inner)) {
+    if (isExplicitWrapper || /^##\s/m.test(inner) || /^- (?:BREAKING|DEPRECATED|NEW): /m.test(inner)) {
       cleaned = inner
     }
   }
@@ -672,8 +672,8 @@ export function cleanSectionOutput(content: string): string {
   }
 
   // Strip raw code preamble before first section marker (defense against LLMs dumping source)
-  // Section markers: ## heading, ⚠️ warning, ✅ best practice
-  const firstMarker = cleaned.match(/^(##\s|⚠️|✅)/m)
+  // Section markers: ## heading, BREAKING/DEPRECATED/NEW labels
+  const firstMarker = cleaned.match(/^(##\s|- (?:BREAKING|DEPRECATED|NEW): )/m)
   if (firstMarker?.index && firstMarker.index > 0) {
     const preamble = cleaned.slice(0, firstMarker.index)
     // Only strip if preamble looks like code (contains function/const/export/return patterns)
@@ -706,8 +706,8 @@ export function cleanSectionOutput(content: string): string {
   cleaned = sanitizeMarkdown(cleaned)
 
   // Reject content that lacks any section structure — likely leaked LLM reasoning/narration
-  // Valid sections always contain headings (##) or item markers (⚠️ ✅ ✨)
-  if (!/^##\s/m.test(cleaned) && !/⚠️|✅|✨/.test(cleaned)) {
+  // Valid sections contain headings (##), API change labels, or source-linked items
+  if (!/^##\s/m.test(cleaned) && !/^- (?:BREAKING|DEPRECATED|NEW): /m.test(cleaned) && !/\[source\]/.test(cleaned)) {
     return ''
   }
 

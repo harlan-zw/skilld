@@ -98,6 +98,10 @@ const BASE64_BLOB_RE = /^[A-Z0-9+/=]{100,}$/gim
 /** Unicode escape spam: 4+ consecutive \uXXXX sequences */
 const UNICODE_ESCAPE_SPAM_RE = /(\\u[\dA-Fa-f]{4}){4,}/g
 
+/** Emoji characters — token-inefficient (2-3x cost), distort embeddings, semantically ambiguous for LLMs */
+// Also strips variation selectors (\uFE0E text, \uFE0F emoji) which dangle after emoji removal
+const EMOJI_RE = /[\p{Extended_Pictographic}\uFE0E\uFE0F]/gu
+
 /**
  * Process content outside of fenced code blocks.
  * Uses a line-by-line state machine to properly track fence boundaries,
@@ -208,6 +212,9 @@ export function sanitizeMarkdown(content: string): string {
     // Layer 8: Strip encoded payloads
     t = t.replace(BASE64_BLOB_RE, '')
     t = t.replace(UNICODE_ESCAPE_SPAM_RE, '')
+
+    // Layer 9: Strip emoji (token-inefficient, distort embeddings, semantically ambiguous)
+    t = t.replace(EMOJI_RE, '')
 
     // Restore inline code spans
     t = t.replace(/\0IC(\d+)\0/g, (_, idx) => inlineCodeSpans[Number(idx)] || '')

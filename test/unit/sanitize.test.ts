@@ -173,6 +173,42 @@ describe('sanitizeMarkdown', () => {
     })
   })
 
+  // Layer 9: Emoji stripping
+  describe('emoji stripping', () => {
+    it('strips common emojis outside code blocks', () => {
+      expect(sanitizeMarkdown('## ✨ Features')).toBe('##  Features')
+      expect(sanitizeMarkdown('🚨 Critical bug')).toBe(' Critical bug')
+      expect(sanitizeMarkdown('Status: ✅')).toBe('Status: ')
+    })
+
+    it('strips multiple emojis', () => {
+      expect(sanitizeMarkdown('🚨🚨 Warning 🚨')).toBe(' Warning ')
+    })
+
+    it('preserves emojis inside fenced code blocks', () => {
+      const input = '```ts\nconsole.log("🎉 Success")\n```'
+      expect(sanitizeMarkdown(input)).toBe(input)
+    })
+
+    it('strips emojis in headings outside code blocks', () => {
+      expect(sanitizeMarkdown('### 🐛 Bug Fixes')).toBe('###  Bug Fixes')
+      expect(sanitizeMarkdown('## 🔥 Breaking Changes')).toBe('##  Breaking Changes')
+    })
+
+    it('strips ZWJ sequence emojis (family, skin tone)', () => {
+      // ZWJ chars already stripped by layer 1, emoji chars by layer 9
+      expect(sanitizeMarkdown('👨‍👩‍👧‍👦 Family')).toBe(' Family')
+    })
+
+    it('preserves text around stripped emojis', () => {
+      expect(sanitizeMarkdown('Before 🎯 after')).toBe('Before  after')
+    })
+
+    it('handles emoji-only lines', () => {
+      expect(sanitizeMarkdown('✅❌⚠️')).toBe('')
+    })
+  })
+
   // Layer 7: Directive lines
   describe('directive lines', () => {
     it('strips SYSTEM: lines', () => {

@@ -40,24 +40,24 @@ ${searchHints.length ? `\nSearch: ${searchHints.join(', ')}` : ''}`,
 \`\`\`
 ## Best Practices
 
-✅ Use ${packageName}'s built-in \`createX()\` helper over manual wiring — handles cleanup and edge cases automatically [source](./.skilld/docs/api.md)
+- Use ${packageName}'s built-in \`createX()\` helper over manual wiring — handles cleanup and edge cases automatically [source](./.skilld/docs/api.md)
 
 \`\`\`ts
-// ✅ idiomatic
+// Preferred
 const instance = createX({ ... })
 
-// ❌ manual — misses cleanup, error boundaries
+// Avoid — misses cleanup, error boundaries
 const instance = new X()
 instance.init({ ... })
 \`\`\`
 
-✅ Pass config through \`defineConfig()\` — enables type inference and plugin merging [source](./.skilld/docs/config.md)
+- Pass config through \`defineConfig()\` — enables type inference and plugin merging [source](./.skilld/docs/config.md)
 
-✅ Prefer \`useComposable()\` over direct imports in reactive contexts — ensures proper lifecycle binding [source](./.skilld/docs/composables.md)
+- Prefer \`useComposable()\` over direct imports in reactive contexts — ensures proper lifecycle binding [source](./.skilld/docs/composables.md)
 \`\`\`
 </format-example>
 
-Each item: ✅ + ${packageName}-specific pattern + why it's preferred + source link. Code block only when the pattern isn't obvious from the title. Use the most relevant language tag (ts, vue, css, json, etc). Every example must be specific to ${packageName} — never generic TypeScript/JS advice. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/docs/guide.md)\`).`,
+Each item: markdown list item (-) + ${packageName}-specific pattern + why it's preferred + source link. Code block only when the pattern isn't obvious from the title. Use the most relevant language tag (ts, vue, css, json, etc). Every example must be specific to ${packageName} — never generic TypeScript/JS advice. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/docs/guide.md)\`). Do NOT use emoji — use plain text markers only.`,
 
     rules: [
       `- **${maxItems(4, 10, enabledSectionCount)} best practice items**`,

@@ -81,20 +81,20 @@ ${searchHints.length ? `\nSearch: ${searchHints.join(', ')}` : ''}${releaseGuida
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
 
-⚠️ \`createClient(url, key)\` — v2 changed to \`createClient({ url, key })\`, old positional args silently ignored [source](./.skilld/releases/v2.0.0.md)
+- BREAKING: \`createClient(url, key)\` — v2 changed to \`createClient({ url, key })\`, old positional args silently ignored [source](./.skilld/releases/v2.0.0.md)
 
-✨ \`useTemplateRef()\` — new in v3.5, replaces \`$refs\` pattern [source](./.skilld/releases/v3.5.0.md)
+- NEW: \`useTemplateRef()\` — new in v3.5, replaces \`$refs\` pattern [source](./.skilld/releases/v3.5.0.md)
 
-⚠️ \`db.query()\` — returns \`{ rows }\` not raw array since v4 [source](./.skilld/docs/migration.md)
+- BREAKING: \`db.query()\` — returns \`{ rows }\` not raw array since v4 [source](./.skilld/docs/migration.md)
 </format-example>
 
-Each item: ⚠️ (breaking/deprecated) or ✨ (new) + API name + what changed + source link. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/releases/v2.0.0.md)\`).`,
+Each item: BREAKING/DEPRECATED/NEW label + API name + what changed + source link. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/releases/v2.0.0.md)\`). Do NOT use emoji — use plain text markers only.`,
 
     rules: [
       `- **API Changes:** ${maxItems(6, 12, enabledSectionCount)} items from version history, MAX ${maxLines(50, 80, enabledSectionCount)} lines`,
       '- Prioritize recent major/minor releases over old patch versions',
       '- Focus on APIs that CHANGED, not general conventions or gotchas',
-      '- New APIs get ✨, deprecated/breaking get ⚠️',
+      '- New APIs get NEW: prefix, deprecated/breaking get BREAKING: or DEPRECATED: prefix',
       hasReleases ? '- Start with `./.skilld/releases/_INDEX.md` to identify recent major/minor releases, then read specific release files' : '',
       hasChangelog ? '- Scan CHANGELOG.md for version headings, focus on Features/Breaking Changes sections' : '',
     ].filter(Boolean),
