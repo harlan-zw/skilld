@@ -53,7 +53,7 @@ export function apiChangesSection({ packageName, version, hasReleases, hasChange
     : ''
 
   const versionGuidance = major && minor
-    ? `\n\n**New APIs in recent releases are the highest-priority gaps** — the LLM was trained on older data and will use outdated or non-existent APIs instead. Search for recent version tags and "Features" in releases/changelog to find new composables, components, hooks, or utilities added in recent major/minor versions.`
+    ? `\n\n**Recency rule:** At least 60% of items must be from v${major}.x releases. Earlier major version items only if the old API is still commonly misused.`
     : ''
 
   return {

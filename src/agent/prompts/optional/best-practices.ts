@@ -31,7 +31,7 @@ export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, h
   return {
     referenceWeights,
 
-    task: `**Extract non-obvious best practices from the references.** Focus on recommended patterns Claude wouldn't already know: idiomatic usage, preferred configurations, performance tips, patterns that differ from what a developer would assume. Surface new patterns from recent minor releases that may post-date training data. Every item must link to a verified source file.
+    task: `**Extract non-obvious best practices from the references.** Focus on recommended patterns the LLM wouldn't already know: idiomatic usage, preferred configurations, performance tips, patterns that differ from what a developer would assume. Surface new patterns from recent minor releases that may post-date training data.
 
 Skip: obvious API usage, installation steps, general TypeScript/programming patterns, anything a developer would naturally write without reading the docs.
 ${searchHints.length ? `\nSearch: ${searchHints.join(', ')}` : ''}`,
@@ -59,7 +59,9 @@ Each item: ✅ + pattern name + why it's preferred + source link. Code block onl
     rules: [
       `- **${maxItems(4, 10, enabledSectionCount)} best practice items**`,
       `- **MAX ${maxLines(80, 150, enabledSectionCount)} lines** for best practices section`,
-      '- **Only link files confirmed to exist** via Glob or Read — no guessed paths',
+      '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Confirm functions/composables are real exports in `./.skilld/pkg/` `.d.ts` files before documenting',
+      '- **Diversity:** Cover at least 3 distinct areas of the library. No single feature should have more than 40% of items',
+      '- **Experimental APIs:** Mark unstable/experimental features with `(experimental)` in the description. Prioritize stable patterns',
     ],
   }
 }

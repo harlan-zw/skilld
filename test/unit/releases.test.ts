@@ -1,6 +1,6 @@
 import type { GitHubRelease } from '../../src/sources/releases'
 import { describe, expect, it } from 'vitest'
-import { isChangelogRedirectPattern, isPrerelease, selectReleases } from '../../src/sources/releases'
+import { isChangelogRedirectPattern, isPrerelease, isStubRelease, selectReleases } from '../../src/sources/releases'
 
 function makeRelease(tag: string, markdown: string, prerelease = false): GitHubRelease {
   return { id: 1, tag, name: tag, prerelease, createdAt: '2024-01-01T00:00:00Z', publishedAt: '2024-01-01T00:00:00Z', markdown }
@@ -195,5 +195,28 @@ describe('isChangelogRedirectPattern', () => {
     ]
     // Empty body doesn't mention changelog
     expect(isChangelogRedirectPattern(releases)).toBe(false)
+  })
+})
+
+describe('isStubRelease', () => {
+  it('detects stub with CHANGELOG.md reference', () => {
+    expect(isStubRelease(makeRelease('v4.5.0', 'Please refer to CHANGELOG.md for details.'))).toBe(true)
+  })
+
+  it('detects stub with linked CHANGELOG.md', () => {
+    expect(isStubRelease(makeRelease('v3.5.8', 'For stable releases, please refer to [CHANGELOG.md](https://github.com/vuejs/core/blob/main/CHANGELOG.md) for details.'))).toBe(true)
+  })
+
+  it('rejects real release notes', () => {
+    expect(isStubRelease(makeRelease('v4.3.0', '## What\'s Changed\n\n### Features\n\n- New routing system\n\n**Full Changelog**: https://github.com/org/repo/compare/v4.2.0...v4.3.0'))).toBe(false)
+  })
+
+  it('rejects long content even with CHANGELOG.md mention', () => {
+    const long = `See CHANGELOG.md\n\n${'- fix: something\n'.repeat(50)}`
+    expect(isStubRelease(makeRelease('v1.0.0', long))).toBe(false)
+  })
+
+  it('rejects empty body', () => {
+    expect(isStubRelease(makeRelease('v1.0.0', ''))).toBe(false)
   })
 })

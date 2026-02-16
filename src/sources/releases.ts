@@ -282,17 +282,23 @@ export function generateReleaseIndex(releasesOrOpts: GitHubRelease[] | ReleaseIn
 }
 
 /**
+ * Check if a single release is a stub redirecting to CHANGELOG.md.
+ * Short body (<500 chars) that mentions CHANGELOG indicates no real content.
+ */
+export function isStubRelease(release: GitHubRelease): boolean {
+  const body = (release.markdown || '').trim()
+  return body.length < 500 && /changelog\.md/i.test(body)
+}
+
+/**
  * Detect if releases are just short stubs redirecting to CHANGELOG.md.
- * Samples up to 3 releases — if all are short (<500 chars) and mention CHANGELOG, it's a redirect pattern.
+ * Samples up to 3 releases — if all are stubs, it's a redirect pattern.
  */
 export function isChangelogRedirectPattern(releases: GitHubRelease[]): boolean {
   const sample = releases.slice(0, 3)
   if (sample.length === 0)
     return false
-  return sample.every((r) => {
-    const body = (r.markdown || '').trim()
-    return body.length < 500 && /changelog\.md/i.test(body)
-  })
+  return sample.every(isStubRelease)
 }
 
 /**
@@ -336,7 +342,10 @@ export async function fetchReleaseNotes(
         return [{ path: 'releases/CHANGELOG.md', content: changelog }]
     }
 
-    const docs = selected.map((r) => {
+    // Filter out individual stub releases that just say "see CHANGELOG"
+    const substantive = selected.filter(r => !isStubRelease(r))
+
+    const docs = substantive.map((r) => {
       const filename = r.tag.includes('@') || r.tag.startsWith('v')
         ? r.tag
         : `v${r.tag}`
