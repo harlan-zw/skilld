@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubUrl } from '../../src/sources/utils'
+import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubUrl, parsePackageSpec } from '../../src/sources/utils'
 
 describe('sources/utils', () => {
   describe('isGitHubRepoUrl', () => {
@@ -52,6 +52,33 @@ describe('sources/utils', () => {
     it('returns null for invalid URLs', () => {
       expect(parseGitHubUrl('https://gitlab.com/owner/repo')).toBeNull()
       expect(parseGitHubUrl('not-a-url')).toBeNull()
+    })
+  })
+
+  describe('parsePackageSpec', () => {
+    it('parses plain package name', () => {
+      expect(parsePackageSpec('vue')).toEqual({ name: 'vue' })
+    })
+
+    it('parses unscoped package with dist-tag', () => {
+      expect(parsePackageSpec('vue@beta')).toEqual({ name: 'vue', tag: 'beta' })
+      expect(parsePackageSpec('vue@latest')).toEqual({ name: 'vue', tag: 'latest' })
+    })
+
+    it('parses unscoped package with version', () => {
+      expect(parsePackageSpec('vue@3.5.0')).toEqual({ name: 'vue', tag: '3.5.0' })
+    })
+
+    it('parses scoped package without tag', () => {
+      expect(parsePackageSpec('@vue/reactivity')).toEqual({ name: '@vue/reactivity' })
+    })
+
+    it('parses scoped package with dist-tag', () => {
+      expect(parsePackageSpec('@vue/reactivity@beta')).toEqual({ name: '@vue/reactivity', tag: 'beta' })
+    })
+
+    it('parses scoped package with version', () => {
+      expect(parsePackageSpec('@nuxt/kit@3.15.0')).toEqual({ name: '@nuxt/kit', tag: '3.15.0' })
     })
   })
 

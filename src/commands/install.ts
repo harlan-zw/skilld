@@ -526,6 +526,7 @@ async function enhanceRegenerated(
     sections,
     customPrompt,
     features,
+    pkgFiles: getPkgKeyFiles(pkgName, process.cwd(), version),
     onProgress: createToolProgress(llmLog),
   })
 

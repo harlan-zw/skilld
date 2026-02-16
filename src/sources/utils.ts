@@ -90,6 +90,28 @@ export function normalizeRepoUrl(url: string): string {
 }
 
 /**
+ * Parse package spec with optional dist-tag or version: "vue@beta" → { name: "vue", tag: "beta" }
+ * Handles scoped packages: "@vue/reactivity@beta" → { name: "@vue/reactivity", tag: "beta" }
+ */
+export function parsePackageSpec(spec: string): { name: string, tag?: string } {
+  // Scoped: @scope/pkg@tag — find the second @
+  if (spec.startsWith('@')) {
+    const slashIdx = spec.indexOf('/')
+    if (slashIdx !== -1) {
+      const atIdx = spec.indexOf('@', slashIdx + 1)
+      if (atIdx !== -1)
+        return { name: spec.slice(0, atIdx), tag: spec.slice(atIdx + 1) }
+    }
+    return { name: spec }
+  }
+  // Unscoped: pkg@tag
+  const atIdx = spec.indexOf('@')
+  if (atIdx !== -1)
+    return { name: spec.slice(0, atIdx), tag: spec.slice(atIdx + 1) }
+  return { name: spec }
+}
+
+/**
  * Extract branch hint from URL fragment (e.g. "git+https://...#main" → "main")
  */
 export function extractBranchHint(url: string): string | undefined {

@@ -16,10 +16,10 @@ export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, h
     referenceWeights.push({ name: 'Docs', path: './.skilld/docs/', score: 9, useFor: 'Primary source — recommended patterns, configuration, idiomatic usage' })
   }
   if (hasDiscussions) {
-    referenceWeights.push({ name: 'Discussions', path: './.skilld/discussions/_INDEX.md', score: 8, useFor: 'Q&A with accepted answers reveal "the right way"' })
+    referenceWeights.push({ name: 'Discussions', path: './.skilld/discussions/_INDEX.md', score: 5, useFor: 'Only maintainer-confirmed patterns — community workarounds are lower confidence' })
   }
   if (hasIssues) {
-    referenceWeights.push({ name: 'Issues', path: './.skilld/issues/_INDEX.md', score: 7, useFor: 'Questions reveal what users find confusing' })
+    referenceWeights.push({ name: 'Issues', path: './.skilld/issues/_INDEX.md', score: 4, useFor: 'Only workarounds confirmed by maintainers or with broad adoption' })
   }
   if (hasReleases) {
     referenceWeights.push({ name: 'Releases', path: './.skilld/releases/_INDEX.md', score: 3, useFor: 'Only for new patterns introduced in recent versions' })
@@ -33,28 +33,31 @@ export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, h
 
     task: `**Extract non-obvious best practices from the references.** Focus on recommended patterns the LLM wouldn't already know: idiomatic usage, preferred configurations, performance tips, patterns that differ from what a developer would assume. Surface new patterns from recent minor releases that may post-date training data.
 
-Skip: obvious API usage, installation steps, general TypeScript/programming patterns, anything a developer would naturally write without reading the docs.
+Skip: obvious API usage, installation steps, general TypeScript/programming patterns not specific to this package, anything a developer would naturally write without reading the docs. Every item must be specific to ${packageName} — reject general programming advice that applies to any project.
 ${searchHints.length ? `\nSearch: ${searchHints.join(', ')}` : ''}`,
 
-    format: `\`\`\`
+    format: `<format-example note="Illustrative structure only — replace placeholder names with real ${packageName} APIs">
+\`\`\`
 ## Best Practices
 
-✅ Pass \`AbortSignal\` to long-lived operations — enables caller-controlled cancellation [source](./.skilld/docs/api.md)
+✅ Use ${packageName}'s built-in \`createX()\` helper over manual wiring — handles cleanup and edge cases automatically [source](./.skilld/docs/api.md)
 
 \`\`\`ts
-async function fetchUser(id: string, signal?: AbortSignal) {
-  return fetch(\`/api/users/\${id}\`, { signal })
-}
+// ✅ idiomatic
+const instance = createX({ ... })
+
+// ❌ manual — misses cleanup, error boundaries
+const instance = new X()
+instance.init({ ... })
 \`\`\`
 
-✅ Use \`satisfies\` for config objects — preserves literal types while validating shape [source](./.skilld/docs/config.md)
+✅ Pass config through \`defineConfig()\` — enables type inference and plugin merging [source](./.skilld/docs/config.md)
 
-✅ Prefer \`structuredClone()\` over spread for deep copies — handles nested objects, Maps, Sets [source](./.skilld/docs/utilities.md)
-
-✅ Set \`isolatedDeclarations: true\` — enables parallel .d.ts emit without full type-checking [source](./.skilld/docs/typescript.md)
+✅ Prefer \`useComposable()\` over direct imports in reactive contexts — ensures proper lifecycle binding [source](./.skilld/docs/composables.md)
 \`\`\`
+</format-example>
 
-Each item: ✅ + pattern name + why it's preferred + source link. Code block only when the pattern isn't obvious from the title. Use the most relevant language tag (ts, vue, css, json, etc).`,
+Each item: ✅ + ${packageName}-specific pattern + why it's preferred + source link. Code block only when the pattern isn't obvious from the title. Use the most relevant language tag (ts, vue, css, json, etc). Every example must be specific to ${packageName} — never generic TypeScript/JS advice.`,
 
     rules: [
       `- **${maxItems(4, 10, enabledSectionCount)} best practice items**`,

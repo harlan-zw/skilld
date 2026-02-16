@@ -164,6 +164,11 @@ export function getPkgKeyFiles(name: string, cwd: string, version?: string): str
       files.push(basename(pkg.main))
     if (pkg.module && pkg.module !== pkg.main)
       files.push(basename(pkg.module))
+
+    // Type definitions (relative path preserved for LLM tool hints)
+    const typesPath = pkg.types || pkg.typings
+    if (typesPath && existsSync(join(pkgPath, typesPath)))
+      files.push(typesPath)
   }
 
   // Check for common doc files (case-insensitive readme match)

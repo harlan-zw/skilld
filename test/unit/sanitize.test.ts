@@ -108,6 +108,25 @@ describe('sanitizeMarkdown', () => {
       const input = 'Use `Array<string>` for typed arrays'
       expect(sanitizeMarkdown(input)).toBe(input)
     })
+
+    it('preserves <script setup> inside inline code spans', () => {
+      const input = 'Use `<script setup>` for Vue SFCs'
+      expect(sanitizeMarkdown(input)).toBe(input)
+    })
+
+    it('preserves <script setup lang="ts"> in inline code', () => {
+      const input = 'Always use `<script setup lang="ts">` in components'
+      expect(sanitizeMarkdown(input)).toBe(input)
+    })
+
+    it('preserves multiple inline code spans with dangerous tags', () => {
+      const input = 'Use `<script setup>` and `<style scoped>` in Vue SFCs'
+      expect(sanitizeMarkdown(input)).toBe(input)
+    })
+
+    it('still strips <script> outside inline code', () => {
+      expect(sanitizeMarkdown('text <script>alert(1)</script> more')).toBe('text  more')
+    })
   })
 
   // Layer 4-6: URL sanitization

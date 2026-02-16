@@ -34,6 +34,7 @@ import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
+  parsePackageSpec,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
@@ -258,15 +259,18 @@ type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: 
 
 /** Phase 1: Generate base skill (no LLM). Returns 'shipped' if shipped skill was linked, or BaseSkillData. */
 async function syncBaseSkill(
-  packageName: string,
+  packageSpec: string,
   config: ParallelSyncConfig,
   cwd: string,
   update: UpdateFn,
 ): Promise<'shipped' | BaseSkillData> {
+  // Parse dist-tag from spec: "vue@beta" → name="vue", tag="beta"
+  const { name: packageName, tag: requestedTag } = parsePackageSpec(packageSpec)
+
   const localDeps = await readLocalDependencies(cwd).catch(() => [])
   const localVersion = localDeps.find(d => d.name === packageName)?.version
 
-  const { package: resolvedPkg, attempts } = await resolvePackageDocsWithAttempts(packageName, {
+  const { package: resolvedPkg, attempts } = await resolvePackageDocsWithAttempts(requestedTag ? packageSpec : packageName, {
     version: localVersion,
     cwd,
     onProgress: step => update(packageName, 'resolving', RESOLVE_STEP_LABELS[step]),
@@ -475,6 +479,7 @@ async function enhanceWithLLM(
     sections,
     customPrompt,
     features: data.features,
+    pkgFiles: data.pkgFiles,
     onProgress: (progress) => {
       const isReasoning = progress.type === 'reasoning'
       const status = isReasoning ? 'exploring' : 'generating'

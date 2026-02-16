@@ -47,6 +47,8 @@ export interface BuildSkillPromptOptions {
   features?: FeaturesConfig
   /** Total number of enabled sections — adjusts per-section line budgets */
   enabledSectionCount?: number
+  /** Key files from the package (e.g., dist/pkg.d.ts) — surfaced in prompt for tool hints */
+  pkgFiles?: string[]
 }
 
 /**
@@ -65,7 +67,7 @@ function formatDocTree(files: string[]): string {
     .join('\n')
 }
 
-function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir, features }: {
+function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir, features, pkgFiles }: {
   packageName: string
   hasIssues?: boolean
   hasDiscussions?: boolean
@@ -75,6 +77,7 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
   hasShippedDocs: boolean
   skillDir: string
   features?: FeaturesConfig
+  pkgFiles?: string[]
 }): string {
   const docsPath = hasShippedDocs
     ? `\`${skillDir}/.skilld/pkg/docs/\` or \`${skillDir}/.skilld/pkg/README.md\``
@@ -84,10 +87,16 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
         ? `\`${skillDir}/.skilld/pkg/README.md\``
         : `\`${skillDir}/.skilld/docs/\``
 
+  // Detect type definitions file for explicit tool hint
+  const typesFile = pkgFiles?.find(f => f.endsWith('.d.ts'))
+
   const rows = [
     ['Docs', docsPath],
     ['Package', `\`${skillDir}/.skilld/pkg/\``],
   ]
+  if (typesFile) {
+    rows.push(['Types', `\`${skillDir}/.skilld/pkg/${typesFile}\` — **read this file directly** to verify exports`])
+  }
   if (hasIssues) {
     rows.push(['Issues', `\`${skillDir}/.skilld/issues/\``])
   }
@@ -132,7 +141,7 @@ function buildPreamble(opts: BuildSkillPromptOptions & { versionContext: string 
     ? `<external-docs>\n**Documentation** (use Read tool to explore):\n${formatDocTree(docFiles)}\n</external-docs>`
     : ''
 
-  const importantBlock = generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir, features: opts.features })
+  const importantBlock = generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir, features: opts.features, pkgFiles: opts.pkgFiles })
 
   return `Generate SKILL.md section for "${packageName}"${versionContext}.
 
@@ -182,6 +191,7 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
     '- **Read `_INDEX.md` first** in issues/releases/discussions — only drill into files that look relevant. Skip stub/placeholder files.',
     '- **Skip files starting with `PROMPT_`** — these are generation prompts, not reference material.',
     '- **Stop exploring once you have enough high-quality items** to fill the budget. Do not read additional files just to be thorough.',
+    '- **To verify API exports:** Read the `.d.ts` file directly (see Types row in references). Do NOT use search with relative paths or `include` filters on package directories — they may silently return no results.',
   ]
 
   const weightsTable = sectionDef.referenceWeights?.length

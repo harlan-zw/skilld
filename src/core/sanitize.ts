@@ -180,8 +180,16 @@ export function sanitizeMarkdown(content: string): string {
 
   // Layers 3b-8: Only outside fenced code blocks
   result = processOutsideCodeBlocks(result, (text) => {
+    // Protect inline code spans from tag stripping (e.g. `<script setup>` in Vue docs)
+    const inlineCodeSpans: string[] = []
+    let t = text.replace(/(`+)([^`]+)\1/g, (match) => {
+      const idx = inlineCodeSpans.length
+      inlineCodeSpans.push(match)
+      return `\x00IC${idx}\x00`
+    })
+
     // Layer 3b: Decode entities + strip remaining dangerous tags (HTML + entity-encoded agent directives)
-    let t = decodeAngleBracketEntities(text)
+    t = decodeAngleBracketEntities(t)
     t = stripTags(t, [...AGENT_DIRECTIVE_TAGS, ...DANGEROUS_HTML_TAGS])
 
     // Layer 4: Strip external images (exfil via query params)
@@ -200,6 +208,9 @@ export function sanitizeMarkdown(content: string): string {
     // Layer 8: Strip encoded payloads
     t = t.replace(BASE64_BLOB_RE, '')
     t = t.replace(UNICODE_ESCAPE_SPAM_RE, '')
+
+    // Restore inline code spans
+    t = t.replace(/\0IC(\d+)\0/g, (_, idx) => inlineCodeSpans[Number(idx)] || '')
 
     return t
   })

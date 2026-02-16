@@ -42,6 +42,7 @@ import { shutdownWorker } from '../retriv/pool.ts'
 import { parseGitSkillInput } from '../sources/git-skills.ts'
 import {
   fetchPkgDist,
+  parsePackageSpec,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
@@ -507,16 +508,19 @@ interface SyncConfig {
   from?: string
 }
 
-async function syncSinglePackage(packageName: string, config: SyncConfig): Promise<void> {
+async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promise<void> {
+  // Parse dist-tag from spec: "vue@beta" → name="vue", tag="beta"
+  const { name: packageName, tag: requestedTag } = parsePackageSpec(packageSpec)
+
   const spin = timedSpinner()
-  spin.start(`Resolving ${packageName}`)
+  spin.start(`Resolving ${packageSpec}`)
 
   const cwd = process.cwd()
   const localDeps = await readLocalDependencies(cwd).catch(() => [])
   const localVersion = localDeps.find(d => d.name === packageName)?.version
 
-  // Try npm first
-  const resolveResult = await resolvePackageDocsWithAttempts(packageName, {
+  // Try npm first — use full spec for npm resolution (unpkg supports dist-tags)
+  const resolveResult = await resolvePackageDocsWithAttempts(requestedTag ? packageSpec : packageName, {
     version: localVersion,
     cwd,
     onProgress: step => spin.message(`${packageName}: ${RESOLVE_STEP_LABELS[step]}`),
@@ -599,7 +603,7 @@ async function syncSinglePackage(packageName: string, config: SyncConfig): Promi
   // Eject path override: default to ./skills/<name>, or use specified directory
   const skillDir = config.eject
     ? typeof config.eject === 'string'
-      ? resolve(cwd, config.eject)
+      ? join(resolve(cwd, config.eject), skillDirName)
       : join(cwd, 'skills', skillDirName)
     : join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
@@ -874,6 +878,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     sections,
     customPrompt,
     features: effectiveFeatures,
+    pkgFiles,
     onProgress: createToolProgress(llmLog),
   })
 

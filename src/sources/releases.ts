@@ -302,11 +302,27 @@ export function isChangelogRedirectPattern(releases: GitHubRelease[]): boolean {
 }
 
 /**
- * Fetch CHANGELOG.md from a GitHub repo at a specific ref as fallback
+ * Fetch CHANGELOG.md from a GitHub repo at a specific ref as fallback.
+ * For monorepos, also checks packages/{shortName}/CHANGELOG.md.
  */
-async function fetchChangelog(owner: string, repo: string, ref: string): Promise<string | null> {
-  for (const filename of ['CHANGELOG.md', 'changelog.md', 'CHANGES.md']) {
-    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${filename}`
+async function fetchChangelog(owner: string, repo: string, ref: string, packageName?: string): Promise<string | null> {
+  const paths: string[] = []
+
+  // Monorepo: try package-specific paths first (e.g. packages/pinia/CHANGELOG.md)
+  if (packageName) {
+    const shortName = packageName.replace(/^@.*\//, '')
+    const scopeless = packageName.replace(/^@/, '').replace('/', '-')
+    const candidates = [...new Set([shortName, scopeless])]
+    for (const name of candidates) {
+      paths.push(`packages/${name}/CHANGELOG.md`)
+    }
+  }
+
+  // Root-level changelog
+  paths.push('CHANGELOG.md', 'changelog.md', 'CHANGES.md')
+
+  for (const path of paths) {
+    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`
     const content = await $fetch(url, { responseType: 'text', signal: AbortSignal.timeout(10_000) }).catch(() => null)
     if (content)
       return content
@@ -337,7 +353,7 @@ export async function fetchReleaseNotes(
     // Sample up to 3 releases to check
     if (isChangelogRedirectPattern(selected)) {
       const ref = gitRef || selected[0]!.tag
-      const changelog = await fetchChangelog(owner, repo, ref)
+      const changelog = await fetchChangelog(owner, repo, ref, packageName)
       if (changelog)
         return [{ path: 'releases/CHANGELOG.md', content: changelog }]
     }
@@ -357,7 +373,7 @@ export async function fetchReleaseNotes(
 
     // Also fetch CHANGELOG.md alongside individual releases (unless redirect pattern)
     const ref = gitRef || selected[0]!.tag
-    const changelog = await fetchChangelog(owner, repo, ref)
+    const changelog = await fetchChangelog(owner, repo, ref, packageName)
     if (changelog && changelog.length < 500_000) {
       docs.push({ path: 'releases/CHANGELOG.md', content: changelog })
     }
@@ -367,7 +383,7 @@ export async function fetchReleaseNotes(
 
   // Fallback: CHANGELOG.md (indexed as single file)
   const ref = gitRef || 'main'
-  const changelog = await fetchChangelog(owner, repo, ref)
+  const changelog = await fetchChangelog(owner, repo, ref, packageName)
   if (!changelog)
     return []
 

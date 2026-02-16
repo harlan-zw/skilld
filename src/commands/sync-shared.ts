@@ -317,7 +317,8 @@ export async function fetchAndCacheResources(opts: {
 
           for (const r of results) {
             if (r) {
-              const cachePath = gitDocs.docsPrefix ? r.file.replace(gitDocs.docsPrefix, '') : r.file
+              const stripped = gitDocs.docsPrefix ? r.file.replace(gitDocs.docsPrefix, '') : r.file
+              const cachePath = stripped.startsWith('docs/') ? stripped : `docs/${stripped}`
               cachedDocs.push({ path: cachePath, content: r.content })
               docsToIndex.push({
                 id: cachePath,

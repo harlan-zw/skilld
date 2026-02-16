@@ -401,7 +401,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
 // ── Main orchestrator ────────────────────────────────────────────────
 
 export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
-  const { packageName, skillDir, model = 'sonnet', version, hasGithub, hasReleases, hasChangelog, docFiles, docsType, hasShippedDocs, onProgress, timeout = 180000, debug, noCache, sections, customPrompt, features } = opts
+  const { packageName, skillDir, model = 'sonnet', version, hasGithub, hasReleases, hasChangelog, docFiles, docsType, hasShippedDocs, onProgress, timeout = 180000, debug, noCache, sections, customPrompt, features, pkgFiles } = opts
 
   const selectedSections = sections ?? ['api-changes', 'best-practices', 'api'] as SkillSection[]
 
@@ -419,6 +419,7 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     hasShippedDocs,
     customPrompt,
     features,
+    pkgFiles,
     sections: selectedSections,
   })
 
@@ -670,6 +671,14 @@ function cleanSectionOutput(content: string): string {
     if (/\b(?:function|const |let |var |export |return |import |async |class )\b/.test(preamble)) {
       cleaned = cleaned.slice(firstMarker.index).trim()
     }
+  }
+
+  // Strip duplicate section headings (LLM echoing the format example before real content)
+  const headingMatch = cleaned.match(/^(## .+)\n/)
+  if (headingMatch) {
+    const secondIdx = cleaned.indexOf(headingMatch[1]!, headingMatch[0].length)
+    if (secondIdx !== -1)
+      cleaned = cleaned.slice(secondIdx).trim()
   }
 
   cleaned = sanitizeMarkdown(cleaned)

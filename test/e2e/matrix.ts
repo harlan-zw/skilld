@@ -81,7 +81,7 @@ export const PACKAGES: PackageSpec[] = [
   },
 
   // ── pinia ─────────────────────────────────────────────────────────
-  // Vue/Nuxt state management — git docs in packages/docs/ monorepo.
+  // Vue/Nuxt state management — git docs in packages/docs/ monorepo (prefix stripped to docs/).
   {
     name: 'pinia',
     preset: 'nuxt',
@@ -90,7 +90,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: false, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'packages/docs/core-concepts/index.md',
+      'docs/core-concepts/index.md',
     ],
     minCacheDocs: 5,
     expectDescriptionContains: '"pinia"',
@@ -188,7 +188,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'packages/docs/guide/index.md',
+      'docs/guide/index.md',
     ],
     minCacheDocs: 5,
     expectDescriptionContains: '"vue-router"',

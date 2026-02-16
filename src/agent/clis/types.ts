@@ -73,6 +73,8 @@ export interface OptimizeDocsOptions {
   customPrompt?: CustomPrompt
   /** Resolved feature flags */
   features?: FeaturesConfig
+  /** Key files from the package (e.g., dist/pkg.d.ts) */
+  pkgFiles?: string[]
 }
 
 export interface OptimizeResult {

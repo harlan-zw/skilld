@@ -102,5 +102,6 @@ export {
   isGitHubRepoUrl,
   normalizeRepoUrl,
   parseGitHubUrl,
+  parsePackageSpec,
   verifyUrl,
 } from './utils.ts'

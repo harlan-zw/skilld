@@ -53,7 +53,15 @@ export function apiChangesSection({ packageName, version, hasReleases, hasChange
     : ''
 
   const versionGuidance = major && minor
-    ? `\n\n**Recency rule:** At least 60% of items must be from v${major}.x releases. Earlier major version items only if the old API is still commonly misused.`
+    ? `\n\n**Item scoring** — include only items scoring ≥ 3:
+
+| Change type | v${major}.x | v${Number(major) - 1}.x | Older |
+|-------------|:---:|:---:|:---:|
+| Silent breakage (compiles, wrong result) | 5 | 4 | 2 |
+| Removed/breaking API | 5 | 3 | 0 |
+| New API unknown to LLMs | 4 | 1 | 0 |
+| Deprecated (still works) | 3 | 1 | 0 |
+| Renamed/moved | 3 | 1 | 0 |`
     : ''
 
   return {

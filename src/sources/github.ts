@@ -286,6 +286,8 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
       ref,
       files,
       fallback,
+      // Strip non-standard prefix so sync normalizes paths under docs/
+      docsPrefix: `${override.path}/` !== 'docs/' ? `${override.path}/` : undefined,
     }
   }
 
