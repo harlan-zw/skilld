@@ -64,7 +64,7 @@ Each item: markdown list item (-) + ${packageName}-specific pattern + why it's p
       `- **MAX ${maxLines(80, 150, enabledSectionCount)} lines** for best practices section`,
       '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Confirm functions/composables are real exports in `./.skilld/pkg/` `.d.ts` files before documenting',
       '- **Diversity:** Cover at least 3 distinct areas of the library. No single feature should have more than 40% of items',
-      '- **Experimental APIs:** Mark unstable/experimental features with `(experimental)` in the description. Prioritize stable patterns',
+      '- **Experimental APIs:** Mark unstable/experimental features with `(experimental)` in the description. **MAX 1 experimental item** — prioritize stable, production-ready patterns that most users need',
     ],
   }
 }
