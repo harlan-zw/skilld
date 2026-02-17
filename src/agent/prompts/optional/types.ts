@@ -26,6 +26,8 @@ export interface SectionContext {
   hasChangelog?: string | false
   /** Whether a docs directory exists in .skilld/ */
   hasDocs?: boolean
+  /** Key files from the package (e.g., dist/pkg.d.ts) — empty when no pkg dir (git skills) */
+  pkgFiles?: string[]
   features?: FeaturesConfig
   /** Total number of enabled sections — used to adjust per-section line budgets */
   enabledSectionCount?: number

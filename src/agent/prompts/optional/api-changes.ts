@@ -1,7 +1,7 @@
 import type { PromptSection, ReferenceWeight, SectionContext } from './types.ts'
 import { maxItems, maxLines } from './budget.ts'
 
-export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasDocs, hasIssues, hasDiscussions, features, enabledSectionCount }: SectionContext): PromptSection {
+export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasDocs, hasIssues, hasDiscussions, pkgFiles, features, enabledSectionCount }: SectionContext): PromptSection {
   const [, major, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
 
   // Search hints for the task text (specific queries to run)
@@ -97,7 +97,11 @@ Each item: BREAKING/DEPRECATED/NEW label + API name + what changed + source link
       '- **Recency:** Only include changes from the current major version and the previous→current migration. Exclude changes from older major versions entirely — users already migrated past them',
       '- Focus on APIs that CHANGED, not general conventions or gotchas',
       '- New APIs get NEW: prefix, deprecated/breaking get BREAKING: or DEPRECATED: prefix',
-      '- **Experimental APIs:** Append `(experimental)` to any API behind an experimental/unstable import path or flag. MAX 2 experimental items',
+      '- **Experimental APIs:** Append `(experimental)` to ALL items for unstable/experimental APIs — every mention, not just the first. MAX 2 experimental items',
+      pkgFiles?.some(f => f.endsWith('.d.ts'))
+        ? '- **Verify before including:** Search for API names in `.d.ts` type definitions or source exports. If you searched and cannot find the export, do NOT include the item — you may be confusing it with a similar API from a different package or version'
+        : '- **Verify before including:** Cross-reference API names against release notes, changelogs, or docs. Do NOT include APIs you infer from similar packages — only include APIs explicitly named in the references',
+      '- **Framework-specific sourcing:** When docs have framework-specific subdirectories (e.g., `vue/`, `react/`), always cite the framework-specific version. Never cite React migration guides as sources in a Vue skill when equivalent Vue docs exist',
       hasReleases ? '- Start with `./.skilld/releases/_INDEX.md` to identify recent major/minor releases, then read specific release files' : '',
       hasChangelog ? '- Scan CHANGELOG.md for version headings, focus on Features/Breaking Changes sections' : '',
     ].filter(Boolean),

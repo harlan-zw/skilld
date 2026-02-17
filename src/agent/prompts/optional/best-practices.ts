@@ -1,7 +1,7 @@
 import type { PromptSection, ReferenceWeight, SectionContext } from './types.ts'
 import { maxItems, maxLines } from './budget.ts'
 
-export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, features, enabledSectionCount }: SectionContext): PromptSection {
+export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles, features, enabledSectionCount }: SectionContext): PromptSection {
   const searchHints: string[] = []
   if (features?.search !== false) {
     searchHints.push(
@@ -62,8 +62,12 @@ Each item: markdown list item (-) + ${packageName}-specific pattern + why it's p
     rules: [
       `- **${maxItems(4, 10, enabledSectionCount)} best practice items**`,
       `- **MAX ${maxLines(80, 150, enabledSectionCount)} lines** for best practices section`,
-      '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Confirm functions/composables are real exports in `./.skilld/pkg/` `.d.ts` files before documenting',
-      '- **Diversity:** Cover at least 3 distinct areas of the library. No single feature should have more than 40% of items',
+      pkgFiles?.some(f => f.endsWith('.d.ts'))
+        ? '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Confirm functions/composables are real exports in `./.skilld/pkg/` `.d.ts` files before documenting. If you cannot find an export, do NOT include it'
+        : '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Only document APIs explicitly named in docs, release notes, or changelogs — do NOT infer API names from similar packages',
+      '- **Source quality:** Issues and discussions are only valid sources if they contain a maintainer response, accepted answer, or confirmed workaround. Do NOT cite bare issue titles, one-line feature requests, or unresolved questions as sources',
+      '- **Framework-specific sourcing:** When docs have framework-specific subdirectories (e.g., `vue/`, `react/`), always prefer the framework-specific version over shared or other-framework docs. Never cite React examples in a Vue skill',
+      '- **Diversity:** Cover at least 3 distinct areas of the library. Count items per feature — if any single feature exceeds 40% of items, replace the excess with items from underrepresented areas',
       '- **Experimental APIs:** Mark unstable/experimental features with `(experimental)` in the description. **MAX 1 experimental item** — prioritize stable, production-ready patterns that most users need',
     ],
   }

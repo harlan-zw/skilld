@@ -173,7 +173,7 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
   const preamble = buildPreamble({ ...opts, versionContext })
 
   const hasDocs = !!opts.docFiles?.some(f => f.includes('/docs/'))
-  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, features: opts.features, enabledSectionCount: opts.enabledSectionCount }
+  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles: opts.pkgFiles, features: opts.features, enabledSectionCount: opts.enabledSectionCount }
   const sectionDef = getSectionDef(section, ctx, customPrompt)
   if (!sectionDef)
     return ''
@@ -186,11 +186,13 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
     `- **NEVER fetch external URLs.** All information is in the local \`./.skilld/\` directory. Use Read, Glob${opts.features?.search !== false ? ', and `skilld search`' : ''} only.`,
     '- **Do NOT use Task tool or spawn subagents.** Work directly.',
     '- **Do NOT re-read files** you have already read in this session.',
-    '- **Read `_INDEX.md` first** in issues/releases/discussions — only drill into files that look relevant. Skip stub/placeholder files.',
+    '- **Read `_INDEX.md` first** in docs/issues/releases/discussions — only drill into files that look relevant. Skip stub/placeholder files.',
     '- **Skip files starting with `PROMPT_`** — these are generation prompts, not reference material.',
     '- **Stop exploring once you have enough high-quality items** to fill the budget. Do not read additional files just to be thorough.',
-    '- **To verify API exports:** Read the `.d.ts` file directly (see Types row in references). Package directories are often gitignored — if you search `pkg/`, pass `no_ignore: true` to avoid silent empty results.',
-  ]
+    opts.pkgFiles?.some(f => f.endsWith('.d.ts'))
+      ? '- **To verify API exports:** Read the `.d.ts` file directly (see Types row in references). Package directories are often gitignored — if you search `pkg/`, pass `no_ignore: true` to avoid silent empty results.'
+      : '',
+  ].filter(Boolean)
 
   const weightsTable = sectionDef.referenceWeights?.length
     ? `\n\n## Reference Priority\n\n| Reference | Path | Score | Use For |\n|-----------|------|:-----:|--------|\n${sectionDef.referenceWeights.map(w => `| ${w.name} | [\`${w.path.split('/').pop()}\`](${w.path}) | ${w.score}/10 | ${w.useFor} |`).join('\n')}`
