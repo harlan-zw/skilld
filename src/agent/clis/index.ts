@@ -12,7 +12,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSy
 import { homedir } from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
-import { join } from 'pathe'
+import { dirname, join } from 'pathe'
 import { readCachedSection, writeSections } from '../../cache/index.ts'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
 import { detectInstalledAgents } from '../detect.ts'
@@ -179,10 +179,21 @@ function resolveReferenceDirs(skillDir: string): string[] {
   const refsDir = join(skillDir, '.skilld')
   if (!existsSync(refsDir))
     return []
-  return readdirSync(refsDir)
+  const resolved = readdirSync(refsDir)
     .map(entry => join(refsDir, entry))
     .filter(p => lstatSync(p).isSymbolicLink() && existsSync(p))
     .map(p => realpathSync(p))
+
+  // Include parent directories so CLIs can search across all references at once
+  // (e.g. Gemini's sandbox requires the parent dir to be explicitly included)
+  const parents = new Set<string>()
+  for (const p of resolved) {
+    const parent = dirname(p)
+    if (!resolved.includes(parent))
+      parents.add(parent)
+  }
+
+  return [...resolved, ...parents]
 }
 
 // ── Cache ────────────────────────────────────────────────────────────
