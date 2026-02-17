@@ -30,7 +30,7 @@ Skilld generates [agent skills](https://agentskills.io/home) from the docs maint
 - 🌍 **Any Source: Opt-in** - Any NPM dependency or GitHub source, docs auto-resolved
 - 📦 **Bleeding Edge Context** - Latest issues, discussions, and releases synced on
 every update. Always use the latest best practices and avoid deprecated patterns.
-- 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best practices`, `API Changes`, `Doc Map`, or your own prompts
+- 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best Practices`, `API Changes`, or your own custom prompts
 - 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
 - 🎯 **Safe & Versioned** - Prompt injection sanitization, version-aware caching, auto-updates on new releases
 - 🤝 **Ecosystem** - Compatible with [`npx skills`](https://skills.sh/) and [skills-npm](https://github.com/antfu/skills-npm)
