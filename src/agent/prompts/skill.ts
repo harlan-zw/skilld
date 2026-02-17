@@ -66,7 +66,7 @@ function formatShortDate(isoDate: string): string {
   return `${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`
 }
 
-function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, pkgFiles, packages, eject }: SkillOptions): string {
+function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, docsType, pkgFiles, packages, eject }: SkillOptions): string {
   let title = `# ${name}`
   if (repoUrl) {
     const url = repoUrl.startsWith('http') ? repoUrl : `https://github.com/${repoUrl}`
@@ -117,6 +117,8 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
     if (pkgFiles?.includes('README.md'))
       refs.push(`[README](${refBase}/pkg/README.md) — setup, basic usage`)
   }
+  if (docsType && docsType !== 'readme')
+    refs.push(`[Docs](${refBase}/docs/_INDEX.md) — API reference, guides`)
   if (hasIssues)
     refs.push(`[GitHub Issues](${refBase}/issues/_INDEX.md) — bugs, workarounds, edge cases`)
   if (hasDiscussions)

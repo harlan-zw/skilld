@@ -33,6 +33,7 @@ import {
 import { isInteractive } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
+import { parseFrontmatter } from '../core/markdown.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 import { createIndex } from '../retriv/index.ts'
@@ -50,6 +51,7 @@ import {
   formatDiscussionAsMarkdown,
   formatIssueAsMarkdown,
   generateDiscussionIndex,
+  generateDocsIndex,
   generateIssueIndex,
   generateReleaseIndex,
   getBlogPreset,
@@ -429,6 +431,14 @@ export async function fetchAndCacheResources(opts: {
         writeToCache(packageName, version, cachedDocs)
       }
     }
+
+    // Generate docs index if we have multiple doc files
+    if (docsType !== 'readme' && cachedDocs.filter(d => d.path.startsWith('docs/') && d.path.endsWith('.md')).length > 1) {
+      const docsIndex = generateDocsIndex(cachedDocs)
+      if (docsIndex) {
+        writeToCache(packageName, version, [{ path: 'docs/_INDEX.md', content: docsIndex }])
+      }
+    }
   }
   else {
     // Detect docs type from cache
@@ -447,6 +457,18 @@ export async function fetchAndCacheResources(opts: {
           content: doc.content,
           metadata: { package: packageName, source: doc.path, ...classifyCachedDoc(doc.path) },
         })
+      }
+    }
+
+    // Backfill docs index for caches created before this feature
+    if (docsType !== 'readme' && !existsSync(join(getCacheDir(packageName, version), 'docs', '_INDEX.md'))) {
+      const cached = readCachedDocs(packageName, version)
+      const docFiles = cached.filter(d => d.path.startsWith('docs/') && d.path.endsWith('.md'))
+      if (docFiles.length > 1) {
+        const docsIndex = generateDocsIndex(cached)
+        if (docsIndex) {
+          writeToCache(packageName, version, [{ path: 'docs/_INDEX.md', content: docsIndex }])
+        }
       }
     }
   }
@@ -531,12 +553,11 @@ export async function fetchAndCacheResources(opts: {
         .filter(d => !d.path.endsWith('_INDEX.md'))
         .map((d) => {
           const versionMatch = d.path.match(/blog-(.+)\.md$/)
-          const titleMatch = d.content.match(/^title:\s*"(.+)"/m)
-          const dateMatch = d.content.match(/^date:\s*(.+)/m)
+          const fm = parseFrontmatter(d.content)
           return {
             version: versionMatch?.[1] ?? '',
-            title: titleMatch?.[1] ?? `Release ${versionMatch?.[1]}`,
-            date: dateMatch?.[1]?.trim() ?? '',
+            title: fm.title ?? `Release ${versionMatch?.[1]}`,
+            date: fm.date ?? '',
           }
         })
         .filter(b => b.version)
@@ -545,10 +566,10 @@ export async function fetchAndCacheResources(opts: {
       const ghReleases = releaseDocs
         .filter(d => d.path.startsWith('releases/') && !d.path.endsWith('CHANGELOG.md'))
         .map((d) => {
-          const tag = d.content.match(/^tag:\s*(.+)/m)?.[1]?.trim() ?? ''
-          const nameMatch = d.content.match(/^name:\s*"([^"]+)"/m) || d.content.match(/^name:\s*(\S+)/m)
-          const name = nameMatch?.[1]?.trim() ?? tag
-          const published = d.content.match(/^published:\s*(.+)/m)?.[1]?.trim() ?? ''
+          const fm = parseFrontmatter(d.content)
+          const tag = fm.tag ?? ''
+          const name = fm.name ?? tag
+          const published = fm.published ?? ''
           return { id: 0, tag, name, prerelease: false, createdAt: published, publishedAt: published, markdown: '' }
         })
         .filter(r => r.tag)
