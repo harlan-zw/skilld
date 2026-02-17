@@ -91,7 +91,7 @@ function truncateBody(body: string, limit: number): string {
 }
 
 /** Off-topic or spam title patterns — instant reject */
-const TITLE_NOISE_RE = /looking .*(developer|engineer|freelanc)|hiring|job post|guide me to (?:complete|finish|build)|help me (?:complete|finish|build)|seeking .* tutorial|recommend.* course/i
+const TITLE_NOISE_RE = /looking .*(?:developer|engineer|freelanc)|hiring|job post|guide me to (?:complete|finish|build)|help me (?:complete|finish|build)|seeking .* tutorial|recommend.* course/i
 
 /** Minimum score for a discussion to be included */
 const MIN_DISCUSSION_SCORE = 3
