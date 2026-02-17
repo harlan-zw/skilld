@@ -148,16 +148,17 @@ function hasCodeBlock(text: string): boolean {
 }
 
 /**
- * Detect non-technical issues: fan mail, roadmaps, showcases, sentiment.
+ * Detect non-technical issues: fan mail, showcases, sentiment.
  * Short body + no code + high reactions = likely non-technical.
+ * Note: roadmap/tracking issues are NOT filtered — they get score-boosted instead.
  */
 export function isNonTechnical(issue: { body: string, title: string, reactions: number }): boolean {
   const body = (issue.body || '').trim()
   // Very short body with no code — probably sentiment/meta
   if (body.length < 200 && !hasCodeBlock(body) && issue.reactions > 50)
     return true
-  // Roadmap/tracking patterns
-  if (/\b(?:roadmap|tracking|love|thank|awesome|great work)\b/i.test(issue.title) && !hasCodeBlock(body))
+  // Sentiment patterns (love letters, fan mail)
+  if (/\b(?:love|thank|awesome|great work)\b/i.test(issue.title) && !hasCodeBlock(body))
     return true
   return false
 }
@@ -323,7 +324,7 @@ function fetchIssuesByState(
     'api',
     `search/issues?q=${q}&sort=reactions&order=desc&per_page=${fetchCount}`,
     '-q',
-    '.items[] | {number, title, state, labels: [.labels[]?.name], body, createdAt: .created_at, url: .html_url, reactions: .reactions["+1"], comments: .comments, user: .user.login, userType: .user.type}',
+    '.items[] | {number, title, state, labels: [.labels[]?.name], body, createdAt: .created_at, url: .html_url, reactions: .reactions["+1"], comments: .comments, user: .user.login, userType: .user.type, authorAssociation: .author_association}',
   ], { encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 })
 
   if (!result)
@@ -333,16 +334,20 @@ function fetchIssuesByState(
     .trim()
     .split('\n')
     .filter(Boolean)
-    .map(line => JSON.parse(line) as GitHubIssue & { user: string, userType: string })
+    .map(line => JSON.parse(line) as GitHubIssue & { user: string, userType: string, authorAssociation: string })
     .filter(issue => !BOT_USERS.has(issue.user) && issue.userType !== 'Bot')
     .filter(issue => !isNoiseIssue(issue))
     .filter(issue => !isNonTechnical(issue))
-    .map(({ user: _, userType: __, ...issue }) => ({
-      ...issue,
-      type: classifyIssue(issue.labels),
-      topComments: [] as IssueComment[],
-      score: freshnessScore(issue.reactions, issue.createdAt),
-    }))
+    .map(({ user: _, userType: __, authorAssociation, ...issue }) => {
+      const isMaintainer = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(authorAssociation)
+      const isRoadmap = /\broadmap\b/i.test(issue.title) || issue.labels.some(l => /roadmap/i.test(l))
+      return {
+        ...issue,
+        type: classifyIssue(issue.labels),
+        topComments: [] as IssueComment[],
+        score: freshnessScore(issue.reactions, issue.createdAt) * (isMaintainer && isRoadmap ? 5 : 1),
+      }
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, count)
 }
