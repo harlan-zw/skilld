@@ -74,8 +74,8 @@ catalogs:
       specifier: ^7.3.0
       version: 7.3.0
     retriv:
-      specifier: ^0.10.0
-      version: 0.10.0
+      specifier: ^0.10.1
+      version: 0.10.1
     sqlite-vec:
       specifier: ^0.1.6
       version: 0.1.6
@@ -164,7 +164,7 @@ importers:
         version: 2.0.3
       retriv:
         specifier: catalog:deps
-        version: 0.10.0(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@6.0.0-beta)
+        version: 0.10.1(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@6.0.0-beta)
       semver:
         specifier: 'catalog:'
         version: 7.7.4
@@ -3020,8 +3020,8 @@ packages:
     resolution: {integrity: sha512-I1XxrZSQ+oErkRR4jYbAyEEu2I0avBvvMM5JN+6EBprOGRCs63ENqZ3vjavq8fBw2+62G5LF5XelKwuJpcvcxw==}
     engines: {node: '>=10'}
 
-  retriv@0.10.0:
-    resolution: {integrity: sha512-WgJxZ+wx+b2mKCpksQZxTkB7xjuu2CSs/RDcVQiHzegZeUVeUhkweEKcqHjQ+a4xLKcxpG57eWjFPKP+1JRfGg==}
+  retriv@0.10.1:
+    resolution: {integrity: sha512-gjH9mmxE1HvlmjOEo5MZSoSBRfobwxWABx4qK5senAygblCiampgVtCN17oy89PuawliZV7avD36xdM/V+ELbA==}
     peerDependencies:
       '@ai-sdk/cohere': ^3.0.0
       '@ai-sdk/google': ^3.0.0
@@ -3034,7 +3034,7 @@ packages:
       ollama-ai-provider-v2: ^1.0.0
       pg: ^8.0.0
       sqlite-vec: ^0.1.0-alpha.0
-      typescript: ^5.0.0
+      typescript: ^5.0.0 || ^6.0.0-0
     peerDependenciesMeta:
       '@ai-sdk/cohere':
         optional: true
@@ -6597,7 +6597,7 @@ snapshots:
 
   ret@0.5.0: {}
 
-  retriv@0.10.0(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@6.0.0-beta):
+  retriv@0.10.1(@huggingface/transformers@3.8.1)(ai@6.0.68(zod@4.3.6))(sqlite-vec@0.1.6)(typescript@6.0.0-beta):
     optionalDependencies:
       '@huggingface/transformers': 3.8.1
       ai: 6.0.68(zod@4.3.6)

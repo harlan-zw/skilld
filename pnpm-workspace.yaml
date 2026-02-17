@@ -34,7 +34,7 @@ catalogs:
     mlly: ^1.8.0
     oxc-parser: ^0.114.0
     p-limit: ^7.3.0
-    retriv: ^0.10.0
+    retriv: ^0.10.1
     sqlite-vec: ^0.1.6
     typescript: 6.0.0-beta
     unist-util-visit: ^5.0.0
