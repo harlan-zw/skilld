@@ -31,6 +31,8 @@ export interface SectionContext {
   features?: FeaturesConfig
   /** Total number of enabled sections — used to adjust per-section line budgets */
   enabledSectionCount?: number
+  /** Number of release files — used for adaptive API changes budget */
+  releaseCount?: number
 }
 
 export interface CustomPrompt {

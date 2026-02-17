@@ -1,7 +1,11 @@
 import type { PromptSection, ReferenceWeight, SectionContext } from './types.ts'
-import { maxItems, maxLines } from './budget.ts'
+import { maxItems, maxLines, releaseBoost } from './budget.ts'
 
-export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles, features, enabledSectionCount }: SectionContext): PromptSection {
+export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles, features, enabledSectionCount, releaseCount, version }: SectionContext): PromptSection {
+  const [,, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
+  // Dampened boost — best practices are less directly tied to releases than API changes
+  const rawBoost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
+  const boost = 1 + (rawBoost - 1) * 0.5
   const searchHints: string[] = []
   if (features?.search !== false) {
     searchHints.push(
@@ -60,8 +64,8 @@ instance.init({ ... })
 Each item: markdown list item (-) + ${packageName}-specific pattern + why it's preferred + source link. Code block only when the pattern isn't obvious from the title. Use the most relevant language tag (ts, vue, css, json, etc). Every example must be specific to ${packageName} — never generic TypeScript/JS advice. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/docs/guide.md)\`). Do NOT use emoji — use plain text markers only.`,
 
     rules: [
-      `- **${maxItems(4, 10, enabledSectionCount)} best practice items**`,
-      `- **MAX ${maxLines(80, 150, enabledSectionCount)} lines** for best practices section`,
+      `- **${maxItems(4, Math.round(10 * boost), enabledSectionCount)} best practice items**`,
+      `- **MAX ${maxLines(80, Math.round(150 * boost), enabledSectionCount)} lines** for best practices section`,
       pkgFiles?.some(f => f.endsWith('.d.ts'))
         ? '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Confirm functions/composables are real exports in `./.skilld/pkg/` `.d.ts` files before documenting. If you cannot find an export, do NOT include it'
         : '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Only document APIs explicitly named in docs, release notes, or changelogs — do NOT infer API names from similar packages',

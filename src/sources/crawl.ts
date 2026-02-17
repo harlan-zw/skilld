@@ -12,6 +12,7 @@ import { join } from 'pathe'
  * Uses HTTP crawler (no browser needed) with sitemap discovery + glob filtering.
  *
  * @param url - URL with optional glob pattern (e.g. 'https://example.com/docs/**')
+ * @param onProgress - Optional progress callback
  * @param maxPages - Max pages to crawl (default 200)
  */
 export async function fetchCrawledDocs(

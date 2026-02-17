@@ -630,7 +630,7 @@ function shortenPath(p: string): string {
 
 /** Max lines per section — generous thresholds (2x prompt guidance) to flag only egregious overruns */
 const SECTION_MAX_LINES: Record<string, number> = {
-  'api-changes': 160,
+  'api-changes': 210,
   'best-practices': 300,
   'custom': 160,
 }

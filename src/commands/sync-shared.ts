@@ -964,7 +964,7 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
 export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'api-changes']
 
 export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: CustomPrompt, cancelled: boolean }> {
-  p.log.info('More sections = less budget each. Fewer sections = deeper coverage.')
+  p.log.info('Budgets adapt to package release density.')
   const selected = await p.multiselect({
     message,
     options: [
@@ -990,10 +990,10 @@ export async function selectSkillSections(message = 'Generate SKILL.md with LLM'
     for (const s of sections) {
       switch (s) {
         case 'api-changes':
-          budgetLines.push(`  API changes     ≤${maxLines(50, 80, n)} lines, ${maxItems(6, 12, n)} items`)
+          budgetLines.push(`  API changes     ${maxItems(6, 12, n)}–${maxItems(6, Math.round(12 * 1.6), n)} items (adapts to release churn)`)
           break
         case 'best-practices':
-          budgetLines.push(`  Best practices  ≤${maxLines(80, 150, n)} lines, ${maxItems(4, 10, n)} items`)
+          budgetLines.push(`  Best practices  ${maxItems(4, 10, n)}–${maxItems(4, Math.round(10 * 1.3), n)} items`)
           break
         case 'custom':
           budgetLines.push(`  Custom          ≤${maxLines(50, 80, n)} lines`)

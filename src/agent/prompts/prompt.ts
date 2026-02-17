@@ -173,7 +173,14 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
   const preamble = buildPreamble({ ...opts, versionContext })
 
   const hasDocs = !!opts.docFiles?.some(f => f.includes('/docs/'))
-  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles: opts.pkgFiles, features: opts.features, enabledSectionCount: opts.enabledSectionCount }
+  // Count significant (major/minor) releases — patch releases excluded from budget signal
+  const releaseCount = opts.docFiles?.filter((f) => {
+    if (!f.includes('/releases/'))
+      return false
+    const m = f.match(/v\d+\.(\d+)\.(\d+)\.md$/)
+    return m && (m[1] === '0' || m[2] === '0') // major (x.0.y) or minor (x.y.0)
+  }).length
+  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles: opts.pkgFiles, features: opts.features, enabledSectionCount: opts.enabledSectionCount, releaseCount }
   const sectionDef = getSectionDef(section, ctx, customPrompt)
   if (!sectionDef)
     return ''

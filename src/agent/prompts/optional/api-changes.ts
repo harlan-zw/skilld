@@ -1,8 +1,9 @@
 import type { PromptSection, ReferenceWeight, SectionContext } from './types.ts'
-import { maxItems, maxLines } from './budget.ts'
+import { maxItems, maxLines, releaseBoost } from './budget.ts'
 
-export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasDocs, hasIssues, hasDiscussions, pkgFiles, features, enabledSectionCount }: SectionContext): PromptSection {
+export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasDocs, hasIssues, hasDiscussions, pkgFiles, features, enabledSectionCount, releaseCount }: SectionContext): PromptSection {
   const [, major, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
+  const boost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
 
   // Search hints for the task text (specific queries to run)
   const searchHints: string[] = []
@@ -88,12 +89,16 @@ This section documents version-specific API changes — prioritize recent major/
 - NEW: \`useTemplateRef()\` — new in v3.5, replaces \`$refs\` pattern [source](./.skilld/releases/v3.5.0.md)
 
 - BREAKING: \`db.query()\` — returns \`{ rows }\` not raw array since v4 [source](./.skilld/docs/migration.md)
+
+**Also changed:** \`defineModel()\` stable v3.4 · \`onWatcherCleanup()\` new v3.5 · \`Suspense\` stable v3.5
 </format-example>
 
-Each item: BREAKING/DEPRECATED/NEW label + API name + what changed + source link. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/releases/v2.0.0.md)\`). Do NOT use emoji — use plain text markers only.`,
+Each item: BREAKING/DEPRECATED/NEW label + API name + what changed + source link. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/releases/v2.0.0.md)\`). Do NOT use emoji — use plain text markers only.
+
+**Tiered format:** Top-scoring items get full detailed entries. Remaining relevant items go in a compact "**Also changed:**" line at the end — API name + brief label, separated by \` · \`. This surfaces more changes without bloating the section.`,
 
     rules: [
-      `- **API Changes:** ${maxItems(6, 12, enabledSectionCount)} items from version history, MAX ${maxLines(50, 80, enabledSectionCount)} lines`,
+      `- **API Changes:** ${maxItems(6, Math.round(12 * boost), enabledSectionCount)} detailed items + compact "Also changed" line for remaining, MAX ${maxLines(50, Math.round(80 * boost), enabledSectionCount)} lines`,
       '- **Recency:** Only include changes from the current major version and the previous→current migration. Exclude changes from older major versions entirely — users already migrated past them',
       '- Focus on APIs that CHANGED, not general conventions or gotchas',
       '- New APIs get NEW: prefix, deprecated/breaking get BREAKING: or DEPRECATED: prefix',
