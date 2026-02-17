@@ -64,7 +64,7 @@ const REPO_REGISTRY: Record<string, RepoEntry> = {
     homepage: 'https://vuejs.org',
     prereleaseChangelogRef: 'minor',
     packages: {
-      'vue': { primary: true, filePatterns: ['*.vue'], rules: ['ALWAYS use `<script setup lang="ts">`'] },
+      'vue': { primary: true, filePatterns: ['*.vue'], rules: ['ALWAYS use `<script setup lang="ts">`', 'Use ```vue code fences for SFC examples containing `<script>` or `<template>` tags, ```ts for plain TypeScript'] },
       '@vue/compiler-core': {},
       '@vue/compiler-dom': {},
       '@vue/reactivity': {},
