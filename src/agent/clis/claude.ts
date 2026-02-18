@@ -10,8 +10,8 @@ export const agentId = 'claude-code' as const
 
 export const models: Record<string, CliModelEntry> = {
   opus: { model: 'opus', name: 'Opus 4.6', hint: 'Most capable for complex work' },
-  sonnet: { model: 'sonnet', name: 'Sonnet 4.6', hint: 'Best for everyday tasks'},
-  haiku: { model: 'haiku', name: 'Haiku 4.5', hint: 'Fastest for quick answers', recommended: true  },
+  sonnet: { model: 'sonnet', name: 'Sonnet 4.6', hint: 'Best for everyday tasks' },
+  haiku: { model: 'haiku', name: 'Haiku 4.5', hint: 'Fastest for quick answers', recommended: true },
 }
 
 export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]): string[] {
