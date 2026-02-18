@@ -61,6 +61,7 @@
     "@mdream/crawl": "catalog:",
     "citty": "catalog:deps",
     "consola": "catalog:deps",
+    "giget": "catalog:",
     "globby": "catalog:deps",
     "log-update": "catalog:deps",
     "mdast-util-from-markdown": "catalog:deps",

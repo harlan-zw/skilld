@@ -41,6 +41,7 @@ vi.mock('../../src/cache', () => ({
 vi.mock('../../src/sources', () => ({
   $fetch: vi.fn(),
   downloadLlmsDocs: vi.fn(),
+  filterFrameworkDocs: vi.fn((files: string[]) => files),
   fetchBlogReleases: vi.fn(),
   fetchCrawledDocs: vi.fn(() => Promise.resolve([])),
   fetchGitDocs: vi.fn(),

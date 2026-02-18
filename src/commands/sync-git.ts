@@ -74,7 +74,7 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
   const spin = timedSpinner()
   spin.start(`Fetching skills from ${label}`)
 
-  const { skills, commitSha } = await fetchGitSkills(source, msg => spin.message(msg))
+  const { skills } = await fetchGitSkills(source, msg => spin.message(msg))
 
   if (skills.length === 0) {
     // No pre-authored skills — fall back to generating from repo docs (GitHub only)
@@ -92,9 +92,9 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
   let selected = skills
 
   if (opts.skillFilter?.length) {
-    // --skill flag: filter to matching names
-    const filterSet = new Set(opts.skillFilter.map(s => s.toLowerCase()))
-    selected = skills.filter(s => filterSet.has(s.name.toLowerCase()))
+    // --skill flag: filter to matching names (strip -skilld suffix for comparison)
+    const filterSet = new Set(opts.skillFilter.map(s => s.toLowerCase().replace(/-skilld$/, '')))
+    selected = skills.filter(s => filterSet.has(s.name.toLowerCase().replace(/-skilld$/, '')))
     if (selected.length === 0) {
       p.log.warn(`No skills matched: ${opts.skillFilter.join(', ')}`)
       p.log.message(`Available: ${skills.map(s => s.name).join(', ')}`)
@@ -152,7 +152,6 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
       repo: source.type === 'local' ? source.localPath : `${source.owner}/${source.repo}`,
       path: skill.path || undefined,
       ref: source.ref || 'main',
-      commit: commitSha,
       syncedAt: new Date().toISOString().split('T')[0],
       generator: 'external',
     })

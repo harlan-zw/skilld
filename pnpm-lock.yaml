@@ -15,6 +15,9 @@ catalogs:
     bumpp:
       specifier: ^10.4.1
       version: 10.4.1
+    giget:
+      specifier: ^3.1.2
+      version: 3.1.2
     mdream:
       specifier: ^0.16.0
       version: 0.16.0
@@ -132,6 +135,9 @@ importers:
       consola:
         specifier: catalog:deps
         version: 3.4.2
+      giget:
+        specifier: 'catalog:'
+        version: 3.1.2
       globby:
         specifier: catalog:deps
         version: 16.1.0
@@ -2635,6 +2641,10 @@ packages:
 
   giget@2.0.0:
     resolution: {integrity: sha512-L5bGsVkxJbJgdnwyuheIunkGatUF/zssUoxxjACCseZYAVbaqdh9Tsmmlkl8vYan09H7sbvKt4pS8GqKLBrEzA==}
+    hasBin: true
+
+  giget@3.1.2:
+    resolution: {integrity: sha512-T2qUpKBHeUTwHcIhydgnJzhL0Hj785ms+JkxaaWQH9SDM/llXeewnOkfJcFShAHjWI+26hOChwUfCoupaXLm8g==}
     hasBin: true
 
   github-from-package@0.0.0:
@@ -6893,6 +6903,8 @@ snapshots:
       node-fetch-native: 1.6.7
       nypm: 0.6.5
       pathe: 2.0.3
+
+  giget@3.1.2: {}
 
   github-from-package@0.0.0: {}
 

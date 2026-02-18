@@ -5,9 +5,10 @@
  * Skills are pre-authored SKILL.md files — no doc resolution or LLM generation needed.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import pLimit from 'p-limit'
-import { resolve } from 'pathe'
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { downloadTemplate } from 'giget'
+import { join, resolve } from 'pathe'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { $fetch, normalizeRepoUrl, parseGitHubUrl } from './utils.ts'
 
@@ -123,21 +124,31 @@ export function parseSkillFrontmatterName(content: string): { name?: string, des
   return { name: fm.name, description: fm.description }
 }
 
-interface UnghFilesResponse {
-  meta: { sha: string }
-  files: Array<{ path: string, mode: string, sha: string, size: number }>
+/** Recursively collect all files in a directory, returning relative paths */
+function collectFiles(dir: string, prefix = ''): Array<{ path: string, content: string }> {
+  const files: Array<{ path: string, content: string }> = []
+  if (!existsSync(dir))
+    return files
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
+    const fullPath = resolve(dir, entry.name)
+    if (entry.isDirectory()) {
+      files.push(...collectFiles(fullPath, relPath))
+    }
+    else if (entry.isFile()) {
+      files.push({ path: relPath, content: readFileSync(fullPath, 'utf-8') })
+    }
+  }
+  return files
 }
 
-/** Supporting file dirs within a skill directory */
-const SUPPORTING_DIRS = ['scripts', 'references', 'assets']
-
 /**
- * Fetch skills from a git source. Returns list of discovered skills + commit SHA.
+ * Fetch skills from a git source. Returns list of discovered skills.
  */
 export async function fetchGitSkills(
   source: GitSkillSource,
   onProgress?: (msg: string) => void,
-): Promise<{ skills: RemoteSkill[], commitSha?: string }> {
+): Promise<{ skills: RemoteSkill[] }> {
   if (source.type === 'local')
     return fetchLocalSkills(source)
   if (source.type === 'github')
@@ -188,20 +199,8 @@ function readLocalSkill(dir: string, repoPath: string): RemoteSkill | null {
   const dirName = dir.split('/').pop()!
   const name = frontmatter.name || dirName
 
-  const files: Array<{ path: string, content: string }> = []
-  for (const subdir of SUPPORTING_DIRS) {
-    const subdirPath = resolve(dir, subdir)
-    if (!existsSync(subdirPath))
-      continue
-    for (const file of readdirSync(subdirPath, { withFileTypes: true })) {
-      if (!file.isFile())
-        continue
-      files.push({
-        path: `${subdir}/${file.name}`,
-        content: readFileSync(resolve(subdirPath, file.name), 'utf-8'),
-      })
-    }
-  }
+  // Collect all files except SKILL.md (handled separately)
+  const files = collectFiles(dir).filter(f => f.path !== 'SKILL.md')
 
   return {
     name,
@@ -217,203 +216,159 @@ function readLocalSkill(dir: string, repoPath: string): RemoteSkill | null {
 async function fetchGitHubSkills(
   source: GitSkillSource,
   onProgress?: (msg: string) => void,
-): Promise<{ skills: RemoteSkill[], commitSha?: string }> {
+): Promise<{ skills: RemoteSkill[] }> {
   const { owner, repo } = source
   if (!owner || !repo)
     return { skills: [] }
 
   const ref = source.ref || 'main'
-  onProgress?.(`Listing files at ${owner}/${repo}@${ref}`)
+  const refs = ref === 'main' ? ['main', 'master'] : [ref]
 
-  const data = await $fetch<UnghFilesResponse>(
-    `https://ungh.cc/repos/${owner}/${repo}/files/${ref}`,
-  ).catch(() => null)
-
-  if (!data?.files?.length) {
-    // Try 'master' fallback if default ref failed
-    if (ref === 'main') {
-      const fallback = await $fetch<UnghFilesResponse>(
-        `https://ungh.cc/repos/${owner}/${repo}/files/master`,
-      ).catch(() => null)
-      if (fallback?.files?.length)
-        return extractGitHubSkills(owner!, repo!, 'master', fallback, source.skillPath, onProgress)
-    }
-    return { skills: [] }
+  for (const tryRef of refs) {
+    const skills = await downloadGitHubSkills(owner, repo, tryRef, source.skillPath, onProgress)
+    if (skills.length > 0)
+      return { skills }
   }
 
-  return extractGitHubSkills(owner!, repo!, ref, data, source.skillPath, onProgress)
+  return { skills: [] }
 }
 
-async function extractGitHubSkills(
+async function downloadGitHubSkills(
   owner: string,
   repo: string,
   ref: string,
-  data: UnghFilesResponse,
   skillPath?: string,
   onProgress?: (msg: string) => void,
-): Promise<{ skills: RemoteSkill[], commitSha?: string }> {
-  const allFiles = data.files.map(f => f.path)
-  const commitSha = data.meta?.sha
+): Promise<RemoteSkill[]> {
+  const tempDir = join(tmpdir(), `skilld-${Date.now()}`)
 
-  // Find SKILL.md files
-  let skillMdPaths: string[]
-
-  if (skillPath) {
-    // Direct skill path: look for SKILL.md at that path
-    const candidates = [
-      `${skillPath}/SKILL.md`,
-      // In case they linked directly to the SKILL.md
-      skillPath.endsWith('/SKILL.md') ? skillPath : null,
-    ].filter(Boolean) as string[]
-
-    skillMdPaths = allFiles.filter(f => candidates.includes(f))
-  }
-  else {
-    // Discover: skills/*/SKILL.md or root SKILL.md
-    skillMdPaths = allFiles.filter(f =>
-      f.match(/^skills\/[^/]+\/SKILL\.md$/) || f === 'SKILL.md',
-    )
-  }
-
-  if (skillMdPaths.length === 0)
-    return { skills: [], commitSha }
-
-  const limit = pLimit(5)
-  const skills: RemoteSkill[] = []
-
-  onProgress?.(`Found ${skillMdPaths.length} skill(s), downloading...`)
-
-  await Promise.all(skillMdPaths.map(mdPath => limit(async () => {
-    const skillDir = mdPath === 'SKILL.md' ? '' : mdPath.replace(/\/SKILL\.md$/, '')
-    const content = await fetchRawGitHub(owner, repo, ref, mdPath)
-    if (!content)
-      return
-
-    const frontmatter = parseSkillFrontmatterName(content)
-    const dirName = skillDir ? skillDir.split('/').pop()! : repo
-    const name = frontmatter.name || dirName
-
-    // Fetch supporting files
-    const supportingFiles: Array<{ path: string, content: string }> = []
-    const prefix = skillDir ? `${skillDir}/` : ''
-
-    for (const subdir of SUPPORTING_DIRS) {
-      const subdirPrefix = `${prefix}${subdir}/`
-      const matching = allFiles.filter(f => f.startsWith(subdirPrefix))
-      for (const filePath of matching) {
-        const fileContent = await fetchRawGitHub(owner, repo, ref, filePath)
-        if (fileContent) {
-          const relativePath = filePath.slice(prefix.length)
-          supportingFiles.push({ path: relativePath, content: fileContent })
-        }
-      }
+  try {
+    if (skillPath) {
+      onProgress?.(`Downloading ${owner}/${repo}/${skillPath}@${ref}`)
+      const { dir } = await downloadTemplate(
+        `github:${owner}/${repo}/${skillPath}#${ref}`,
+        { dir: tempDir, force: true },
+      )
+      const skill = readLocalSkill(dir, skillPath)
+      return skill ? [skill] : []
     }
 
-    skills.push({
-      name,
-      description: frontmatter.description || '',
-      path: skillDir,
-      content,
-      files: supportingFiles,
-    })
-  })))
+    // Download skills/ subdirectory (single tarball request)
+    onProgress?.(`Downloading ${owner}/${repo}/skills@${ref}`)
+    try {
+      const { dir } = await downloadTemplate(
+        `github:${owner}/${repo}/skills#${ref}`,
+        { dir: tempDir, force: true },
+      )
 
-  return { skills, commitSha }
-}
+      const skills: RemoteSkill[] = []
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory())
+          continue
+        const skill = readLocalSkill(resolve(dir, entry.name), `skills/${entry.name}`)
+        if (skill)
+          skills.push(skill)
+      }
 
-async function fetchRawGitHub(owner: string, repo: string, ref: string, path: string): Promise<string | null> {
-  return $fetch(
-    `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`,
-    { responseType: 'text' },
-  ).catch(() => null)
+      if (skills.length > 0) {
+        onProgress?.(`Found ${skills.length} skill(s)`)
+        return skills
+      }
+    }
+    catch {}
+
+    // Fallback: check root SKILL.md via single HTTP request
+    const content = await $fetch(
+      `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/SKILL.md`,
+      { responseType: 'text' },
+    ).catch(() => null)
+    if (content) {
+      const fm = parseSkillFrontmatterName(content)
+      onProgress?.('Found 1 skill')
+      return [{
+        name: fm.name || repo,
+        description: fm.description || '',
+        path: '',
+        content,
+        files: [],
+      }]
+    }
+
+    return []
+  }
+  catch {
+    return []
+  }
+  finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
 }
 
 // ── GitLab ──
 
-interface GitLabTreeEntry {
-  id: string
-  name: string
-  type: string
-  path: string
-  mode: string
-}
-
 async function fetchGitLabSkills(
   source: GitSkillSource,
   onProgress?: (msg: string) => void,
-): Promise<{ skills: RemoteSkill[], commitSha?: string }> {
+): Promise<{ skills: RemoteSkill[] }> {
   const { owner, repo } = source
   if (!owner || !repo)
     return { skills: [] }
 
   const ref = source.ref || 'main'
-  const projectId = encodeURIComponent(`${owner}/${repo}`)
+  const tempDir = join(tmpdir(), `skilld-gitlab-${Date.now()}`)
 
-  onProgress?.(`Listing files at ${owner}/${repo}@${ref}`)
+  try {
+    const subdir = source.skillPath || 'skills'
+    onProgress?.(`Downloading ${owner}/${repo}/${subdir}@${ref}`)
 
-  const tree = await $fetch<GitLabTreeEntry[]>(
-    `https://gitlab.com/api/v4/projects/${projectId}/repository/tree?ref=${ref}&recursive=true&per_page=100`,
-  ).catch(() => null)
+    const { dir } = await downloadTemplate(
+      `gitlab:${owner}/${repo}/${subdir}#${ref}`,
+      { dir: tempDir, force: true },
+    )
 
-  if (!tree?.length)
-    return { skills: [] }
+    if (source.skillPath) {
+      const skill = readLocalSkill(dir, source.skillPath)
+      return { skills: skill ? [skill] : [] }
+    }
 
-  const allFiles = tree.filter(e => e.type === 'blob').map(e => e.path)
+    const skills: RemoteSkill[] = []
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (!entry.isDirectory())
+        continue
+      const skill = readLocalSkill(resolve(dir, entry.name), `skills/${entry.name}`)
+      if (skill)
+        skills.push(skill)
+    }
 
-  // Find SKILL.md files
-  const skillMdPaths = source.skillPath
-    ? allFiles.filter(f => f === `${source.skillPath}/SKILL.md`)
-    : allFiles.filter(f => f.match(/^skills\/[^/]+\/SKILL\.md$/) || f === 'SKILL.md')
+    if (skills.length > 0) {
+      onProgress?.(`Found ${skills.length} skill(s)`)
+      return { skills }
+    }
 
-  if (skillMdPaths.length === 0)
-    return { skills: [] }
-
-  const limit = pLimit(5)
-  const skills: RemoteSkill[] = []
-
-  onProgress?.(`Found ${skillMdPaths.length} skill(s), downloading...`)
-
-  await Promise.all(skillMdPaths.map(mdPath => limit(async () => {
-    const skillDir = mdPath === 'SKILL.md' ? '' : mdPath.replace(/\/SKILL\.md$/, '')
-    const content = await fetchRawGitLab(owner!, repo!, ref, mdPath)
-    if (!content)
-      return
-
-    const frontmatter = parseSkillFrontmatterName(content)
-    const dirName = skillDir ? skillDir.split('/').pop()! : repo!
-    const name = frontmatter.name || dirName
-
-    // Fetch supporting files
-    const supportingFiles: Array<{ path: string, content: string }> = []
-    const prefix = skillDir ? `${skillDir}/` : ''
-
-    for (const subdir of SUPPORTING_DIRS) {
-      const subdirPrefix = `${prefix}${subdir}/`
-      const matching = allFiles.filter(f => f.startsWith(subdirPrefix))
-      for (const filePath of matching) {
-        const fileContent = await fetchRawGitLab(owner!, repo!, ref, filePath)
-        if (fileContent) {
-          const relativePath = filePath.slice(prefix.length)
-          supportingFiles.push({ path: relativePath, content: fileContent })
-        }
+    // Fallback: check root SKILL.md
+    const content = await $fetch(
+      `https://gitlab.com/${owner}/${repo}/-/raw/${ref}/SKILL.md`,
+      { responseType: 'text' },
+    ).catch(() => null)
+    if (content) {
+      const fm = parseSkillFrontmatterName(content)
+      return {
+        skills: [{
+          name: fm.name || repo,
+          description: fm.description || '',
+          path: '',
+          content,
+          files: [],
+        }],
       }
     }
 
-    skills.push({
-      name,
-      description: frontmatter.description || '',
-      path: skillDir,
-      content,
-      files: supportingFiles,
-    })
-  })))
-
-  return { skills }
-}
-
-async function fetchRawGitLab(owner: string, repo: string, ref: string, path: string): Promise<string | null> {
-  return $fetch(
-    `https://gitlab.com/${owner}/${repo}/-/raw/${ref}/${path}`,
-    { responseType: 'text' },
-  ).catch(() => null)
+    return { skills: [] }
+  }
+  catch {
+    return { skills: [] }
+  }
+  finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
 }
