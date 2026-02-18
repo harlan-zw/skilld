@@ -1107,7 +1107,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
   const llmLog = p.taskLog({ title: `Agent exploring ${packageName}` })
   const docFiles = listReferenceFiles(skillDir)
   const hasGithub = hasIssues || hasDiscussions
-  const { optimized, wasOptimized, usage, cost, warnings, debugLogsDir } = await optimizeDocs({
+  const { optimized, wasOptimized, usage, cost, warnings, error, debugLogsDir } = await optimizeDocs({
     packageName,
     skillDir,
     model,
@@ -1139,6 +1139,8 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     llmLog.success(`Generated best practices${costSuffix}`)
     if (debugLogsDir)
       p.log.info(`Debug logs: ${debugLogsDir}`)
+    if (error)
+      p.log.warn(`\x1B[33mPartial failure: ${error}\x1B[0m`)
     if (warnings?.length) {
       for (const w of warnings)
         p.log.warn(`\x1B[33m${w}\x1B[0m`)
@@ -1168,6 +1170,6 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
-    llmLog.error('LLM optimization failed')
+    llmLog.error(`LLM optimization failed${error ? `: ${error}` : ''}`)
   }
 }
