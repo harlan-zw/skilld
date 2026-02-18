@@ -232,6 +232,7 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
     metaEntries.push(`  version: ${yamlEscape(version)}`)
   if (body && generatedBy)
     metaEntries.push(`  generated_by: ${yamlEscape(generatedBy)}`)
+  metaEntries.push(`  generated_at: ${new Date().toISOString().split('T')[0]}`)
   if (metaEntries.length) {
     lines.push('metadata:')
     lines.push(...metaEntries)
