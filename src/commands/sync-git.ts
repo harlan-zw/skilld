@@ -55,6 +55,8 @@ export interface GitSyncOptions {
   force?: boolean
   debug?: boolean
   from?: string
+  /** Filter to specific skill names (comma-separated via --skill flag) */
+  skillFilter?: string[]
 }
 
 export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
@@ -89,7 +91,17 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
   // Select skills to install
   let selected = skills
 
-  if (source.skillPath) {
+  if (opts.skillFilter?.length) {
+    // --skill flag: filter to matching names
+    const filterSet = new Set(opts.skillFilter.map(s => s.toLowerCase()))
+    selected = skills.filter(s => filterSet.has(s.name.toLowerCase()))
+    if (selected.length === 0) {
+      p.log.warn(`No skills matched: ${opts.skillFilter.join(', ')}`)
+      p.log.message(`Available: ${skills.map(s => s.name).join(', ')}`)
+      return
+    }
+  }
+  else if (source.skillPath) {
     // Direct path: auto-select the matched skill
     selected = skills
   }
@@ -101,7 +113,7 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
         value: s.name,
         hint: s.description || s.path,
       })),
-      initialValues: skills.map(s => s.name),
+      initialValues: [],
     })
 
     if (p.isCancel(choices))
@@ -109,6 +121,8 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
 
     const selectedNames = new Set(choices)
     selected = skills.filter(s => selectedNames.has(s.name))
+    if (selected.length === 0)
+      return
   }
 
   // Install each selected skill

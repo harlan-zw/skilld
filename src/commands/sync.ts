@@ -568,6 +568,12 @@ export const addCommandDef = defineCommand({
       description: 'Package(s) to sync (space or comma-separated, e.g., vue nuxt pinia)',
       required: true,
     },
+    skill: {
+      type: 'string',
+      alias: 's',
+      description: 'Select specific skills from a git repo (comma-separated)',
+      valueHint: 'name',
+    },
     ...sharedArgs,
   },
   async run({ args }) {
@@ -605,7 +611,8 @@ export const addCommandDef = defineCommand({
     // Handle git sources
     if (gitSources.length > 0) {
       for (const source of gitSources) {
-        await syncGitSkills({ source, global: args.global, agent, yes: args.yes, model: args.model as OptimizeModel | undefined, force: args.force, debug: args.debug })
+        const skillFilter = args.skill ? args.skill.split(/[,\s]+/).map((s: string) => s.trim()).filter(Boolean) : undefined
+        await syncGitSkills({ source, global: args.global, agent, yes: args.yes, model: args.model as OptimizeModel | undefined, force: args.force, debug: args.debug, skillFilter })
       }
     }
 
