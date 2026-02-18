@@ -2,7 +2,6 @@ import type { DatabaseSync } from 'node:sqlite'
 import type { Embedding } from 'retriv'
 import { rmSync } from 'node:fs'
 import { join } from 'pathe'
-import { cachedEmbeddings as retrivCached } from 'retriv/embeddings/cached'
 import { CACHE_DIR } from '../cache/index.ts'
 
 interface EmbeddingConfig {
@@ -40,11 +39,11 @@ function createSqliteStorage(db: DatabaseSync) {
   }
 }
 
-export function cachedEmbeddings(config: EmbeddingConfig): EmbeddingConfig {
+export async function cachedEmbeddings(config: EmbeddingConfig): Promise<EmbeddingConfig> {
+  const { cachedEmbeddings: retrivCached } = await import('retriv/embeddings/cached')
   const db = openDb()
   const storage = createSqliteStorage(db)
 
-  // Validate dimensions on first resolve
   const originalResolve = config.resolve
   const validatedConfig: EmbeddingConfig = {
     async resolve() {

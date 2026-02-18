@@ -43,7 +43,7 @@ describe('embedding-cache', () => {
 
   it('computes embeddings on first call (cache miss)', async () => {
     const { config, calls } = fakeEmbeddingConfig()
-    const wrapped = cachedEmbeddings(config)
+    const wrapped = await cachedEmbeddings(config)
     const { embedder } = await wrapped.resolve()
 
     const result = await embedder(['hello', 'world'])
@@ -55,7 +55,7 @@ describe('embedding-cache', () => {
 
   it('serves cached embeddings on second call (cache hit)', async () => {
     const { config, calls } = fakeEmbeddingConfig()
-    const wrapped = cachedEmbeddings(config)
+    const wrapped = await cachedEmbeddings(config)
     const { embedder } = await wrapped.resolve()
 
     await embedder(['hello', 'world'])
@@ -68,7 +68,7 @@ describe('embedding-cache', () => {
 
   it('computes only missed texts on partial cache hit', async () => {
     const { config, calls } = fakeEmbeddingConfig()
-    const wrapped = cachedEmbeddings(config)
+    const wrapped = await cachedEmbeddings(config)
     const { embedder } = await wrapped.resolve()
 
     await embedder(['hello'])
@@ -87,7 +87,7 @@ describe('embedding-cache', () => {
         return new Float32Array([counter, counter * 10])
       })
     })
-    const wrapped = cachedEmbeddings(config)
+    const wrapped = await cachedEmbeddings(config)
     const { embedder } = await wrapped.resolve()
 
     await embedder(['a', 'b'])
@@ -104,14 +104,14 @@ describe('embedding-cache', () => {
   it('wipes cache on dimension mismatch', async () => {
     // First: populate with 4-dim embeddings
     const { config: config4, calls: calls4 } = fakeEmbeddingConfig(4)
-    const wrapped4 = cachedEmbeddings(config4)
+    const wrapped4 = await cachedEmbeddings(config4)
     const { embedder: embedder4 } = await wrapped4.resolve()
     await embedder4(['hello'])
     expect(calls4).toHaveLength(1)
 
     // Second: resolve with 8-dim → should wipe, recompute
     const { config: config8, calls: calls8 } = fakeEmbeddingConfig(8)
-    const wrapped8 = cachedEmbeddings(config8)
+    const wrapped8 = await cachedEmbeddings(config8)
     const { embedder: embedder8 } = await wrapped8.resolve()
     const result = await embedder8(['hello'])
 
@@ -122,7 +122,7 @@ describe('embedding-cache', () => {
 
   it('clearEmbeddingCache removes the db file', async () => {
     const { config } = fakeEmbeddingConfig()
-    const wrapped = cachedEmbeddings(config)
+    const wrapped = await cachedEmbeddings(config)
     const { embedder } = await wrapped.resolve()
     await embedder(['hello'])
 
@@ -137,12 +137,12 @@ describe('embedding-cache', () => {
     const { config, calls } = fakeEmbeddingConfig()
 
     // First resolve + embed
-    const wrapped1 = cachedEmbeddings(config)
+    const wrapped1 = await cachedEmbeddings(config)
     const { embedder: e1 } = await wrapped1.resolve()
     await e1(['hello'])
 
     // Second resolve (simulates new process opening same DB)
-    const wrapped2 = cachedEmbeddings(config)
+    const wrapped2 = await cachedEmbeddings(config)
     const { embedder: e2 } = await wrapped2.resolve()
     await e2(['hello'])
 
@@ -152,7 +152,7 @@ describe('embedding-cache', () => {
 
   it('handles empty input', async () => {
     const { config, calls } = fakeEmbeddingConfig()
-    const wrapped = cachedEmbeddings(config)
+    const wrapped = await cachedEmbeddings(config)
     const { embedder } = await wrapped.resolve()
 
     const result = await embedder([])

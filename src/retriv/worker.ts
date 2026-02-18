@@ -57,10 +57,11 @@ if (parentPort) {
           },
         }
 
+        const embeddings = await cachedEmbeddings(transformersJs())
         const db = await createRetriv({
           driver: sqlite({
             path: config.dbPath,
-            embeddings: cachedEmbeddings(transformersJs()),
+            embeddings,
           }),
           chunking: autoChunker(),
         })

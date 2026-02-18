@@ -1,20 +1,30 @@
 import type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet } from './types.ts'
-import { createRetriv } from 'retriv'
-import { autoChunker } from 'retriv/chunkers/auto'
-import sqlite from 'retriv/db/sqlite'
-import { transformersJs } from 'retriv/embeddings/transformers-js'
 import { stripFrontmatter } from '../core/markdown.ts'
-import { cachedEmbeddings } from './embedding-cache.ts'
 
 export type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, SearchFilter, SearchOptions, SearchResult, SearchSnippet }
 
-type RetrivInstance = Awaited<ReturnType<typeof createRetriv>>
+type RetrivInstance = Awaited<ReturnType<typeof getDb>>
 
-function getDb(config: IndexConfig) {
+// Dynamic imports: retriv/chunkers/auto eagerly loads typescript which may not be installed (e.g. npx)
+async function getDb(config: Pick<IndexConfig, 'dbPath'>) {
+  const [
+    { createRetriv },
+    { autoChunker },
+    sqliteMod,
+    { transformersJs },
+    { cachedEmbeddings },
+  ] = await Promise.all([
+    import('retriv'),
+    import('retriv/chunkers/auto'),
+    import('retriv/db/sqlite'),
+    import('retriv/embeddings/transformers-js'),
+    import('./embedding-cache.ts'),
+  ])
+  const embeddings = await cachedEmbeddings(transformersJs())
   return createRetriv({
-    driver: sqlite({
+    driver: sqliteMod.default({
       path: config.dbPath,
-      embeddings: cachedEmbeddings(transformersJs()),
+      embeddings,
     }),
     chunking: autoChunker(),
   })
