@@ -41,6 +41,7 @@ const TOOL_VERBS: Record<string, string> = {
   write_file: 'Writing',
   list_directory: 'Listing',
   search_file_content: 'Searching',
+  run_shell_command: 'Running',
 }
 
 interface ToolProgressLog {
@@ -86,10 +87,12 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       const verb = TOOL_VERBS[rawName] ?? rawName
       const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
 
-      if (rawName === 'Bash' && hint) {
+      if ((rawName === 'Bash' || rawName === 'run_shell_command') && hint) {
         const searchMatch = hint.match(/skilld search\s+"([^"]+)"/)
         if (searchMatch)
           emit(`${prefix}Searching \x1B[36m"${searchMatch[1]}"\x1B[0m`)
+        else if (hint.includes('skilld validate'))
+          emit(`${prefix}Validating...`)
         else
           emit(`${prefix}Running ${hint.length > 50 ? `${hint.slice(0, 47)}...` : hint}`)
       }

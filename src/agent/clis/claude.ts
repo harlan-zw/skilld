@@ -21,6 +21,7 @@ export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]
     ...readDirs.flatMap(d => [`Read(${d}/**)`, `Glob(${d}/**)`, `Grep(${d}/**)`]),
     `Write(${skilldDir}/**)`,
     `Bash(*skilld search*)`,
+    `Bash(*skilld validate*)`,
   ].join(' ')
   return [
     '-p',
