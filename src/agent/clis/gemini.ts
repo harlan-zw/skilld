@@ -20,7 +20,7 @@ export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]
     '-m',
     model,
     '--allowed-tools',
-    'read_file,write_file,glob_tool,list_directory,search_file_content,run_shell_command(npx -y skilld)',
+    'read_file,write_file,glob_tool,list_directory,search_file_content,run_shell_command(npx -y skilld),run_shell_command(grep),run_shell_command(head)',
     '--include-directories',
     skillDir,
     ...symlinkDirs.flatMap(d => ['--include-directories', d]),
