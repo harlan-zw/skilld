@@ -384,8 +384,9 @@ const REPO_REGISTRY: Record<string, RepoEntry> = {
   'quasarframework/quasar': {
     owner: 'quasarframework',
     repo: 'quasar',
+    docsPath: 'docs/src/pages',
+    docsRef: 'dev',
     homepage: 'https://quasar.dev',
-    crawlUrl: 'https://quasar.dev/**',
     packages: {
       quasar: { primary: true },
     },
