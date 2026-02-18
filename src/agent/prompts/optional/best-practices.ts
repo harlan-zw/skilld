@@ -65,13 +65,13 @@ ${searchHints.length ? `\nSearch: ${searchHints.join(', ')}` : ''}`,
 \`\`\`
 ## Best Practices
 
-- Use ${packageName}'s built-in \`createX()\` helper over manual wiring — handles cleanup and edge cases automatically [source](./.skilld/docs/api.md)
+- Use ${packageName}'s built-in \`createX()\` helper over manual wiring — handles cleanup and edge cases automatically [source](./.skilld/docs/api.md#createx)
 
-- Pass config through \`defineConfig()\` — enables type inference and plugin merging [source](./.skilld/docs/config.md)
+- Pass config through \`defineConfig()\` — enables type inference and plugin merging [source](./.skilld/docs/config.md:L22)
 
-- Prefer \`useComposable()\` over direct imports in reactive contexts — ensures proper lifecycle binding [source](./.skilld/docs/composables.md)
+- Prefer \`useComposable()\` over direct imports in reactive contexts — ensures proper lifecycle binding [source](./.skilld/docs/composables.md:L85:109)
 
-- Set \`retryDelay\` to exponential backoff for production resilience — default fixed delay causes thundering herd under load [source](./.skilld/docs/advanced.md)
+- Set \`retryDelay\` to exponential backoff for production resilience — default fixed delay causes thundering herd under load [source](./.skilld/docs/advanced.md#retry-strategies)
 
 \`\`\`ts
 // Only when the pattern cannot be understood from the description alone
@@ -80,12 +80,12 @@ const client = createX({ retryDelay: attempt => Math.min(1000 * 2 ** attempt, 30
 \`\`\`
 </format-example>
 
-Each item: markdown list item (-) + ${packageName}-specific pattern + why it's preferred + \`[source](./.skilld/...)\` link. **Prefer concise descriptions over inline code** — the source link points the agent to full examples in the docs. Only add a code block when the pattern genuinely cannot be understood from the description alone (e.g., non-obvious syntax, multi-step wiring). Most items should be description + source link only. All source links MUST use \`./.skilld/\` prefix. Do NOT use emoji — use plain text markers only.`,
+Each item: markdown list item (-) + ${packageName}-specific pattern + why it's preferred + \`[source](./.skilld/...#section)\` link. **Prefer concise descriptions over inline code** — the source link points the agent to full examples in the docs. Only add a code block when the pattern genuinely cannot be understood from the description alone (e.g., non-obvious syntax, multi-step wiring). Most items should be description + source link only. All source links MUST use \`./.skilld/\` prefix and include a **section anchor** (\`#heading-slug\`) or **line reference** (\`:L<line>\` or \`:L<start>:<end>\`) to pinpoint the exact location. Do NOT use emoji — use plain text markers only.`,
 
     rules: [
       `- **${maxItems(4, Math.round(10 * boost), enabledSectionCount)} best practice items**`,
       `- **MAX ${bpMaxLines} lines** for best practices section`,
-      '- **Every item MUST have a `[source](./.skilld/...)` link.** If you cannot cite a specific reference file, do NOT include the item — unsourced items risk hallucination and will be rejected',
+      '- **Every item MUST have a `[source](./.skilld/...#section)` link** with a section anchor (`#heading-slug`) or line reference (`:L<line>` or `:L<start>:<end>`). If you cannot cite a specific location in a reference file, do NOT include the item — unsourced items risk hallucination and will be rejected',
       '- **Minimize inline code.** Most items should be description + source link only. The source file contains full examples the agent can read. Only add a code block when the pattern is unintuitable from the description (non-obvious syntax, surprising argument order, multi-step wiring). Aim for at most 1 in 4 items having a code block',
       pkgFiles?.some(f => f.endsWith('.d.ts'))
         ? '- **Verify before including:** Confirm file paths exist via Glob/Read before linking. Confirm functions/composables are real exports in `./.skilld/pkg/` `.d.ts` files before documenting. If you cannot find an export, do NOT include it'

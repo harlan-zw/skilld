@@ -107,22 +107,22 @@ ${searchHints.length ? `\nSearch: ${searchHints.join(', ')}` : ''}${releaseGuida
 
 This section documents version-specific API changes — prioritize recent major/minor releases.
 
-- BREAKING: \`createClient(url, key)\` — v2 changed to \`createClient({ url, key })\`, old positional args silently ignored [source](./.skilld/releases/v2.0.0.md)
+- BREAKING: \`createClient(url, key)\` — v2 changed to \`createClient({ url, key })\`, old positional args silently ignored [source](./.skilld/releases/v2.0.0.md:L18)
 
-- NEW: \`useTemplateRef()\` — new in v3.5, replaces \`$refs\` pattern [source](./.skilld/releases/v3.5.0.md)
+- NEW: \`useTemplateRef()\` — new in v3.5, replaces \`$refs\` pattern [source](./.skilld/releases/v3.5.0.md#new-features)
 
-- BREAKING: \`db.query()\` — returns \`{ rows }\` not raw array since v4 [source](./.skilld/docs/migration.md)
+- BREAKING: \`db.query()\` — returns \`{ rows }\` not raw array since v4 [source](./.skilld/docs/migration.md:L42:55)
 
 **Also changed:** \`defineModel()\` stable v3.4 · \`onWatcherCleanup()\` new v3.5 · \`Suspense\` stable v3.5
 </format-example>
 
-Each item: BREAKING/DEPRECATED/NEW label + API name + what changed + source link. All source links MUST use \`./.skilld/\` prefix (e.g., \`[source](./.skilld/releases/v2.0.0.md)\`). Do NOT use emoji — use plain text markers only.
+Each item: BREAKING/DEPRECATED/NEW label + API name + what changed + source link. All source links MUST use \`./.skilld/\` prefix and include a **section anchor** (\`#heading-slug\`) or **line reference** (\`:L<line>\` or \`:L<start>:<end>\`) to pinpoint the exact location (e.g., \`[source](./.skilld/releases/v2.0.0.md#breaking-changes)\` or \`[source](./.skilld/docs/api.md:L127)\`). Do NOT use emoji — use plain text markers only.
 
 **Tiered format:** Top-scoring items get full detailed entries. Remaining relevant items go in a compact "**Also changed:**" line at the end — API name + brief label, separated by \` · \`. This surfaces more changes without bloating the section.`,
 
     rules: [
       `- **API Changes:** ${maxItems(6, Math.round(12 * boost), enabledSectionCount)} detailed items + compact "Also changed" line for remaining, MAX ${apiChangesMaxLines} lines`,
-      '- **Every detailed item MUST have a `[source](./.skilld/...)` link.** If you cannot cite a specific release, changelog entry, or migration doc, do NOT include the item',
+      '- **Every detailed item MUST have a `[source](./.skilld/...#section)` link** with a section anchor (`#heading-slug`) or line reference (`:L<line>` or `:L<start>:<end>`). If you cannot cite a specific location in a release, changelog entry, or migration doc, do NOT include the item',
       '- **Recency:** Only include changes from the current major version and the previous→current migration. Exclude changes from older major versions entirely — users already migrated past them',
       '- Focus on APIs that CHANGED, not general conventions or gotchas',
       '- New APIs get NEW: prefix, deprecated/breaking get BREAKING: or DEPRECATED: prefix',
