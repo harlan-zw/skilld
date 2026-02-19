@@ -1,5 +1,5 @@
 import type { AgentType, OptimizeModel } from '../agent/index.ts'
-import type { ProjectState } from '../core/skills.ts'
+import type { ProjectState, SkillEntry } from '../core/skills.ts'
 import type { GitSkillSource } from '../sources/git-skills.ts'
 import type { ResolveAttempt } from '../sources/index.ts'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -37,6 +37,7 @@ import {
   fetchPkgDist,
   parsePackageSpec,
   readLocalDependencies,
+  resolveCrateDocsWithAttempts,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
 } from '../sources/index.ts'
@@ -95,13 +96,44 @@ export interface SyncOptions {
   from?: string
 }
 
+export function isCrateSpec(spec: string): boolean {
+  return spec.startsWith('crate:')
+}
+
+function toStoragePackageName(packageName: string, isCrate: boolean): string {
+  return isCrate ? `@skilld-crate/${packageName}` : packageName
+}
+
+function toIdentityPackageName(packageName: string, isCrate: boolean): string {
+  return isCrate ? `crate:${packageName}` : packageName
+}
+
+function storageNameFromIdentity(identityName: string): string {
+  if (identityName.startsWith('crate:'))
+    return toStoragePackageName(identityName.slice('crate:'.length), true)
+  return identityName
+}
+
+function toUpdatePackageSpec(skill: SkillEntry): string {
+  const packageName = skill.packageName || skill.name
+  if (packageName.startsWith('crate:'))
+    return packageName
+
+  if (skill.name.includes('skilld-crate-') || skill.info?.source?.includes('docs.rs/'))
+    return `crate:${packageName}`
+
+  return packageName
+}
+
 export async function syncCommand(state: ProjectState, opts: SyncOptions): Promise<void> {
   // If packages specified, sync those
   if (opts.packages && opts.packages.length > 0) {
-    // Use parallel sync for multiple packages
-    if (opts.packages.length > 1) {
-      return syncPackagesParallel({
-        packages: opts.packages,
+    const crateSpecs = opts.packages.filter(isCrateSpec)
+    const npmSpecs = opts.packages.filter(pkg => !isCrateSpec(pkg))
+
+    if (npmSpecs.length > 1) {
+      await syncPackagesParallel({
+        packages: npmSpecs,
         global: opts.global,
         agent: opts.agent,
         model: opts.model,
@@ -111,9 +143,13 @@ export async function syncCommand(state: ProjectState, opts: SyncOptions): Promi
         mode: opts.mode,
       })
     }
+    else if (npmSpecs.length === 1) {
+      await syncSinglePackage(npmSpecs[0]!, opts)
+    }
 
-    // Single package - use original flow for cleaner output
-    await syncSinglePackage(opts.packages[0]!, opts)
+    for (const spec of crateSpecs)
+      await syncSinglePackage(spec, opts)
+
     return
   }
 
@@ -238,80 +274,95 @@ interface SyncConfig {
 }
 
 async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promise<void> {
+  const isCrate = isCrateSpec(packageSpec)
+  const normalizedSpec = isCrate ? packageSpec.slice('crate:'.length).trim() : packageSpec
+  if (!normalizedSpec) {
+    p.log.error('Invalid crate spec. Use format: crate:<name>')
+    return
+  }
+
   // Parse dist-tag from spec: "vue@beta" → name="vue", tag="beta"
-  const { name: packageName, tag: requestedTag } = parsePackageSpec(packageSpec)
+  const { name: parsedName, tag: requestedTag } = parsePackageSpec(normalizedSpec)
+  const packageName = isCrate ? parsedName.toLowerCase() : parsedName
+  const identityPackageName = toIdentityPackageName(packageName, isCrate)
+  const storagePackageName = toStoragePackageName(packageName, isCrate)
 
   const spin = timedSpinner()
   spin.start(`Resolving ${packageSpec}`)
 
   const cwd = process.cwd()
-  const localDeps = await readLocalDependencies(cwd).catch(() => [])
-  const localVersion = localDeps.find(d => d.name === packageName)?.version
+  const localDeps = isCrate ? [] : await readLocalDependencies(cwd).catch(() => [])
+  const localVersion = isCrate ? undefined : localDeps.find(d => d.name === packageName)?.version
 
-  // Try npm first — use full spec for npm resolution (unpkg supports dist-tags)
-  const resolveResult = await resolvePackageDocsWithAttempts(requestedTag ? packageSpec : packageName, {
-    version: localVersion,
-    cwd,
-    onProgress: step => spin.message(`${packageName}: ${RESOLVE_STEP_LABELS[step]}`),
-  })
+  const resolveResult = isCrate
+    ? await resolveCrateDocsWithAttempts(packageName, {
+        version: requestedTag,
+        onProgress: step => spin.message(`${identityPackageName}: ${step}`),
+      })
+    : await resolvePackageDocsWithAttempts(requestedTag ? normalizedSpec : packageName, {
+        version: localVersion,
+        cwd,
+        onProgress: step => spin.message(`${identityPackageName}: ${RESOLVE_STEP_LABELS[step]}`),
+      })
   let resolved = resolveResult.package
 
   // If npm fails, check if it's a link: dep and try local resolution
-  if (!resolved) {
+  if (!resolved && !isCrate) {
     spin.message(`Resolving local package: ${packageName}`)
     resolved = await resolveLocalDep(packageName, cwd)
   }
 
   if (!resolved) {
-    // Search npm for alternatives before giving up
-    spin.message(`Searching npm for "${packageName}"...`)
-    const suggestions = await searchNpmPackages(packageName)
+    if (!isCrate) {
+      // Search npm for alternatives before giving up
+      spin.message(`Searching npm for "${packageName}"...`)
+      const suggestions = await searchNpmPackages(packageName)
 
-    if (suggestions.length > 0) {
-      spin.stop(`Package "${packageName}" not found on npm`)
-      showResolveAttempts(resolveResult.attempts)
+      if (suggestions.length > 0) {
+        spin.stop(`Package "${packageName}" not found on npm`)
+        showResolveAttempts(resolveResult.attempts)
 
-      const selected = await p.select({
-        message: 'Did you mean one of these?',
-        options: [
-          ...suggestions.map(s => ({
-            label: s.name,
-            value: s.name,
-            hint: s.description,
-          })),
-          { label: 'None of these', value: '_none_' as const },
-        ],
-      })
+        const selected = await p.select({
+          message: 'Did you mean one of these?',
+          options: [
+            ...suggestions.map(s => ({
+              label: s.name,
+              value: s.name,
+              hint: s.description,
+            })),
+            { label: 'None of these', value: '_none_' as const },
+          ],
+        })
 
-      if (!p.isCancel(selected) && selected !== '_none_')
-        return syncSinglePackage(selected as string, config)
+        if (!p.isCancel(selected) && selected !== '_none_')
+          return syncSinglePackage(selected as string, config)
 
-      return
+        return
+      }
     }
 
-    spin.stop(`Could not find docs for: ${packageName}`)
+    spin.stop(`Could not find docs for: ${identityPackageName}`)
     showResolveAttempts(resolveResult.attempts)
     return
   }
 
-  const version = localVersion || resolved.version || 'latest'
+  const version = isCrate ? (resolved.version || requestedTag || 'latest') : (localVersion || resolved.version || 'latest')
   const versionKey = getVersionKey(version)
 
   // Force: nuke cached references + search index so all existsSync guards re-fetch
-  if (config.force) {
-    forceClearCache(packageName, version)
-  }
+  if (config.force)
+    forceClearCache(storagePackageName, version)
 
-  const useCache = isCached(packageName, version)
+  const useCache = isCached(storagePackageName, version)
 
   // Download npm dist if not in node_modules (for standalone/learning use)
-  if (!existsSync(join(cwd, 'node_modules', packageName))) {
+  if (!isCrate && !existsSync(join(cwd, 'node_modules', packageName))) {
     spin.message(`Downloading ${packageName}@${version} dist`)
     await fetchPkgDist(packageName, version)
   }
 
   // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
-  const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global)
+  const shippedResult = isCrate ? null : handleShippedSkills(packageName, version, cwd, config.agent, config.global)
   if (shippedResult) {
     const shared = !config.global && getSharedSkillsDir(cwd)
     for (const shipped of shippedResult.shipped) {
@@ -323,12 +374,12 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     return
   }
 
-  spin.stop(`Resolved ${packageName}@${useCache ? versionKey : version}${config.force ? ' (force)' : useCache ? ' (cached)' : ''}`)
+  spin.stop(`Resolved ${identityPackageName}@${useCache ? versionKey : version}${config.force ? ' (force)' : useCache ? ' (cached)' : ''}`)
 
   ensureCacheDir()
 
   const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-  const skillDirName = config.name ? sanitizeName(config.name) : computeSkillDirName(packageName)
+  const skillDirName = config.name ? sanitizeName(config.name) : computeSkillDirName(storagePackageName)
   // Eject path override: default to ./skills/<name>, or use specified directory
   const skillDir = config.eject
     ? typeof config.eject === 'string'
@@ -339,18 +390,18 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
   // ── Merge mode: skill dir already exists with a different primary package (skip in eject) ──
   const existingLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
-  const isMerge = existingLock && existingLock.packageName !== packageName
+  const isMerge = existingLock && existingLock.packageName !== identityPackageName
 
   if (isMerge) {
-    spin.stop(`Merging ${packageName} into ${skillDirName}`)
+    spin.stop(`Merging ${identityPackageName} into ${skillDirName}`)
 
     // Create named symlink for this package
-    linkPkgNamed(skillDir, packageName, cwd, version)
+    linkPkgNamed(skillDir, storagePackageName, cwd, version)
 
     // Merge into lockfile
     const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
     writeLock(baseDir, skillDirName, {
-      packageName,
+      packageName: identityPackageName,
       version,
       repo: repoSlug,
       source: existingLock.source,
@@ -361,9 +412,10 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     // Regenerate SKILL.md with all packages listed
     const updatedLock = readLock(baseDir)?.skills[skillDirName]
     const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
-    const relatedSkills = await findRelatedSkills(packageName, baseDir)
-    const pkgFiles = getPkgKeyFiles(existingLock.packageName!, cwd, existingLock.version)
-    const shippedDocs = hasShippedDocs(existingLock.packageName!, cwd, existingLock.version)
+    const relatedSkills = await findRelatedSkills(storagePackageName, baseDir)
+    const existingStorageName = storageNameFromIdentity(existingLock.packageName!)
+    const pkgFiles = getPkgKeyFiles(existingStorageName, cwd, existingLock.version)
+    const shippedDocs = hasShippedDocs(existingStorageName, cwd, existingLock.version)
 
     const mergeFeatures = readConfig().features ?? defaultFeatures
     const skillMd = generateSkillMd({
@@ -389,7 +441,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     if (!config.global)
       registerProject(cwd)
 
-    p.outro(`Merged ${packageName} into ${skillDirName}`)
+    p.outro(`Merged ${identityPackageName} into ${skillDirName}`)
     return
   }
 
@@ -399,7 +451,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const resSpin = timedSpinner()
   resSpin.start('Finding resources')
   const resources = await fetchAndCacheResources({
-    packageName,
+    packageName: storagePackageName,
     resolved,
     version,
     useCache,
@@ -424,14 +476,14 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     p.log.warn(`\x1B[33m${w}\x1B[0m`)
 
   // Create symlinks (LLM needs .skilld/ to read docs, even in eject mode)
-  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features, resources.repoInfo)
+  linkAllReferences(skillDir, storagePackageName, cwd, version, resources.docsType, undefined, features, resources.repoInfo)
 
   // ── Phase 2: Search index (skip in eject mode — not portable) ──
   if (features.search && !config.eject) {
     const idxSpin = timedSpinner()
     idxSpin.start('Creating search index')
     await indexResources({
-      packageName,
+      packageName: storagePackageName,
       version,
       cwd,
       docsToIndex: resources.docsToIndex,
@@ -441,23 +493,23 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     idxSpin.stop('Search index ready')
   }
 
-  const pkgDir = resolvePkgDir(packageName, cwd, version)
-  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version))
-  const relatedSkills = await findRelatedSkills(packageName, baseDir)
-  const shippedDocs = hasShippedDocs(packageName, cwd, version)
-  const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
+  const pkgDir = resolvePkgDir(storagePackageName, cwd, version)
+  const hasChangelog = detectChangelog(pkgDir, getCacheDir(storagePackageName, version))
+  const relatedSkills = await findRelatedSkills(storagePackageName, baseDir)
+  const shippedDocs = hasShippedDocs(storagePackageName, cwd, version)
+  const pkgFiles = getPkgKeyFiles(storagePackageName, cwd, version)
 
   // Write base SKILL.md (no LLM needed)
   const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
 
   // Also create named symlink for this package (skip in eject mode)
   if (!config.eject)
-    linkPkgNamed(skillDir, packageName, cwd, version)
+    linkPkgNamed(skillDir, storagePackageName, cwd, version)
 
   // Skip lockfile in eject mode — no agent skills dir to write to
   if (!config.eject) {
     writeLock(baseDir, skillDirName, {
-      packageName,
+      packageName: identityPackageName,
       version,
       repo: repoSlug,
       source: resources.docSource,
@@ -504,6 +556,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       p.log.step(getModelLabel(llmConfig.model))
       await enhanceSkillWithLLM({
         packageName,
+        cachePackageName: storagePackageName,
         version,
         skillDir,
         dirName: skillDirName,
@@ -533,7 +586,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     const skilldDir = join(skillDir, '.skilld')
     if (existsSync(skilldDir) && !config.debug)
       rmSync(skilldDir, { recursive: true, force: true })
-    ejectReferences(skillDir, packageName, cwd, version, resources.docsType, features, resources.repoInfo)
+    ejectReferences(skillDir, storagePackageName, cwd, version, resources.docsType, features, resources.repoInfo)
   }
 
   // Skip agent integration in eject mode (no symlinks, no gitignore, no instructions)
@@ -555,7 +608,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   await shutdownWorker()
 
   const ejectMsg = isEject ? ' (ejected)' : ''
-  p.outro(config.mode === 'update' ? `Updated ${packageName}${ejectMsg}` : `Synced ${packageName} to ${relative(cwd, skillDir)}${ejectMsg}`)
+  p.outro(config.mode === 'update' ? `Updated ${identityPackageName}${ejectMsg}` : `Synced ${identityPackageName} to ${relative(cwd, skillDir)}${ejectMsg}`)
 }
 
 // ── Citty command definitions (lazy-loaded by cli.ts) ──
@@ -565,7 +618,7 @@ export const addCommandDef = defineCommand({
   args: {
     package: {
       type: 'positional',
-      description: 'Package(s) to sync (space or comma-separated, e.g., vue nuxt pinia)',
+      description: 'Package(s) to sync (space/comma-separated; npm, crate:<name>, or owner/repo)',
       required: true,
     },
     skill: {
@@ -596,16 +649,15 @@ export const addCommandDef = defineCommand({
         .filter(Boolean),
     )]
 
-    // Partition: git sources vs npm packages
     const gitSources: GitSkillSource[] = []
-    const npmTokens: string[] = []
+    const packageTokens: string[] = []
 
     for (const input of rawInputs) {
       const git = parseGitSkillInput(input)
       if (git)
         gitSources.push(git)
       else
-        npmTokens.push(input)
+        packageTokens.push(input)
     }
 
     // Handle git sources
@@ -616,9 +668,8 @@ export const addCommandDef = defineCommand({
       }
     }
 
-    // Handle npm packages via existing flow
-    if (npmTokens.length > 0) {
-      const packages = [...new Set(npmTokens.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+    if (packageTokens.length > 0) {
+      const packages = [...new Set(packageTokens.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
       const state = await getProjectState(cwd)
       p.intro(introLine({ state }))
       return syncCommand(state, {
@@ -755,7 +806,7 @@ export const updateCommandDef = defineCommand({
       return
     }
 
-    const packages = state.outdated.map(s => s.packageName || s.name)
+    const packages = state.outdated.map(toUpdatePackageSpec)
     return syncCommand(state, {
       packages,
       global: args.global,

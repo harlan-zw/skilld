@@ -1076,6 +1076,7 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
 
 export interface EnhanceOptions {
   packageName: string
+  cachePackageName?: string
   version: string
   skillDir: string
   dirName?: string
@@ -1099,7 +1100,7 @@ export interface EnhanceOptions {
 }
 
 export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
-  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject } = opts
+  const { packageName, cachePackageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject } = opts
 
   // Eject mode: search index isn't built, so don't include search hints in prompts
   const effectiveFeatures = eject && features ? { ...features, search: false } as FeaturesConfig : features
@@ -1108,7 +1109,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
   const docFiles = listReferenceFiles(skillDir)
   const hasGithub = hasIssues || hasDiscussions
   const { optimized, wasOptimized, usage, cost, warnings, error, debugLogsDir } = await optimizeDocs({
-    packageName,
+    packageName: cachePackageName || packageName,
     skillDir,
     model,
     version,
