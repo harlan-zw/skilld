@@ -1059,7 +1059,29 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
     return { model, sections: DEFAULT_SECTIONS }
   }
 
-  const model = await selectModel(false)
+  // Resolve default model (configured or recommended) without prompting
+  const defaultModel = await selectModel(true)
+  if (!defaultModel)
+    return null
+
+  const defaultModelName = getModelName(defaultModel)
+
+  const choice = await p.select({
+    message: 'Generate enhanced SKILL.md?',
+    options: [
+      { label: defaultModelName, value: 'default' as const, hint: 'configured default' },
+      { label: 'Different model', value: 'pick' as const, hint: 'choose another model' },
+      { label: 'Skip', value: 'skip' as const, hint: 'base skill only' },
+    ],
+  })
+
+  if (p.isCancel(choice))
+    return null
+
+  if (choice === 'skip')
+    return null
+
+  const model = choice === 'pick' ? await selectModel(false) : defaultModel
   if (!model)
     return null
 
