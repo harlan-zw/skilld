@@ -21,7 +21,7 @@ export const claudeCode = defineTarget({
   agent: 'claude-code',
   displayName: 'Claude Code',
   detectInstalled: () => existsSync(claudeHome),
-  detectEnv: () => !!(process.env.CLAUDE_CODE || process.env.CLAUDE_CONFIG_DIR),
+  detectEnv: () => !!(process.env.CLAUDE_CODE || process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT || process.env.CLAUDE_CONFIG_DIR),
   detectProject: cwd => existsSync(join(cwd, '.claude')) || existsSync(join(cwd, 'CLAUDE.md')),
   cli: 'claude',
   instructionFile: 'CLAUDE.md',
