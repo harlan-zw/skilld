@@ -1,4 +1,5 @@
 import type { PromptSection, ReferenceWeight, SectionContext, SectionValidationWarning } from './types.ts'
+import { resolveSkilldCommand } from '../../../core/shared.ts'
 import { maxItems, maxLines, releaseBoost } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 
@@ -7,11 +8,12 @@ export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, h
   // Dampened boost — best practices are less directly tied to releases than API changes
   const rawBoost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
   const boost = 1 + (rawBoost - 1) * 0.5
+  const cmd = resolveSkilldCommand()
   const searchHints: string[] = []
   if (features?.search !== false) {
     searchHints.push(
-      `\`npx -y skilld search "recommended" -p ${packageName}\``,
-      `\`npx -y skilld search "avoid" -p ${packageName}\``,
+      `\`${cmd} search "recommended" -p ${packageName}\``,
+      `\`${cmd} search "avoid" -p ${packageName}\``,
     )
   }
 

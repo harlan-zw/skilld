@@ -4,6 +4,7 @@
  */
 
 import type { CliModelEntry, ParsedEvent } from './types.ts'
+import { resolveSkilldCommand } from '../../core/shared.ts'
 
 export const cli = 'gemini' as const
 export const agentId = 'gemini-cli' as const
@@ -20,7 +21,7 @@ export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]
     '-m',
     model,
     '--allowed-tools',
-    'read_file,write_file,glob_tool,list_directory,search_file_content,run_shell_command(npx -y skilld),run_shell_command(grep),run_shell_command(head)',
+    `read_file,write_file,glob_tool,list_directory,search_file_content,run_shell_command(${resolveSkilldCommand()}),run_shell_command(grep),run_shell_command(head)`,
     '--include-directories',
     skillDir,
     ...symlinkDirs.flatMap(d => ['--include-directories', d]),
