@@ -30,7 +30,7 @@ export function buildArgs(model: string, _skillDir: string, _symlinkDirs: string
     // Permissions aligned with Claude's scoped model:
     // --full-auto = --sandbox workspace-write + --ask-for-approval on-request
     //   → writes scoped to CWD (.skilld/, set in spawn), reads unrestricted, network blocked
-    // Shell remains enabled for `npx -y skilld search/validate` (no per-command allowlist in Codex)
+    // Shell remains enabled for `skilld` / `npx -y skilld` search/validate (no per-command allowlist in Codex)
     // --ephemeral → no session persistence (equivalent to Claude's --no-session-persistence)
     '--full-auto',
     '-',

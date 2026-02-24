@@ -1,4 +1,5 @@
 import type { PromptSection, ReferenceWeight, SectionContext, SectionValidationWarning } from './types.ts'
+import { resolveSkilldCommand } from '../../../core/shared.ts'
 import { maxItems, maxLines, releaseBoost } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 
@@ -6,29 +7,29 @@ export function apiChangesSection({ packageName, version, hasReleases, hasChange
   const [, major, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
   const boost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
 
-  // Search hints for the task text (specific queries to run)
+  const cmd = resolveSkilldCommand()
   const searchHints: string[] = []
   if (features?.search !== false) {
     searchHints.push(
-      `\`npx -y skilld search "deprecated" -p ${packageName}\``,
-      `\`npx -y skilld search "breaking" -p ${packageName}\``,
+      `\`${cmd} search "deprecated" -p ${packageName}\``,
+      `\`${cmd} search "breaking" -p ${packageName}\``,
     )
     if (major && minor) {
       const minorNum = Number(minor)
       const majorNum = Number(major)
       if (minorNum <= 2) {
-        searchHints.push(`\`npx -y skilld search "v${majorNum}.${minorNum}" -p ${packageName}\``)
+        searchHints.push(`\`${cmd} search "v${majorNum}.${minorNum}" -p ${packageName}\``)
         if (minorNum > 0)
-          searchHints.push(`\`npx -y skilld search "v${majorNum}.${minorNum - 1}" -p ${packageName}\``)
+          searchHints.push(`\`${cmd} search "v${majorNum}.${minorNum - 1}" -p ${packageName}\``)
         if (majorNum > 0)
-          searchHints.push(`\`npx -y skilld search "v${majorNum - 1}" -p ${packageName}\``)
+          searchHints.push(`\`${cmd} search "v${majorNum - 1}" -p ${packageName}\``)
       }
       else {
-        searchHints.push(`\`npx -y skilld search "v${majorNum}.${minorNum}" -p ${packageName}\``)
-        searchHints.push(`\`npx -y skilld search "v${majorNum}.${minorNum - 1}" -p ${packageName}\``)
-        searchHints.push(`\`npx -y skilld search "v${majorNum}.${minorNum - 2}" -p ${packageName}\``)
+        searchHints.push(`\`${cmd} search "v${majorNum}.${minorNum}" -p ${packageName}\``)
+        searchHints.push(`\`${cmd} search "v${majorNum}.${minorNum - 1}" -p ${packageName}\``)
+        searchHints.push(`\`${cmd} search "v${majorNum}.${minorNum - 2}" -p ${packageName}\``)
       }
-      searchHints.push(`\`npx -y skilld search "Features" -p ${packageName}\``)
+      searchHints.push(`\`${cmd} search "Features" -p ${packageName}\``)
     }
   }
 

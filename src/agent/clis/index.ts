@@ -13,6 +13,7 @@ import { homedir } from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import { dirname, join } from 'pathe'
+import { isWindows } from 'std-env'
 import { readCachedSection, writeSections } from '../../cache/index.ts'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
 import { detectInstalledAgents } from '../detect.ts'
@@ -147,6 +148,7 @@ export function getModelLabel(id: OptimizeModel): string {
 
 export async function getAvailableModels(): Promise<import('./types.ts').ModelInfo[]> {
   const execAsync = promisify(exec)
+  const lookupCmd = isWindows ? 'where' : 'which'
 
   const installedAgents = detectInstalledAgents()
   const agentsWithCli = installedAgents.filter(id => agents[id].cli)
@@ -155,7 +157,7 @@ export async function getAvailableModels(): Promise<import('./types.ts').ModelIn
     agentsWithCli.map(async (agentId) => {
       const cli = agents[agentId].cli!
       try {
-        await execAsync(`which ${cli}`)
+        await execAsync(`${lookupCmd} ${cli}`)
         return agentId
       }
       catch { return null }
@@ -277,6 +279,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout,
       env: { ...process.env, NO_COLOR: '1' },
+      shell: isWindows,
     })
 
     let buffer = ''

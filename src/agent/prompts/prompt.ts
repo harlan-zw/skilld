@@ -5,6 +5,7 @@
 import type { FeaturesConfig } from '../../core/config.ts'
 import type { CustomPrompt, PromptSection, SectionContext, SectionValidationWarning } from './optional/index.ts'
 import { dirname } from 'pathe'
+import { resolveSkilldCommand } from '../../core/shared.ts'
 import { getPackageRules } from '../../sources/package-registry.ts'
 import { apiChangesSection, bestPracticesSection, customSection } from './optional/index.ts'
 
@@ -115,14 +116,16 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
     ...rows.map(([desc, cmd]) => `| ${desc} | ${cmd} |`),
   ].join('\n')
 
+  const cmd = resolveSkilldCommand()
+  const fallbackCmd = cmd === 'skilld' ? 'npx -y skilld' : 'skilld'
   const searchBlock = features?.search !== false
     ? `\n\n## Search
 
-Use \`npx -y skilld search\` as your primary research tool — search before manually reading files. Hybrid semantic + keyword search across all indexed docs, issues, and releases.
+Use \`${cmd} search\` as your primary research tool — search before manually reading files. If \`${cmd}\` is unavailable, use \`${fallbackCmd} search\`.
 
 \`\`\`bash
-npx -y skilld search "<query>" -p ${packageName}
-${hasIssues ? `npx -y skilld search "issues:<query>" -p ${packageName}\n` : ''}${hasReleases ? `npx -y skilld search "releases:<query>" -p ${packageName}\n` : ''}\`\`\`
+${cmd} search "<query>" -p ${packageName}
+${hasIssues ? `${cmd} search "issues:<query>" -p ${packageName}\n` : ''}${hasReleases ? `${cmd} search "releases:<query>" -p ${packageName}\n` : ''}\`\`\`
 
 Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.`
     : ''
@@ -216,6 +219,8 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
   const weightsTable = sectionDef.referenceWeights?.length
     ? `\n\n## Reference Priority\n\n| Reference | Path | Score | Use For |\n|-----------|------|:-----:|--------|\n${sectionDef.referenceWeights.map(w => `| ${w.name} | [\`${w.path.split('/').pop()}\`](${w.path}) | ${w.score}/10 | ${w.useFor} |`).join('\n')}`
     : ''
+  const cmd = resolveSkilldCommand()
+  const fallbackCmd = cmd === 'skilld' ? 'npx -y skilld' : 'skilld'
 
   return `${preamble}${weightsTable}
 
@@ -235,7 +240,7 @@ ${rules.join('\n')}
 
 Write your final output to the file \`${skillDir}/.skilld/${outputFile}\` using the Write tool. Do NOT write to any other file path.
 
-After writing, run \`npx -y skilld validate ${skillDir}/.skilld/${outputFile}\` and fix any warnings before finishing.
+After writing, run \`${cmd} validate ${skillDir}/.skilld/${outputFile}\` and fix any warnings before finishing. If unavailable, use \`${fallbackCmd} validate ${skillDir}/.skilld/${outputFile}\`.
 `
 }
 

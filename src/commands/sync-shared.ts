@@ -1051,12 +1051,9 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
     return { model: presetModel, sections: DEFAULT_SECTIONS }
   }
 
-  // Non-interactive: auto-pick model with default sections
+  // Non-interactive (CI, agent, no TTY): skip generation unless model explicitly provided
   if (!isInteractive()) {
-    const model = await selectModel(true)
-    if (!model)
-      return null
-    return { model, sections: DEFAULT_SECTIONS }
+    return null
   }
 
   // Resolve default model (configured or recommended) without prompting
@@ -1123,8 +1120,7 @@ export interface EnhanceOptions {
 export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
   const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject } = opts
 
-  // Eject mode: search index isn't built, so don't include search hints in prompts
-  const effectiveFeatures = eject && features ? { ...features, search: false } as FeaturesConfig : features
+  const effectiveFeatures = features
 
   const llmLog = p.taskLog({ title: `Agent exploring ${packageName}` })
   const docFiles = listReferenceFiles(skillDir)

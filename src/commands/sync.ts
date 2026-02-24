@@ -426,8 +426,8 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   // Create symlinks (LLM needs .skilld/ to read docs, even in eject mode)
   linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features, resources.repoInfo)
 
-  // ── Phase 2: Search index (skip in eject mode — not portable) ──
-  if (features.search && !config.eject) {
+  // ── Phase 2: Search index (generated even in eject mode so LLM can use it) ──
+  if (features.search) {
     const idxSpin = timedSpinner()
     idxSpin.start('Creating search index')
     await indexResources({

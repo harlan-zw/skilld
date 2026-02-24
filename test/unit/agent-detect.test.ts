@@ -7,6 +7,12 @@ describe('agent/detect', () => {
   beforeEach(() => {
     vi.resetModules()
     process.env = { ...originalEnv }
+    // Clean Claude Code env vars that may leak when tests run inside Claude Code
+    delete process.env.CLAUDE_CODE
+    delete process.env.CLAUDECODE
+    delete process.env.CLAUDE_CODE_ENTRYPOINT
+    delete process.env.CLAUDE_CODE_SSE_PORT
+    delete process.env.CLAUDE_CONFIG_DIR
   })
 
   afterEach(() => {
@@ -16,6 +22,16 @@ describe('agent/detect', () => {
   describe('detectTargetAgent', () => {
     it('detects claude-code from CLAUDE_CODE env', () => {
       process.env.CLAUDE_CODE = '1'
+      expect(detectTargetAgent()).toBe('claude-code')
+    })
+
+    it('detects claude-code from CLAUDECODE env (no underscore)', () => {
+      process.env.CLAUDECODE = '1'
+      expect(detectTargetAgent()).toBe('claude-code')
+    })
+
+    it('detects claude-code from CLAUDE_CODE_ENTRYPOINT env', () => {
+      process.env.CLAUDE_CODE_ENTRYPOINT = 'cli'
       expect(detectTargetAgent()).toBe('claude-code')
     })
 

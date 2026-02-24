@@ -4,6 +4,7 @@
 
 import type { FeaturesConfig } from '../../core/config.ts'
 import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize.ts'
+import { resolveSkilldCommand } from '../../core/shared.ts'
 import { yamlEscape } from '../../core/yaml.ts'
 import { getFilePatterns } from '../../sources/package-registry.ts'
 import { computeSkillDirName } from '../install.ts'
@@ -245,17 +246,19 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
 }
 
 function generateSearchBlock(name: string, hasIssues?: boolean, hasReleases?: boolean): string {
+  const cmd = resolveSkilldCommand()
+  const fallbackCmd = cmd === 'skilld' ? 'npx -y skilld' : 'skilld'
   const examples = [
-    `npx -y skilld search "query" -p ${name}`,
+    `${cmd} search "query" -p ${name}`,
   ]
   if (hasIssues)
-    examples.push(`npx -y skilld search "issues:error handling" -p ${name}`)
+    examples.push(`${cmd} search "issues:error handling" -p ${name}`)
   if (hasReleases)
-    examples.push(`npx -y skilld search "releases:deprecated" -p ${name}`)
+    examples.push(`${cmd} search "releases:deprecated" -p ${name}`)
 
   return `## Search
 
-Use \`npx -y skilld search\` instead of grepping \`.skilld/\` directories — hybrid semantic + keyword search across all indexed docs, issues, and releases.
+Use \`${cmd} search\` instead of grepping \`.skilld/\` directories — hybrid semantic + keyword search across all indexed docs, issues, and releases. If \`${cmd}\` is unavailable, use \`${fallbackCmd} search\`.
 
 \`\`\`bash
 ${examples.join('\n')}

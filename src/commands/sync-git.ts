@@ -106,10 +106,10 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
     selected = skills
   }
   else if (skills.length > 1 && !yes) {
-    const choices = await p.multiselect({
+    const choices = await p.autocompleteMultiselect({
       message: `Select skills to install from ${label}`,
       options: skills.map(s => ({
-        label: s.name,
+        label: s.name.replace(/-skilld$/, ''),
         value: s.name,
         hint: s.description || s.path,
       })),

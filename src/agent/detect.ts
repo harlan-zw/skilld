@@ -4,6 +4,7 @@
 
 import type { AgentType } from './types.ts'
 import { spawnSync } from 'node:child_process'
+import { isWindows } from 'std-env'
 import { agents } from './registry.ts'
 
 /**
@@ -50,6 +51,7 @@ export function getAgentVersion(agentType: AgentType): string | null {
       encoding: 'utf-8',
       timeout: 3000,
       stdio: ['pipe', 'pipe', 'pipe'],
+      shell: isWindows,
     })
     if (result.status !== 0)
       return null
