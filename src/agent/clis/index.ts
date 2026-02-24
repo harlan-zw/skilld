@@ -90,12 +90,16 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
 
       if ((rawName === 'Bash' || rawName === 'run_shell_command') && hint) {
         const searchMatch = hint.match(/skilld search\s+"([^"]+)"/)
-        if (searchMatch)
+        if (searchMatch) {
           emit(`${prefix}Searching \x1B[36m"${searchMatch[1]}"\x1B[0m`)
-        else if (hint.includes('skilld validate'))
+        }
+        else if (hint.includes('skilld validate')) {
           emit(`${prefix}Validating...`)
-        else
-          emit(`${prefix}Running ${hint.length > 50 ? `${hint.slice(0, 47)}...` : hint}`)
+        }
+        else {
+          const shortened = shortenCommand(hint)
+          emit(`${prefix}Running ${shortened.length > 50 ? `${shortened.slice(0, 47)}...` : shortened}`)
+        }
       }
       else {
         const path = shortenPath(hint || '...')
@@ -624,7 +628,7 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-/** Shorten absolute paths for display: /home/.../.skilld/docs/guide.md → docs/guide.md */
+/** Shorten absolute paths for display: /home/user/project/.claude/skills/vue/SKILL.md → .claude/.../SKILL.md */
 function shortenPath(p: string): string {
   const refIdx = p.indexOf('.skilld/')
   if (refIdx !== -1)
@@ -632,6 +636,16 @@ function shortenPath(p: string): string {
   // Keep just filename for other paths
   const parts = p.split('/')
   return parts.length > 2 ? `.../${parts.slice(-2).join('/')}` : p
+}
+
+/** Replace absolute paths in a command string with shortened versions */
+function shortenCommand(cmd: string): string {
+  return cmd.replace(/\/[^\s"']+/g, (match) => {
+    // Only shorten paths that look like they're inside a project
+    if (match.includes('.claude/') || match.includes('.skilld/') || match.includes('node_modules/'))
+      return `.../${match.split('/').slice(-2).join('/')}`
+    return match
+  })
 }
 
 /** Clean a single section's LLM output: strip markdown fences, frontmatter, sanitize */

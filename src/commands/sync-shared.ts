@@ -3,7 +3,7 @@ import type { FeaturesConfig } from '../core/config.ts'
 import type { ResolvedPackage, ResolveStep } from '../sources/index.ts'
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
-import { join, resolve } from 'pathe'
+import { join, relative, resolve } from 'pathe'
 import {
   agents,
   createToolProgress,
@@ -839,10 +839,11 @@ export async function ensureGitignore(skillsDir: string, cwd: string, isGlobal: 
   }
 
   // Show guidance
+  const relSkillsDir = relative(cwd, skillsDir) || '.'
   p.log.info(
     `\x1B[1mGit guidance:\x1B[0m\n`
-    + `  \x1B[32m✓\x1B[0m Commit: \x1B[36m${skillsDir}/*/SKILL.md\x1B[0m\n`
-    + `  \x1B[32m✓\x1B[0m Commit: \x1B[36m${skillsDir}/skilld-lock.yaml\x1B[0m\n`
+    + `  \x1B[32m✓\x1B[0m Commit: \x1B[36m${relSkillsDir}/*/SKILL.md\x1B[0m\n`
+    + `  \x1B[32m✓\x1B[0m Commit: \x1B[36m${relSkillsDir}/skilld-lock.yaml\x1B[0m\n`
     + `  \x1B[31m✗\x1B[0m Ignore: \x1B[36m${pattern}\x1B[0m \x1B[90m(recreated by \`skilld install\`)\x1B[0m`,
   )
 
@@ -1155,7 +1156,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     const costSuffix = costParts.length > 0 ? ` (${costParts.join(', ')})` : ''
     llmLog.success(`Generated best practices${costSuffix}`)
     if (debugLogsDir)
-      p.log.info(`Debug logs: ${debugLogsDir}`)
+      p.log.info(`Debug logs: ${relative(process.cwd(), debugLogsDir)}`)
     if (error)
       p.log.warn(`\x1B[33mPartial failure: ${error}\x1B[0m`)
     if (warnings?.length) {
