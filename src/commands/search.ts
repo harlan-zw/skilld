@@ -14,31 +14,38 @@ import { searchSnippets } from '../retriv/index.ts'
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
 export function findPackageDbs(packageFilter?: string): string[] {
   const cwd = process.cwd()
+  const lock = readProjectLock(cwd)
+  if (!lock)
+    return []
+  return filterLockDbs(lock, packageFilter)
+}
 
-  // Try shared dir first
+/** Read the project's skilld-lock.yaml (shared dir or agent skills dir) */
+function readProjectLock(cwd: string): ReturnType<typeof readLock> {
   const shared = getSharedSkillsDir(cwd)
   if (shared) {
     const lock = readLock(shared)
     if (lock)
-      return filterLockDbs(lock, packageFilter)
+      return lock
   }
-
   const agent = detectTargetAgent()
   if (!agent)
-    return []
+    return null
+  return readLock(`${cwd}/${agents[agent].skillsDir}`)
+}
 
-  const skillsDir = `${cwd}/${agents[agent].skillsDir}`
-  const lock = readLock(skillsDir)
+/** List installed package names from the project lockfile */
+export function listLockPackages(cwd: string = process.cwd()): string[] {
+  const lock = readProjectLock(cwd)
   if (!lock)
     return []
-
-  return filterLockDbs(lock, packageFilter)
+  return [...new Set(Object.values(lock.skills).map(s => s.packageName).filter(Boolean) as string[])]
 }
 
 function filterLockDbs(lock: ReturnType<typeof readLock>, packageFilter?: string): string[] {
   if (!lock)
     return []
-  const normalize = (s: string) => s.toLowerCase().replace(/[-_@/]/g, '')
+  const tokenize = (s: string) => s.toLowerCase().replace(/@/g, '').split(/[-_/]+/).filter(Boolean)
 
   return Object.values(lock.skills)
     .filter((info) => {
@@ -46,15 +53,20 @@ function filterLockDbs(lock: ReturnType<typeof readLock>, packageFilter?: string
         return false
       if (!packageFilter)
         return true
-      const f = normalize(packageFilter)
-      return normalize(info.packageName).includes(f) || normalize(info.packageName) === f
+      // All tokens from filter must appear in package name tokens
+      const filterTokens = tokenize(packageFilter)
+      const nameTokens = tokenize(info.packageName)
+      return filterTokens.every(ft => nameTokens.some(nt => nt.includes(ft) || ft.includes(nt)))
     })
     .map((info) => {
       const exact = getPackageDbPath(info.packageName!, info.version!)
       if (existsSync(exact))
         return exact
       // Fallback: find any cached version's search.db for this package
-      return findAnyPackageDb(info.packageName!)
+      const fallback = findAnyPackageDb(info.packageName!)
+      if (fallback)
+        p.log.warn(`Using cached search index for ${info.packageName} (v${info.version} not indexed). Run \`skilld update ${info.packageName}\` to re-index.`)
+      return fallback
     })
     .filter((db): db is string => !!db)
 }
@@ -112,10 +124,16 @@ export async function searchCommand(rawQuery: string, packageFilter?: string): P
   const dbs = findPackageDbs(packageFilter)
 
   if (dbs.length === 0) {
-    if (packageFilter)
-      p.log.warn(`No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`)
-    else
+    if (packageFilter) {
+      const available = listLockPackages()
+      if (available.length > 0)
+        p.log.warn(`No docs indexed for "${packageFilter}". Available: ${available.join(', ')}`)
+      else
+        p.log.warn(`No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`)
+    }
+    else {
       p.log.warn('No docs indexed yet. Run `skilld add <package>` first.')
+    }
     return
   }
 

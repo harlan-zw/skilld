@@ -2,7 +2,7 @@ import type { SearchFilter, SearchSnippet } from '../retriv/index.ts'
 import { createLogUpdate } from 'log-update'
 import { formatCompactSnippet, highlightTerms, sanitizeMarkdown } from '../core/index.ts'
 import { closePool, openPool, searchPooled } from '../retriv/index.ts'
-import { findPackageDbs, parseFilterPrefix } from './search.ts'
+import { findPackageDbs, listLockPackages, parseFilterPrefix } from './search.ts'
 
 const FILTER_CYCLE = [undefined, 'docs', 'issues', 'releases'] as const
 type FilterLabel = typeof FILTER_CYCLE[number]
@@ -30,9 +30,16 @@ const SPINNER_FRAMES = ['◐', '◓', '◑', '◒']
 export async function interactiveSearch(packageFilter?: string): Promise<void> {
   const dbs = findPackageDbs(packageFilter)
   if (dbs.length === 0) {
-    const msg = packageFilter
-      ? `No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`
-      : 'No docs indexed yet. Run `skilld add <package>` first.'
+    let msg: string
+    if (packageFilter) {
+      const available = listLockPackages()
+      msg = available.length > 0
+        ? `No docs indexed for "${packageFilter}". Available: ${available.join(', ')}`
+        : `No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`
+    }
+    else {
+      msg = 'No docs indexed yet. Run `skilld add <package>` first.'
+    }
     process.stderr.write(`\x1B[33m${msg}\x1B[0m\n`)
     return
   }
