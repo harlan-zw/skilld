@@ -8,7 +8,9 @@ function findPackageJson(): string {
   for (let i = 0; i < 5; i++) {
     const candidate = resolve(dir, 'package.json')
     try {
-      return readFileSync(candidate, 'utf8')
+      const content = readFileSync(candidate, 'utf8')
+      if (content)
+        return content
     }
     catch {}
     dir = resolve(dir, '..')
