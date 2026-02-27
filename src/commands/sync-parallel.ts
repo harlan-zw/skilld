@@ -223,9 +223,8 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
 
   // Phase 2: Ask about LLM enhancement (skip if -y without model, or skipLlm config)
   const globalConfig = readConfig()
-  const allCached = successfulPkgs.every(pkg => skillData.get(pkg)?.usedCache)
   if (successfulPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !config.model)) {
-    const llmConfig = await selectLlmConfig(config.model, undefined, allCached)
+    const llmConfig = await selectLlmConfig(config.model)
 
     if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))

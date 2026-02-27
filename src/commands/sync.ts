@@ -502,7 +502,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   // Ask about LLM optimization (skip if -y flag, skipLlm config, or model already specified)
   const globalConfig = readConfig()
   if (!globalConfig.skipLlm && (!config.yes || config.model)) {
-    const llmConfig = await selectLlmConfig(config.model, undefined, resources.usedCache)
+    const llmConfig = await selectLlmConfig(config.model)
     if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))
       await enhanceSkillWithLLM({
