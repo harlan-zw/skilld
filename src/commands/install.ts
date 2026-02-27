@@ -10,6 +10,7 @@
  */
 
 import type { AgentType, CustomPrompt, SkillSection } from '../agent/index.ts'
+import type { FeaturesConfig } from '../core/config.ts'
 import type { SkillInfo } from '../core/lockfile.ts'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -92,6 +93,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 
   const skills = Object.entries(lock.skills)
   const toRestore: Array<{ name: string, info: SkillInfo }> = []
+  const features = readConfig().features ?? defaultFeatures
 
   // Find skills with missing/broken references symlinks
   for (const [name, info] of skills) {
@@ -111,12 +113,11 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     const referencesPath = join(skillDir, '.skilld')
     const skillMdPath = join(skillDir, 'SKILL.md')
 
-    // Check if skill dir is missing entirely, or has broken symlinks
+    // Check skill dir, SKILL.md, and all internal .skilld/ references
     const needsRestore = !existsSync(skillDir)
       || !existsSync(skillMdPath)
       || !existsSync(referencesPath)
-      || (lstatSync(referencesPath).isSymbolicLink() && !existsSync(referencesPath))
-      || (existsSync(skillMdPath) && lstatSync(skillMdPath).isSymbolicLink() && !existsSync(skillMdPath))
+      || hasStaleReferences(referencesPath, info.packageName || name, info.version!, features)
 
     if (needsRestore) {
       toRestore.push({ name, info })
@@ -130,7 +131,6 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 
   p.log.info(`Restoring ${toRestore.length} references`)
   ensureCacheDir()
-  const features = readConfig().features ?? defaultFeatures
 
   const allSkillNames = skills.map(([, info]) => info.packageName || '').filter(Boolean)
   const regenerated: Array<{ name: string, pkgName: string, version: string, skillDir: string, packages?: string }> = []
@@ -681,4 +681,35 @@ function regenerateBaseSkillMd(
   mkdirSync(skillDir, { recursive: true })
   writeFileSync(skillMdPath, content)
   return true
+}
+
+/** Check if .skilld/ has broken symlinks or is missing expected references from global cache */
+function hasStaleReferences(referencesPath: string, pkgName: string, version: string, features: FeaturesConfig): boolean {
+  // Scan existing entries for broken symlinks
+  for (const entry of readdirSync(referencesPath)) {
+    const entryPath = join(referencesPath, entry)
+    if (lstatSync(entryPath).isSymbolicLink() && !existsSync(entryPath))
+      return true
+  }
+
+  // Check pkg link always expected
+  if (!existsSync(join(referencesPath, 'pkg')))
+    return true
+
+  // Check expected links against global cache
+  const globalCachePath = getCacheDir(pkgName, version)
+  const expected: Array<[string, boolean]> = [
+    ['docs', existsSync(join(globalCachePath, 'docs'))],
+    ['issues', features.issues && existsSync(join(globalCachePath, 'issues'))],
+    ['discussions', features.discussions && existsSync(join(globalCachePath, 'discussions'))],
+    ['releases', features.releases && existsSync(join(globalCachePath, 'releases'))],
+    ['sections', existsSync(join(globalCachePath, 'sections'))],
+  ]
+
+  for (const [name, shouldExist] of expected) {
+    if (shouldExist && !existsSync(join(referencesPath, name)))
+      return true
+  }
+
+  return false
 }
