@@ -18,8 +18,9 @@ export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]
   const skilldDir = join(skillDir, '.skilld')
   const readDirs = [skillDir, ...symlinkDirs]
   const allowedTools = [
-    ...readDirs.flatMap(d => [`Read(${d}/**)`, `Glob(${d}/**)`, `Grep(${d}/**)`]),
-    `Write(${skilldDir}/**)`,
+    ...readDirs.flatMap(d => [`Read(//${d}/**)`, `Glob(//${d}/**)`, `Grep(//${d}/**)`]),
+    // Edit rules apply to both Edit and Write tools; // prefix = absolute path
+    `Edit(//${skilldDir}/**)`,
     `Bash(*skilld search*)`,
     `Bash(*skilld validate*)`,
   ].join(' ')
@@ -31,6 +32,8 @@ export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]
     'stream-json',
     '--verbose',
     '--include-partial-messages',
+    '--permission-mode',
+    'acceptEdits',
     '--allowedTools',
     allowedTools,
     '--disallowedTools',

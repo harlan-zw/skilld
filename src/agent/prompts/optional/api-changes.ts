@@ -84,7 +84,7 @@ The "Older" column means ≤ v${Number(major) - 2}.x — these changes are NOT u
       ]
       // Every detailed item needs BREAKING/DEPRECATED/NEW label
       const detailedBullets = (content.match(/^- /gm) || []).length
-      const labeledBullets = (content.match(/^- (?:BREAKING|DEPRECATED|NEW): /gm) || []).length
+      const labeledBullets = (content.match(/^- (?:\*\*)?(?:BREAKING|DEPRECATED|NEW):(?:\*\*)? /gm) || []).length
       // Exclude "Also changed" compact line from the count
       const alsoChangedItems = (content.match(/\*\*Also changed:\*\*/g) || []).length
       if (detailedBullets > 2 && labeledBullets / (detailedBullets - alsoChangedItems || 1) < 0.8)
