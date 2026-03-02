@@ -7,6 +7,8 @@ export { fetchBlogReleases } from './blog-releases.ts'
 // Crawl
 export { fetchCrawledDocs, toCrawlPattern } from './crawl.ts'
 
+export { resolveCrateDocsWithAttempts } from './crates.ts'
+
 // Discussions
 export type { GitHubDiscussion } from './discussions.ts'
 

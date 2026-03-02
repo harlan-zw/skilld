@@ -4,7 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
 [![license](https://img.shields.io/npm/l/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE)
 
-> Generate AI agent skills from your NPM dependencies.
+> Generate AI agent skills from your NPM dependencies and Rust crates.
 
 ## Why?
 
@@ -133,6 +133,9 @@ skilld
 # Add skills for specific package(s)
 skilld add vue nuxt pinia
 
+# Add skills for a Rust crate
+skilld add crate:serde
+
 # Update outdated skills
 skilld update
 skilld update tailwindcss
@@ -165,7 +168,7 @@ skilld config
 | Command | Description |
 |---------|-------------|
 | `skilld` | Interactive wizard (first run) or status menu (existing skills) |
-| `skilld add <pkg...>` | Add skills for package(s), space or comma-separated |
+| `skilld add <pkg...>` | Add skills for package(s), space/comma-separated (`npm`, `crate:<name>`, or `owner/repo`) |
 | `skilld update [pkg]` | Update outdated skills (all or specific) |
 | `skilld search <query>` | Search indexed docs (`-p` to filter by package) |
 | `skilld list`           | List installed skills (`--json` for machine-readable output) |
