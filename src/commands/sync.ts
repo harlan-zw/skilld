@@ -35,6 +35,7 @@ import { shutdownWorker } from '../retriv/pool.ts'
 import { parseGitSkillInput } from '../sources/git-skills.ts'
 import {
   fetchPkgDist,
+  isPrerelease,
   parsePackageSpec,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
@@ -324,6 +325,14 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   }
 
   spin.stop(`Resolved ${packageName}@${useCache ? versionKey : version}${config.force ? ' (force)' : useCache ? ' (cached)' : ''}`)
+
+  // Warn when no local dep and resolved to stable latest — prerelease releases won't be fetched
+  if (!localVersion && !requestedTag && !isPrerelease(version)) {
+    const nextTag = resolved.distTags?.next ?? resolved.distTags?.beta ?? resolved.distTags?.alpha
+    if (nextTag) {
+      p.log.warn(`\x1B[33mNo local dependency found — using latest stable (${version}). Prerelease ${nextTag.version} available: skilld add ${packageName}@beta\x1B[0m`)
+    }
+  }
 
   ensureCacheDir()
 
