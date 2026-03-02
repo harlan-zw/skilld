@@ -7,7 +7,10 @@ import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
 import { detectImportedPackages } from './agent/index.ts'
 import { formatStatus, getRepoHint, isInteractive, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers.ts'
-import { configCommand, removeCommand, runWizard, statusCommand } from './commands/index.ts'
+import { configCommand, configCommandDef } from './commands/config.ts'
+import { removeCommand, removeCommandDef } from './commands/remove.ts'
+import { infoCommandDef, statusCommand } from './commands/status.ts'
+import { runWizard } from './commands/wizard.ts'
 import { timedSpinner } from './core/formatting.ts'
 import { getProjectState, hasCompletedWizard, isOutdated, readConfig, semverGt } from './core/index.ts'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index.ts'
@@ -162,10 +165,10 @@ const main = defineCommand({
     add: () => import('./commands/sync.ts').then(m => m.addCommandDef),
     eject: () => import('./commands/sync.ts').then(m => m.ejectCommandDef),
     update: () => import('./commands/sync.ts').then(m => m.updateCommandDef),
-    info: () => import('./commands/status.ts').then(m => m.infoCommandDef),
+    info: () => infoCommandDef,
     list: () => import('./commands/list.ts').then(m => m.listCommandDef),
-    config: () => import('./commands/config.ts').then(m => m.configCommandDef),
-    remove: () => import('./commands/remove.ts').then(m => m.removeCommandDef),
+    config: () => configCommandDef,
+    remove: () => removeCommandDef,
     install: () => import('./commands/install.ts').then(m => m.installCommandDef),
     uninstall: () => import('./commands/uninstall.ts').then(m => m.uninstallCommandDef),
     search: () => import('./commands/search.ts').then(m => m.searchCommandDef),
