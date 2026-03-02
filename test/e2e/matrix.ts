@@ -205,7 +205,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: false, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'docs/useActiveElement/index.md',
+      'docs/core/useActiveElement/index.md',
     ],
     minCacheDocs: 100,
     expectDescriptionContains: '"@vueuse/core"',
