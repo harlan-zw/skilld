@@ -30,8 +30,7 @@ Skilld generates [agent skills](https://agentskills.io/home) from the references
 ## Features
 
 - 🌍 **Any Source: Opt-in** - Any NPM dependency or GitHub source, docs auto-resolved
-- 📦 **Bleeding Edge Context** - Latest issues, discussions, and releases synced on
-every update. Always use the latest best practices and avoid deprecated patterns.
+- 📦 **Bleeding Edge Context** - Latest issues, discussions, and releases . Always use the latest best practices and avoid deprecated patterns.
 - 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best Practices`, `API Changes`, or your own custom prompts
 - 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
 - 🧠 **Context-Aware** - Follows [Claude Code skill best practices](https://code.claude.com/docs/en/skills#add-supporting-files): SKILL.md stays under 500 lines, references are separate files the agent discovers on-demand — not inlined into context
