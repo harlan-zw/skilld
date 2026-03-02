@@ -9,7 +9,7 @@ import type { CliModelConfig, CliName, OptimizeDocsOptions, OptimizeModel, Optim
 import { exec, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { setTimeout as delay } from 'node:timers/promises'
 import { promisify } from 'node:util'
 import { dirname, join } from 'pathe'
@@ -268,14 +268,24 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
   const parseLine = CLI_PARSE_LINE[cli]
 
   const skilldDir = join(skillDir, '.skilld')
-  const outputPath = join(skilldDir, outputFile)
+  // Claude Code has hardcoded write protection for .claude/ — redirect output to tmpdir
+  const usesTmpOutput = cli === 'claude' && skillDir.includes('.claude/')
+  const outputDir = usesTmpOutput ? join(tmpdir(), 'skilld-out') : skilldDir
+  if (usesTmpOutput)
+    mkdirSync(outputDir, { recursive: true })
+  const outputPath = join(outputDir, outputFile)
 
   // Remove stale output so we don't read a leftover from a previous run
   if (existsSync(outputPath))
     unlinkSync(outputPath)
 
+  // Rewrite prompt output path when using tmpdir redirect
+  const effectivePrompt = usesTmpOutput
+    ? prompt.replace(new RegExp(`${skillDir.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\.skilld/${outputFile}`, 'g'), outputPath)
+    : prompt
+
   // Write prompt for debugging
-  writeFileSync(join(skilldDir, `PROMPT_${section}.md`), prompt)
+  writeFileSync(join(skilldDir, `PROMPT_${section}.md`), effectivePrompt)
 
   return new Promise<SectionResult>((resolve) => {
     const proc = spawn(cli, args, {
@@ -295,7 +305,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
 
     onProgress?.({ chunk: '[starting...]', type: 'reasoning', text: '', reasoning: '', section })
 
-    proc.stdin.write(prompt)
+    proc.stdin.write(effectivePrompt)
     proc.stdin.end()
 
     proc.stdout.on('data', (chunk: Buffer) => {

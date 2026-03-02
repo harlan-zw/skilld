@@ -3,6 +3,7 @@
  */
 
 import type { CliModelEntry, ParsedEvent } from './types.ts'
+import { tmpdir } from 'node:os'
 import { join } from 'pathe'
 
 export const cli = 'claude' as const
@@ -17,10 +18,13 @@ export const models: Record<string, CliModelEntry> = {
 export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]): string[] {
   const skilldDir = join(skillDir, '.skilld')
   const readDirs = [skillDir, ...symlinkDirs]
+  // Claude Code has hardcoded .claude/ write protection — use tmpdir for output
+  const tmpOut = join(tmpdir(), 'skilld-out')
   const allowedTools = [
     ...readDirs.flatMap(d => [`Read(//${d}/**)`, `Glob(//${d}/**)`, `Grep(//${d}/**)`]),
     // Edit rules apply to both Edit and Write tools; // prefix = absolute path
     `Edit(//${skilldDir}/**)`,
+    `Edit(//${tmpOut}/**)`,
     `Bash(*skilld search*)`,
     `Bash(*skilld validate*)`,
   ].join(' ')
