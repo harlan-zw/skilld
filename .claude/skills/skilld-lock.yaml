@@ -35,7 +35,7 @@ skills:
     version: 3.5.29
     packages: "vue@3.5.29"
     repo: vuejs/core
-    source: "https://vuejs.org/llms.txt"
+    source: "https://github.com/vuejs/core/tree/v3.5.29/docs"
     syncedAt: 2026-03-02
     generator: skilld
   sqlite-vec-skilld:
@@ -58,7 +58,7 @@ skills:
     packages: "citty@0.2.1"
     repo: unjs/citty
     source: "ungh://unjs/citty"
-    syncedAt: 2026-02-25
+    syncedAt: 2026-03-02
     generator: skilld
   log-update-skilld:
     packageName: log-update
