@@ -10,7 +10,7 @@
 
 When using new packages or migrating to new versions, agents often struggle to use the appropriate best practices. This is because
 agents have [knowledge cutoffs](https://platform.claude.com/docs/en/about-claude/models/overview#latest-models-comparison) and
-predict based on existing patterns. 
+predict based on existing patterns.
 
 Methods of getting the right context to your agent require either manual curation, author opt-in, external servers or vendor lock-in. See [the landscape](#the-landscape)
 for more details.
