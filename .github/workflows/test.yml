@@ -1,11 +1,5 @@
 name: Test
 
-on:
-  push:
-    paths-ignore:
-      - '**/README.md'
-      - 'docs/**'
-
 permissions:
   contents: read
 
