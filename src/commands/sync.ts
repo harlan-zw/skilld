@@ -329,7 +329,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   // Warn when no local dep and resolved to stable latest — prerelease releases won't be fetched
   if (!localVersion && !requestedTag && !isPrerelease(version)) {
     const nextTag = resolved.distTags?.next ?? resolved.distTags?.beta ?? resolved.distTags?.alpha
-    if (nextTag) {
+    if (nextTag && (!resolved.releasedAt || !nextTag.releasedAt || nextTag.releasedAt > resolved.releasedAt)) {
       p.log.warn(`\x1B[33mNo local dependency found — using latest stable (${version}). Prerelease ${nextTag.version} available: skilld add ${packageName}@beta\x1B[0m`)
     }
   }
