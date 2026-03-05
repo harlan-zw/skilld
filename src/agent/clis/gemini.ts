@@ -10,8 +10,8 @@ export const cli = 'gemini' as const
 export const agentId = 'gemini-cli' as const
 
 export const models: Record<string, CliModelEntry> = {
-  'gemini-3-pro': { model: 'gemini-3-pro-preview', name: 'Gemini 3 Pro', hint: 'Most capable' },
-  'gemini-3-flash': { model: 'gemini-3-flash-preview', name: 'Gemini 3 Flash', hint: 'Balanced', recommended: true },
+  'gemini-3.1-pro': { model: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', hint: 'Most capable' },
+  'gemini-3-flash': { model: 'gemini-3-flash', name: 'Gemini 3 Flash', hint: 'Balanced', recommended: true },
 }
 
 export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]): string[] {
