@@ -41,13 +41,13 @@ import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 import { createIndex, SearchDepsUnavailableError } from '../retriv/index.ts'
 import {
-  $fetch,
   downloadLlmsDocs,
   fetchBlogReleases,
   fetchCrawledDocs,
   fetchGitDocs,
   fetchGitHubDiscussions,
   fetchGitHubIssues,
+  fetchGitHubRaw,
   fetchLlmsTxt,
   fetchNpmPackage,
   fetchReadmeContent,
@@ -361,7 +361,7 @@ export async function fetchAndCacheResources(opts: {
             const batchResults = await Promise.all(
               batch.map(async (file) => {
                 const url = `${gitDocs.baseUrl}/${file}`
-                const content = await $fetch(url, { responseType: 'text' }).catch(() => null)
+                const content = await fetchGitHubRaw(url)
                 if (!content)
                   return null
                 return { file, content }

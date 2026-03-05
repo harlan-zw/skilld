@@ -10,7 +10,8 @@ import { tmpdir } from 'node:os'
 import { downloadTemplate } from 'giget'
 import { join, resolve } from 'pathe'
 import { parseFrontmatter } from '../core/markdown.ts'
-import { $fetch, normalizeRepoUrl, parseGitHubUrl } from './utils.ts'
+import { getGitHubToken } from './github-common.ts'
+import { $fetch, fetchGitHubRaw, normalizeRepoUrl, parseGitHubUrl } from './utils.ts'
 
 export interface GitSkillSource {
   type: 'github' | 'gitlab' | 'git-ssh' | 'local'
@@ -247,7 +248,7 @@ async function downloadGitHubSkills(
       onProgress?.(`Downloading ${owner}/${repo}/${skillPath}@${ref}`)
       const { dir } = await downloadTemplate(
         `github:${owner}/${repo}/${skillPath}#${ref}`,
-        { dir: tempDir, force: true },
+        { dir: tempDir, force: true, auth: getGitHubToken() || undefined },
       )
       const skill = readLocalSkill(dir, skillPath)
       return skill ? [skill] : []
@@ -258,7 +259,7 @@ async function downloadGitHubSkills(
     try {
       const { dir } = await downloadTemplate(
         `github:${owner}/${repo}/skills#${ref}`,
-        { dir: tempDir, force: true },
+        { dir: tempDir, force: true, auth: getGitHubToken() || undefined },
       )
 
       const skills: RemoteSkill[] = []
@@ -277,11 +278,10 @@ async function downloadGitHubSkills(
     }
     catch {}
 
-    // Fallback: check root SKILL.md via single HTTP request
-    const content = await $fetch(
+    // Fallback: check root SKILL.md via single HTTP request (auth-aware for private repos)
+    const content = await fetchGitHubRaw(
       `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/SKILL.md`,
-      { responseType: 'text' },
-    ).catch(() => null)
+    )
     if (content) {
       const fm = parseSkillFrontmatterName(content)
       onProgress?.('Found 1 skill')

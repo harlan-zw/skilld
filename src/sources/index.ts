@@ -106,6 +106,7 @@ export type {
 export {
   $fetch,
   extractBranchHint,
+  fetchGitHubRaw,
   fetchText,
   isGitHubRepoUrl,
   normalizeRepoUrl,

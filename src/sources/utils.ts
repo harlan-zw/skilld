@@ -3,6 +3,7 @@
  */
 
 import { ofetch } from 'ofetch'
+import { getGitHubToken, isKnownPrivateRepo } from './github-common.ts'
 
 export const $fetch = ofetch.create({
   retry: 3,
@@ -16,6 +17,43 @@ export const $fetch = ofetch.create({
  */
 export async function fetchText(url: string): Promise<string | null> {
   return $fetch(url, { responseType: 'text' }).catch(() => null)
+}
+
+/** Extract owner/repo from a GitHub raw content URL */
+function extractGitHubRepo(url: string): { owner: string, repo: string } | null {
+  const match = url.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)/)
+  return match ? { owner: match[1]!, repo: match[2]! } : null
+}
+
+/**
+ * Fetch text from a GitHub raw URL with auth fallback for private repos.
+ * Tries unauthenticated first (fast path), falls back to authenticated
+ * request when the repo is known to be private or unauthenticated fails.
+ */
+export async function fetchGitHubRaw(url: string): Promise<string | null> {
+  const gh = extractGitHubRepo(url)
+  const isKnownPrivate = gh ? isKnownPrivateRepo(gh.owner, gh.repo) : false
+
+  // Fast path: skip unauthenticated attempt for known private repos
+  if (!isKnownPrivate) {
+    const unauthRes = await $fetch.raw(url).catch(() => null)
+    if (unauthRes?.ok && typeof unauthRes._data === 'string')
+      return unauthRes._data
+
+    if (unauthRes?.status === 404)
+      return null
+  }
+
+  // Fallback: authenticated request
+  const token = getGitHubToken()
+  if (!token)
+    return null
+
+  const authRes = await $fetch.raw(url, {
+    headers: { Authorization: `token ${token}` },
+  }).catch(() => null)
+
+  return authRes?.ok && typeof authRes._data === 'string' ? authRes._data : null
 }
 
 /**
