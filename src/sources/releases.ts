@@ -5,7 +5,7 @@
 import { spawnSync } from 'node:child_process'
 import { isoDate } from './github-common.ts'
 import { isGhAvailable } from './issues.ts'
-import { $fetch } from './utils.ts'
+import { $fetch, fetchGitHubRaw } from './utils.ts'
 
 export interface GitHubRelease {
   id: number
@@ -324,7 +324,7 @@ async function fetchChangelog(owner: string, repo: string, ref: string, packageN
 
   for (const path of paths) {
     const url = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`
-    const content = await $fetch(url, { responseType: 'text', signal: AbortSignal.timeout(10_000) }).catch(() => null)
+    const content = await fetchGitHubRaw(url)
     if (content)
       return content
   }
