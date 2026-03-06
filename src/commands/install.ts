@@ -58,7 +58,7 @@ import {
   resolvePackageDocs,
 } from '../sources/index.ts'
 import { classifyCachedDoc, indexResources } from './sync-shared.ts'
-import { selectLlmConfig } from './sync.ts'
+import { selectLlmConfig, writePromptFiles } from './sync.ts'
 
 export interface InstallOptions {
   global: boolean
@@ -411,7 +411,28 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   if (regenerated.length > 0 && !readConfig().skipLlm) {
     const names = regenerated.map(r => r.name).join(', ')
     const llmConfig = await selectLlmConfig(undefined, `Enhance SKILL.md for ${names}`)
-    if (llmConfig) {
+    if (llmConfig?.promptOnly) {
+      const features = readConfig().features ?? defaultFeatures
+      for (const { pkgName, version, skillDir } of regenerated) {
+        const globalCachePath = getCacheDir(pkgName, version)
+        writePromptFiles({
+          packageName: pkgName,
+          skillDir,
+          version,
+          hasIssues: existsSync(join(globalCachePath, 'issues')),
+          hasDiscussions: existsSync(join(globalCachePath, 'discussions')),
+          hasReleases: existsSync(join(globalCachePath, 'releases')),
+          hasChangelog: false,
+          docsType: 'docs',
+          hasShippedDocs: false,
+          pkgFiles: getPkgKeyFiles(pkgName, process.cwd(), version),
+          sections: llmConfig.sections,
+          customPrompt: llmConfig.customPrompt,
+          features,
+        })
+      }
+    }
+    else if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))
       for (const { pkgName, version, skillDir, packages: pkgPackages } of regenerated) {
         await enhanceRegenerated(pkgName, version, skillDir, llmConfig.model, llmConfig.sections, llmConfig.customPrompt, pkgPackages)
@@ -426,7 +447,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
   // In shared mode: recreate per-agent symlinks, skip per-agent lockfile sync
   if (shared) {
     for (const [name] of skills)
-      linkSkillToAgents(name, shared, cwd)
+      linkSkillToAgents(name, shared, cwd, opts.agent)
   }
   else {
     syncLockfilesToDirs(lock, allSkillsDirs.filter(d => d !== skillsDir))
@@ -606,10 +627,13 @@ export const installCommandDef = defineCommand({
   },
   async run({ args }) {
     let agent = resolveAgent(args.agent)
-    if (!agent) {
-      agent = await promptForAgent()
-      if (!agent)
+    if (!agent || agent === 'none') {
+      if (agent === 'none')
         return
+      const picked = await promptForAgent()
+      if (!picked || picked === 'none')
+        return
+      agent = picked
     }
 
     p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m install`)

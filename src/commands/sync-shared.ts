@@ -6,12 +6,14 @@ import * as p from '@clack/prompts'
 import { join, relative, resolve } from 'pathe'
 import {
   agents,
+  buildAllSectionPrompts,
   createToolProgress,
   generateSkillMd,
   getAvailableModels,
   getModelLabel,
   getModelName,
   optimizeDocs,
+  SECTION_OUTPUT_FILES,
 } from '../agent/index.ts'
 import { maxItems, maxLines } from '../agent/prompts/optional/budget.ts'
 import {
@@ -70,6 +72,9 @@ import {
   resolveLocalPackageDocs,
   toCrawlPattern,
 } from '../sources/index.ts'
+
+/** Max docs sent to the embedding pipeline to prevent oversized indexes */
+const MAX_INDEX_DOCS = 250
 
 export const RESOLVE_STEP_LABELS: Record<ResolveStep, string> = {
   'npm': 'npm registry',
@@ -491,7 +496,8 @@ export async function fetchAndCacheResources(opts: {
     if (resolved.docsUrl && !cachedDocs.some(d => d.path.startsWith('docs/'))) {
       const crawlPattern = resolved.crawlUrl || toCrawlPattern(resolved.docsUrl)
       onProgress('Crawling docs site')
-      const crawledDocs = await fetchCrawledDocs(crawlPattern, onProgress).catch((err) => {
+      const crawlMaxPages = resolved.crawlUrl ? 200 : 400
+      const crawledDocs = await fetchCrawledDocs(crawlPattern, onProgress, crawlMaxPages).catch((err) => {
         warnings.push(`Crawl failed for ${crawlPattern}: ${err?.message || err}`)
         return []
       })
@@ -760,6 +766,20 @@ export async function indexResources(opts: {
 
   if (allDocs.length === 0)
     return
+
+  // Cap docs to prevent oversized indexes
+  if (allDocs.length > MAX_INDEX_DOCS) {
+    const TYPE_PRIORITY: Record<string, number> = { doc: 0, issue: 1, discussion: 2, release: 3, source: 4, types: 5 }
+    allDocs.sort((a, b) => {
+      const ta = TYPE_PRIORITY[a.metadata?.type || 'doc'] ?? 3
+      const tb = TYPE_PRIORITY[b.metadata?.type || 'doc'] ?? 3
+      if (ta !== tb)
+        return ta - tb
+      return a.id.localeCompare(b.id)
+    })
+    onProgress(`Indexing capped at ${MAX_INDEX_DOCS}/${allDocs.length} docs (prioritized by type)`)
+    allDocs.length = MAX_INDEX_DOCS
+  }
 
   onProgress(`Building search index (${allDocs.length} docs)`)
   try {
@@ -1070,6 +1090,7 @@ export interface LlmConfig {
   model: OptimizeModel
   sections: SkillSection[]
   customPrompt?: CustomPrompt
+  promptOnly?: boolean
 }
 
 /**
@@ -1099,6 +1120,7 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
     options: [
       { label: defaultModelName, value: 'default' as const, hint: 'configured default' },
       { label: 'Different model', value: 'pick' as const, hint: 'choose another model' },
+      { label: 'Prompt only', value: 'prompt' as const, hint: 'write prompts for manual use' },
       { label: 'Skip', value: 'skip' as const, hint: 'base skill only' },
     ],
   })
@@ -1108,6 +1130,16 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
 
   if (choice === 'skip')
     return null
+
+  if (choice === 'prompt') {
+    const { sections, customPrompt, cancelled } = await selectSkillSections(
+      message ? `${message} (prompt only)` : 'Select sections for prompt generation',
+    )
+    if (cancelled || sections.length === 0)
+      return null
+    // model is unused for prompt-only but required by type — use defaultModel as placeholder
+    return { model: defaultModel, sections, customPrompt, promptOnly: true }
+  }
 
   const model = choice === 'pick' ? await selectModel(false) : defaultModel
   if (!model)
@@ -1221,4 +1253,61 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
   else {
     llmLog.error(`LLM optimization failed${error ? `: ${error}` : ''}`)
   }
+}
+
+export interface WritePromptFilesOptions {
+  packageName: string
+  skillDir: string
+  version: string
+  hasIssues: boolean
+  hasDiscussions: boolean
+  hasReleases: boolean
+  hasChangelog: string | false
+  docsType: 'llms.txt' | 'readme' | 'docs'
+  hasShippedDocs: boolean
+  pkgFiles: string[]
+  sections: SkillSection[]
+  customPrompt?: CustomPrompt
+  features?: FeaturesConfig
+}
+
+/**
+ * Build and write PROMPT_*.md files for manual LLM use.
+ * Returns the list of sections that had prompts written.
+ */
+export function writePromptFiles(opts: WritePromptFilesOptions): SkillSection[] {
+  const { skillDir, sections, customPrompt, features } = opts
+  const docFiles = listReferenceFiles(skillDir)
+  const prompts = buildAllSectionPrompts({
+    packageName: opts.packageName,
+    skillDir,
+    version: opts.version,
+    hasIssues: opts.hasIssues,
+    hasDiscussions: opts.hasDiscussions,
+    hasReleases: opts.hasReleases,
+    hasChangelog: opts.hasChangelog,
+    docFiles,
+    docsType: opts.docsType,
+    hasShippedDocs: opts.hasShippedDocs,
+    pkgFiles: opts.pkgFiles,
+    customPrompt,
+    features,
+    sections,
+  })
+
+  const skilldDir = join(skillDir, '.skilld')
+  mkdirSync(skilldDir, { recursive: true })
+
+  for (const [section, prompt] of prompts)
+    writeFileSync(join(skilldDir, `PROMPT_${section}.md`), prompt)
+
+  const written = [...prompts.keys()]
+  if (written.length > 0) {
+    const relDir = relative(process.cwd(), skillDir)
+    const promptFiles = written.map(s => `PROMPT_${s}.md`).join(', ')
+    const outputFileList = written.map(s => SECTION_OUTPUT_FILES[s]).join(', ')
+    p.log.info(`Prompt files written to ${relDir}/.skilld/\n\x1B[2m\x1B[3m  Read each prompt file (${promptFiles}) in ${relDir}/.skilld/, read the\n  referenced files, then write your output to the matching file (${outputFileList}).\n  When done, run: skilld assemble\x1B[0m`)
+  }
+
+  return written
 }

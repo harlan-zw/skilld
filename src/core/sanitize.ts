@@ -12,8 +12,8 @@
 // eslint-disable-next-line no-misleading-character-class -- intentionally matching individual invisible chars
 const ZERO_WIDTH_RE = /[\u200B\u200C\uFEFF\u2060\u200D\u061C\u180E\u200E\u200F\u2028\u2029]/gu
 
-/** HTML comments (single-line and multi-line) */
-const HTML_COMMENT_RE = /<!--[\s\S]*?-->/g
+/** HTML comments (single-line and multi-line), except skilld section markers */
+const HTML_COMMENT_RE = /<!--(?!\s*\/?skilld:)[\s\S]*?-->/g
 
 /**
  * Agent directive tags — stripped globally (including inside code blocks).

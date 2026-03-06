@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import type { PackageUsage } from './agent/detect-imports.ts'
+import type { AgentType } from './agent/index.ts'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
@@ -148,7 +149,7 @@ async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> 
 
 // ── Subcommands (lazy-loaded) ──
 
-const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate']
+const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate', 'assemble']
 
 // ── Main command ──
 
@@ -174,6 +175,7 @@ const main = defineCommand({
     search: () => import('./commands/search.ts').then(m => m.searchCommandDef),
     cache: () => import('./commands/cache.ts').then(m => m.cacheCommandDef),
     validate: () => import('./commands/validate.ts').then(m => m.validateCommandDef),
+    assemble: () => import('./commands/assemble.ts').then(m => m.assembleCommandDef),
   },
   async run({ args }) {
     // Guard: citty always calls parent run() after subcommand dispatch.
@@ -192,13 +194,22 @@ const main = defineCommand({
       return
     }
 
-    let currentAgent = resolveAgent(args.agent)
+    let currentAgent: AgentType | 'none' | null = resolveAgent(args.agent)
 
     if (!currentAgent) {
       currentAgent = await promptForAgent()
       if (!currentAgent)
         return
     }
+
+    // No-agent mode: skip interactive menu, just offer `skilld add <pkg>` usage
+    if (currentAgent === 'none') {
+      p.log.info('No agent selected. Use `skilld add <pkg>` to export portable prompts.')
+      return
+    }
+
+    // After this point, agent is guaranteed to be a real AgentType
+    const agent: AgentType = currentAgent
 
     // Animate brand while bootstrapping + check for updates
     const { state, selfUpdate } = await brandLoader(async () => {
@@ -386,7 +397,7 @@ const main = defineCommand({
         await syncCommand(state, {
           packages: selected,
           global: false,
-          agent: currentAgent,
+          agent,
           yes: false,
         })
         setupComplete = true
@@ -518,7 +529,7 @@ const main = defineCommand({
           return sync(state, {
             packages: selected,
             global: false,
-            agent: currentAgent,
+            agent,
             yes: false,
           })
         }
@@ -542,14 +553,14 @@ const main = defineCommand({
           return syncUpdate(state, {
             packages: selected,
             global: false,
-            agent: currentAgent,
+            agent,
             yes: false,
           })
         }
         case 'remove':
           await removeCommand(state, {
             global: false,
-            agent: currentAgent,
+            agent,
             yes: false,
           })
           continue

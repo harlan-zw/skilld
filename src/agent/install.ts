@@ -34,8 +34,9 @@ export function computeSkillDirName(packageName: string): string {
 }
 
 /**
- * Install a skill directly to agent skill directories
- * Writes to each agent's skill folder in the project (e.g., .claude/skills/package-name/)
+ * Install a skill directly to agent skill directories.
+ * When agents are explicitly specified, creates directories as needed.
+ * When falling back to auto-detection, only writes to agents whose skills dir already exists.
  */
 export function installSkillForAgents(
   skillName: string,
@@ -51,8 +52,7 @@ export function installSkillForAgents(
   const isGlobal = options.global ?? false
   const cwd = options.cwd || process.cwd()
   const sanitized = sanitizeName(skillName)
-
-  // Use specified agents or detect installed
+  const explicit = !!options.agents
   const targetAgents = options.agents || detectInstalledAgents()
 
   const installed: AgentType[] = []
@@ -65,16 +65,17 @@ export function installSkillForAgents(
     if (isGlobal && !agent.globalSkillsDir)
       continue
 
-    // Determine target directory
     const baseDir = isGlobal ? agent.globalSkillsDir! : join(cwd, agent.skillsDir)
-    const skillDir = join(baseDir, sanitized)
 
-    // Create directory and write files (inside .skilld/ to keep git clean)
+    // Auto-detected agents: only write if their skills dir already exists
+    if (!explicit && !existsSync(baseDir))
+      continue
+
+    const skillDir = join(baseDir, sanitized)
     const skilldDir = join(skillDir, '.skilld')
     mkdirSync(skilldDir, { recursive: true })
     writeFileSync(join(skilldDir, '_SKILL.md'), sanitizeMarkdown(repairMarkdown(skillContent)))
 
-    // Write additional files
     if (options.files) {
       for (const [filename, content] of Object.entries(options.files)) {
         writeFileSync(join(skillDir, filename), filename.endsWith('.md') ? sanitizeMarkdown(repairMarkdown(content)) : content)
@@ -89,18 +90,27 @@ export function installSkillForAgents(
 }
 
 /**
- * Create relative symlinks from each detected agent's skills dir to the shared .skills/ dir.
- * Only targets agents whose config dir already exists in the project.
- * Replaces existing symlinks, skips real directories (user's custom skills).
+ * Create a relative symlink from the target agent's skills dir to the shared .skills/ dir.
+ * Only creates directories for the explicit target agent; other agents must already have
+ * their skills dir present. This prevents skilld from polluting projects with dirs
+ * for agents the user doesn't use (e.g. .gemini/, .agent/).
  */
-export function linkSkillToAgents(skillName: string, sharedDir: string, cwd: string): void {
-  for (const [, agent] of Object.entries(agents)) {
-    const agentSkillsDir = join(cwd, agent.skillsDir)
+export function linkSkillToAgents(skillName: string, sharedDir: string, cwd: string, agentType?: AgentType): void {
+  const targetAgents = agentType ? [[agentType, agents[agentType]] as const] : Object.entries(agents)
 
-    // Only link if the agent's parent config dir exists (e.g. .claude/, .cursor/)
-    const agentConfigDir = join(cwd, agent.skillsDir.split('/')[0]!)
-    if (!existsSync(agentConfigDir))
-      continue
+  for (const [type, agent] of targetAgents) {
+    const agentSkillsDir = join(cwd, agent.skillsDir)
+    const isTarget = agentType === type
+
+    if (isTarget) {
+      // Target agent: create skills dir if needed
+      mkdirSync(agentSkillsDir, { recursive: true })
+    }
+    else {
+      // Non-target agent: only link if skills dir already exists, never create
+      if (!existsSync(agentSkillsDir))
+        continue
+    }
 
     const target = join(agentSkillsDir, skillName)
 
@@ -122,8 +132,6 @@ export function linkSkillToAgents(skillName: string, sharedDir: string, cwd: str
     if (isSymlink)
       unlinkSync(target)
 
-    mkdirSync(agentSkillsDir, { recursive: true })
-
     const source = join(sharedDir, skillName)
     const rel = relative(agentSkillsDir, source)
     symlinkSync(rel, target)
@@ -133,8 +141,10 @@ export function linkSkillToAgents(skillName: string, sharedDir: string, cwd: str
 /**
  * Remove per-agent symlinks for a skill when removing from shared dir.
  */
-export function unlinkSkillFromAgents(skillName: string, cwd: string): void {
-  for (const [, agent] of Object.entries(agents)) {
+export function unlinkSkillFromAgents(skillName: string, cwd: string, agentType?: AgentType): void {
+  const targetAgents = agentType ? [[agentType, agents[agentType]] as const] : Object.entries(agents)
+
+  for (const [, agent] of targetAgents) {
     const target = join(cwd, agent.skillsDir, skillName)
     try {
       if (lstatSync(target).isSymbolicLink())

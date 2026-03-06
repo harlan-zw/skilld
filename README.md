@@ -30,8 +30,9 @@ Skilld generates [agent skills](https://agentskills.io/home) from the references
 ## Features
 
 - 🌍 **Any Source: Opt-in** - Any NPM dependency or GitHub source, docs auto-resolved
-- 📦 **Bleeding Edge Context** - Latest issues, discussions, and releases . Always use the latest best practices and avoid deprecated patterns.
+- 📦 **Bleeding Edge Context** - Latest issues, discussions, and releases. Always use the latest best practices and avoid deprecated patterns.
 - 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best Practices`, `API Changes`, or your own custom prompts
+- 🧩 **No Agent Required** - Export prompts and run them in any LLM (ChatGPT, Claude web, API). No CLI agent dependency.
 - 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
 - 🧠 **Context-Aware** - Follows [Claude Code skill best practices](https://code.claude.com/docs/en/skills#add-supporting-files): SKILL.md stays under 500 lines, references are separate files the agent discovers on-demand — not inlined into context
 - 🎯 **Safe & Versioned** - Prompt injection sanitization, version-aware caching, auto-updates on new releases
@@ -54,6 +55,15 @@ npx -y skilld add vue
 ```
 
 If you need to re-configure skilld, just run `npx -y skilld config` to update your agent, model, or preferences.
+
+**No agent CLI?** No problem — choose "No agent" when prompted. You get a base skill immediately, plus portable prompts you can run in any LLM:
+
+```bash
+npx -y skilld add vue
+# Choose "No agent" → base skill + prompts exported
+# Paste prompts into ChatGPT/Claude web, save outputs, then:
+npx -y skilld assemble
+```
 
 ### Tips
 
@@ -177,26 +187,40 @@ skilld config
 | `skilld uninstall`      | Remove all skilld data |
 | `skilld cache`          | Cache management (clean expired LLM cache entries) |
 | `skilld eject <pkg>`    | Eject skill as portable directory (no symlinks) |
+| `skilld assemble [dir]` | Merge LLM output files back into SKILL.md (auto-discovers) |
+
+### Works Without an Agent CLI
+
+No Claude, Gemini, or Codex CLI? Choose "No agent" when prompted. You get a base skill immediately, plus portable prompts you can run in any LLM to enhance it:
+
+```bash
+skilld add vue
+# Choose "No agent" → installs to .claude/skills/vue-skilld/
+
+# What you get:
+#   SKILL.md           ← base skill (works immediately)
+#   PROMPT_*.md        ← prompts to enhance it with any LLM
+#   references/        ← docs, issues, releases as real files
+
+# Run each PROMPT_*.md in ChatGPT/Claude web/any LLM
+# Save outputs as _BEST_PRACTICES.md, _API_CHANGES.md, then:
+skilld assemble
+```
+
+`skilld assemble` auto-discovers skills with pending output files. `skilld update` re-exports prompts for outdated packages.
 
 ### Eject
 
-Export a skill as a portable, self-contained directory with references copied as real files instead of symlinks. Useful for sharing skills via git repos.
+Export a skill as a portable, self-contained directory for sharing via git repos:
 
 ```bash
-# Eject to the default skill directory
-skilld eject vue
-
-# Custom skill directory name
-skilld eject vue --name vue
-
-# Eject to a custom path
-skilld eject vue --out ./skills/vue/
-
-# Only collect releases/issues/discussions since a date
-skilld eject vue --from 2025-07-01
+skilld eject vue                    # Default skill directory
+skilld eject vue --name vue         # Custom directory name
+skilld eject vue --out ./skills/    # Custom path
+skilld eject vue --from 2025-07-01  # Only recent releases/issues
 ```
 
-The ejected skill contains `SKILL.md` plus a `references/` directory with docs, issues, and releases as real files. Share it via `skilld add owner/repo` — consumers get fully functional skills with no LLM cost.
+Share via `skilld add owner/repo` — consumers get fully functional skills with no LLM cost.
 
 ### CLI Options
 
@@ -216,16 +240,16 @@ The ejected skill contains `SKILL.md` plus a `references/` directory with docs, 
 
 Several approaches exist for steering agent knowledge. Each fills a different niche:
 
-| Approach | Versioned | Curated | No Opt-in | Local |
-|:---------|:---------:|:-------:|:---------:|:-----:|
-| **Manual rules** | ✗ | ✓ | ✓ | ✓ |
-| **llms.txt** | ~ | ✗ | ✗ | ✗ |
-| **MCP servers** | ✓ | ✗ | ✗ | ✗ |
-| **skills.sh** | ✗ | ~ | ✓ | ✗ |
-| **skills-npm** | ✓ | ✓ | ✗ | ✓ |
-| **skilld** | ✓ | ✓ | ✓ | ✓ |
+| Approach | Versioned | Curated | No Opt-in | Local | Any LLM |
+|:---------|:---------:|:-------:|:---------:|:-----:|:-------:|
+| **Manual rules** | ✗ | ✓ | ✓ | ✓ | ✓ |
+| **llms.txt** | ~ | ✗ | ✗ | ✗ | ✓ |
+| **MCP servers** | ✓ | ✗ | ✗ | ✗ | ✗ |
+| **skills.sh** | ✗ | ~ | ✓ | ✗ | ✗ |
+| **skills-npm** | ✓ | ✓ | ✗ | ✓ | ✗ |
+| **skilld** | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-> **Versioned** — tied to your installed package version. **Curated** — distilled best practices, not raw docs. **No Opt-in** — works without the package author doing anything. **Local** — runs on your machine, no external service dependency.
+> **Versioned** — tied to your installed package version. **Curated** — distilled best practices, not raw docs. **No Opt-in** — works without the package author doing anything. **Local** — runs on your machine, no external service dependency. **Any LLM** — works with any LLM, not just agent CLIs.
 
 - **Manual rules** (CLAUDE.md, .cursorrules): full control, but you need to already know the best practices and maintain them across every dep.
 - **[llms.txt](https://llmstxt.org/)**: standard convention for exposing docs to LLMs, but it's full docs not curated guidance and requires author adoption.

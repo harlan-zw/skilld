@@ -79,35 +79,49 @@ export function requireInteractive(command: string): void {
 }
 
 /** Resolve agent from flags/cwd/config. cwd is source of truth over config. */
-export function resolveAgent(agentFlag?: string): AgentType | null {
+export function resolveAgent(agentFlag?: string): AgentType | 'none' | null {
+  if (process.env.SKILLD_NO_AGENT)
+    return null
   return (agentFlag as AgentType | undefined)
     ?? detectTargetAgent()
     ?? (readConfig().agent as AgentType | undefined)
     ?? null
 }
 
-/** Prompt user to pick an agent when auto-detection fails */
-export async function promptForAgent(): Promise<AgentType | null> {
-  const installed = detectInstalledAgents()
+let _warnedNoAgent = false
+function warnNoAgent(): void {
+  if (_warnedNoAgent)
+    return
+  _warnedNoAgent = true
+  p.log.warn('No coding agent detected — falling back to prompt-only mode.\n  Use --agent <name> to specify, or run `skilld config` to set a default.')
+}
 
-  // Non-interactive: auto-select sole installed agent or error
+/** Prompt user to pick an agent when auto-detection fails */
+export async function promptForAgent(): Promise<AgentType | 'none' | null> {
+  const noAgent = !!process.env.SKILLD_NO_AGENT
+  const installed = noAgent ? [] : detectInstalledAgents()
+
+  // Non-interactive: auto-select sole installed agent or fall back to prompt-only
   if (!isInteractive()) {
     if (installed.length === 1) {
       updateConfig({ agent: installed[0] })
       return installed[0]!
     }
-    console.error('Error: could not auto-detect agent. Pass --agent <name> to specify.')
-    process.exit(1)
+    warnNoAgent()
+    return 'none'
   }
 
-  const options = (installed.length ? installed : Object.keys(agents) as AgentType[])
-    .map(id => ({ label: agents[id].displayName, value: id, hint: agents[id].skillsDir }))
+  const options: Array<{ label: string, value: AgentType | 'none', hint?: string }> = (installed.length ? installed : Object.keys(agents) as AgentType[])
+    .map(id => ({ label: agents[id].displayName, value: id as AgentType, hint: agents[id].skillsDir }))
+  options.push({ label: 'No agent', value: 'none', hint: 'Export portable prompts for any LLM' })
 
-  const hint = installed.length
-    ? `Detected ${installed.map(t => agents[t].displayName).join(', ')} but couldn't determine which to use`
-    : 'No agents auto-detected'
-
-  p.log.warn(`Could not detect which coding agent to install skills for.\n  ${hint}`)
+  if (!_warnedNoAgent) {
+    _warnedNoAgent = true
+    const hint = installed.length
+      ? `Detected ${installed.map(t => agents[t].displayName).join(', ')} but couldn't determine which to use`
+      : 'No agents auto-detected'
+    p.log.warn(`Could not detect which coding agent to install skills for.\n  ${hint}`)
+  }
 
   const choice = await p.select({
     message: 'Which coding agent should skills be installed for?',
@@ -116,6 +130,9 @@ export async function promptForAgent(): Promise<AgentType | null> {
 
   if (p.isCancel(choice))
     return null
+
+  if (choice === 'none')
+    return 'none'
 
   // Save as default so they don't get asked again
   updateConfig({ agent: choice })

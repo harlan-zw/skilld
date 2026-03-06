@@ -74,3 +74,19 @@ skills:
     source: "ungh://SuperchupuDev/tinyglobby"
     syncedAt: 2026-02-27
     generator: skilld
+  typescript-skilld:
+    packageName: typescript
+    version: 6.0.0-beta
+    packages: "typescript@6.0.0-beta"
+    repo: microsoft/TypeScript
+    source: "https://www.typescriptlang.org/**"
+    syncedAt: 2026-03-02
+    generator: skilld
+  nuxt-og-image-skilld:
+    packageName: nuxt-og-image
+    version: 5.1.13
+    packages: "nuxt-og-image@5.1.13"
+    repo: nuxt-modules/og-image
+    source: "https://nuxtseo.com/llms.txt"
+    syncedAt: 2026-03-05
+    generator: skilld

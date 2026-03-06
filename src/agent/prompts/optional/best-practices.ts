@@ -54,7 +54,7 @@ export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, h
       if (bullets > 2 && codeBlocks / bullets > 0.5)
         warnings.push({ warning: `${Math.round(codeBlocks)}/${bullets} items have code blocks — prefer concise descriptions with source links` })
       // Heading required
-      if (!/^## Best Practices/m.test(content))
+      if (!/^## Best Practices/im.test(content))
         warnings.push({ warning: 'Missing required "## Best Practices" heading' })
       return warnings
     },

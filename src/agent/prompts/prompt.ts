@@ -21,6 +21,25 @@ export const SECTION_OUTPUT_FILES: Record<SkillSection, string> = {
 /** Merge order for final SKILL.md body */
 export const SECTION_MERGE_ORDER: SkillSection[] = ['api-changes', 'best-practices', 'custom']
 
+/** Wrap section content with HTML comment markers for targeted re-assembly */
+export function wrapSection(section: SkillSection, content: string): string {
+  return `<!-- skilld:${section} -->\n${content}\n<!-- /skilld:${section} -->`
+}
+
+/** Extract marker-delimited sections from existing SKILL.md */
+export function extractMarkedSections(md: string): Map<SkillSection, { start: number, end: number }> {
+  const sections = new Map<SkillSection, { start: number, end: number }>()
+  for (const section of SECTION_MERGE_ORDER) {
+    const open = `<!-- skilld:${section} -->`
+    const close = `<!-- /skilld:${section} -->`
+    const start = md.indexOf(open)
+    const end = md.indexOf(close)
+    if (start !== -1 && end !== -1)
+      sections.set(section, { start, end: end + close.length })
+  }
+  return sections
+}
+
 export interface BuildSkillPromptOptions {
   packageName: string
   /** Absolute path to skill directory with ./.skilld/ */
@@ -255,4 +274,59 @@ export function buildAllSectionPrompts(opts: BuildSkillPromptOptions & { section
       result.set(section, prompt)
   }
   return result
+}
+
+/**
+ * Transform an agent-specific prompt into a portable prompt for any LLM.
+ * - Rewrites .skilld/ paths → ./references/
+ * - Strips ## Output section (file-writing instructions)
+ * - Strips skilld search/validate instructions
+ * - Replaces tool-specific language with generic equivalents
+ * - Strips agent-specific rules
+ */
+export function portabilizePrompt(prompt: string, section?: SkillSection): string {
+  let out = prompt
+
+  // Rewrite absolute and relative .skilld/ paths → ./references/
+  out = out.replace(/`[^`]*\/\.skilld\//g, m => m.replace(/[^`]*\/\.skilld\//, './references/'))
+  out = out.replace(/\(\.\/\.skilld\//g, '(./references/')
+  out = out.replace(/`\.\/\.skilld\//g, '`./references/')
+  out = out.replace(/\.skilld\//g, './references/')
+
+  // Strip ## Output section entirely (Write tool, validate instructions)
+  out = out.replace(/\n## Output\n[\s\S]*$/, '')
+
+  // Strip ## Search section (skilld search instructions)
+  // Stop at table (|), next heading (##), XML tag (<), or **IMPORTANT
+  out = out.replace(/\n## Search\n[\s\S]*?(?=\n\n(?:\||## |<|\*\*))/, '')
+
+  // Strip skilld search/validate references in rules
+  out = out.replace(/^- .*`skilld search`.*$/gm, '')
+  out = out.replace(/^- .*`skilld validate`.*$/gm, '')
+  out = out.replace(/,? and `skilld search`/g, '')
+
+  // Replace tool-specific language
+  out = out.replace(/\buse Read tool to explore\b/gi, 'read the files')
+  out = out.replace(/\bRead tool\b/g, 'reading files')
+  out = out.replace(/\buse Read, Glob\b/gi, 'read the files in')
+  out = out.replace(/\bWrite tool\b/g, 'your output')
+  out = out.replace(/\bGlob\b/g, 'file search')
+  out = out.replace(/\bpass `no_ignore: true`[^.]*\./g, '')
+
+  // Strip agent-specific rules
+  out = out.replace(/^- \*\*Do NOT use Task tool or spawn subagents\.\*\*.*$/gm, '')
+  out = out.replace(/^- \*\*Do NOT re-read files\*\*.*$/gm, '')
+
+  // Add portable output instruction
+  out = out.trimEnd()
+  const outputFile = section ? SECTION_OUTPUT_FILES[section] : undefined
+  out += `\n\n## Output\n\nOutput the section content as plain markdown. Do not wrap in code fences.\n`
+  if (outputFile) {
+    out += `\nSave your output as \`${outputFile}\`, then run:\n\n\`\`\`bash\nskilld assemble\n\`\`\`\n`
+  }
+
+  // Clean up multiple blank lines
+  out = out.replace(/\n{3,}/g, '\n\n')
+
+  return out
 }

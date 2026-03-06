@@ -17,7 +17,7 @@ import { isWindows } from 'std-env'
 import { readCachedSection, writeSections } from '../../cache/index.ts'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
 import { detectInstalledAgents } from '../detect.ts'
-import { buildAllSectionPrompts, getSectionValidator, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts/index.ts'
+import { buildAllSectionPrompts, getSectionValidator, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES, wrapSection } from '../prompts/index.ts'
 import { agents } from '../registry.ts'
 import * as claude from './claude.ts'
 import * as codex from './codex.ts'
@@ -590,12 +590,12 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     }
   }
 
-  // Merge results in SECTION_MERGE_ORDER
+  // Merge results in SECTION_MERGE_ORDER, wrapped with comment markers
   const mergedParts: string[] = []
   for (const section of SECTION_MERGE_ORDER) {
     const result = allResults.find(r => r.section === section)
     if (result?.wasOptimized && result.content) {
-      mergedParts.push(result.content)
+      mergedParts.push(wrapSection(section, result.content))
     }
   }
 

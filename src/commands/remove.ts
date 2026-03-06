@@ -61,7 +61,7 @@ export async function removeCommand(state: ProjectState, opts: RemoveOptions): P
       removeLockEntry(skillsDir, skill.name)
       // Clean up per-agent symlinks when removing from shared dir
       if (shared && skill.scope === 'local')
-        unlinkSkillFromAgents(skill.name, cwd)
+        unlinkSkillFromAgents(skill.name, cwd, opts.agent)
       p.log.success(`Removed ${skill.name}`)
     }
     else {
@@ -112,10 +112,13 @@ export const removeCommandDef = defineCommand({
   async run({ args }) {
     const cwd = process.cwd()
     let agent = resolveAgent(args.agent)
-    if (!agent) {
-      agent = await promptForAgent()
-      if (!agent)
+    if (!agent || agent === 'none') {
+      if (agent === 'none')
         return
+      const picked = await promptForAgent()
+      if (!picked || picked === 'none')
+        return
+      agent = picked
     }
 
     const state = await getProjectState(cwd)

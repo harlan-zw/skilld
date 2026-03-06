@@ -90,7 +90,7 @@ The "Older" column means ≤ v${Number(major) - 2}.x — these changes are NOT u
       if (detailedBullets > 2 && labeledBullets / (detailedBullets - alsoChangedItems || 1) < 0.8)
         warnings.push({ warning: `Only ${labeledBullets}/${detailedBullets} items have BREAKING/DEPRECATED/NEW labels` })
       // Heading required
-      if (!/^## API Changes/m.test(content))
+      if (!/^## API Changes/im.test(content))
         warnings.push({ warning: 'Missing required "## API Changes" heading' })
       return warnings
     },

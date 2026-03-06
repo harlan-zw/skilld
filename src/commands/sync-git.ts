@@ -44,6 +44,7 @@ import {
   linkAllReferences,
   resolveBaseDir,
   selectLlmConfig,
+  writePromptFiles,
 } from './sync-shared.ts'
 
 export interface GitSyncOptions {
@@ -299,7 +300,24 @@ async function syncGitHubRepo(opts: GitSyncOptions): Promise<void> {
   const globalConfig = readConfig()
   if (!globalConfig.skipLlm && (!yes || opts.model)) {
     const llmConfig = await selectLlmConfig(opts.model)
-    if (llmConfig) {
+    if (llmConfig?.promptOnly) {
+      writePromptFiles({
+        packageName,
+        skillDir,
+        version,
+        hasIssues: resources.hasIssues,
+        hasDiscussions: resources.hasDiscussions,
+        hasReleases: resources.hasReleases,
+        hasChangelog,
+        docsType: resources.docsType,
+        hasShippedDocs: shippedDocs,
+        pkgFiles,
+        sections: llmConfig.sections,
+        customPrompt: llmConfig.customPrompt,
+        features,
+      })
+    }
+    else if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))
       await enhanceSkillWithLLM({
         packageName,
@@ -328,7 +346,7 @@ async function syncGitHubRepo(opts: GitSyncOptions): Promise<void> {
   // Link shared dir to per-agent dirs
   const shared = !isGlobal && getSharedSkillsDir(cwd)
   if (shared)
-    linkSkillToAgents(skillDirName, shared, cwd)
+    linkSkillToAgents(skillDirName, shared, cwd, agent)
 
   if (!isGlobal) {
     registerProject(cwd)

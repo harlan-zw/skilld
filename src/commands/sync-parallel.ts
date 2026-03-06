@@ -52,7 +52,7 @@ import {
   resolveBaseDir,
   resolveLocalDep,
 } from './sync-shared.ts'
-import { ensureAgentInstructions, ensureGitignore, selectLlmConfig } from './sync.ts'
+import { ensureAgentInstructions, ensureGitignore, selectLlmConfig, writePromptFiles } from './sync.ts'
 
 type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'exploring' | 'thinking' | 'generating' | 'done' | 'error'
 
@@ -226,7 +226,29 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
   if (successfulPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !config.model)) {
     const llmConfig = await selectLlmConfig(config.model)
 
-    if (llmConfig) {
+    if (llmConfig?.promptOnly) {
+      for (const pkg of successfulPkgs) {
+        const data = skillData.get(pkg)!
+        const baseDir = resolveBaseDir(cwd, config.agent, config.global)
+        const skillDir = join(baseDir, data.skillDirName)
+        writePromptFiles({
+          packageName: pkg,
+          skillDir,
+          version: data.version,
+          hasIssues: data.hasIssues,
+          hasDiscussions: data.hasDiscussions,
+          hasReleases: data.hasReleases,
+          hasChangelog: data.hasChangelog,
+          docsType: data.docsType,
+          hasShippedDocs: data.shippedDocs,
+          pkgFiles: data.pkgFiles,
+          sections: llmConfig.sections,
+          customPrompt: llmConfig.customPrompt,
+          features: data.features,
+        })
+      }
+    }
+    else if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))
       // Reset states for LLM phase
       for (const pkg of successfulPkgs) {
@@ -317,7 +339,7 @@ async function syncBaseSkill(
     const shared = !config.global && getSharedSkillsDir(cwd)
     if (shared) {
       for (const shipped of shippedResult.shipped)
-        linkSkillToAgents(shipped.skillName, shared, cwd)
+        linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
     }
     update(packageName, 'done', 'Published SKILL.md', versionKey)
     return 'shipped'
@@ -420,7 +442,7 @@ async function syncBaseSkill(
   // Link shared dir to per-agent dirs
   const shared = !config.global && getSharedSkillsDir(cwd)
   if (shared)
-    linkSkillToAgents(skillDirName, shared, cwd)
+    linkSkillToAgents(skillDirName, shared, cwd, config.agent)
 
   if (!config.global) {
     registerProject(cwd)

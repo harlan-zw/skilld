@@ -1,4 +1,4 @@
-import type { AgentType, OptimizeModel } from '../agent/index.ts'
+import type { AgentType, OptimizeModel, SkillSection } from '../agent/index.ts'
 import type { ProjectState } from '../core/skills.ts'
 import type { GitSkillSource } from '../sources/git-skills.ts'
 import type { ResolveAttempt } from '../sources/index.ts'
@@ -8,12 +8,15 @@ import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
 import {
   agents,
+  buildAllSectionPrompts,
   computeSkillDirName,
   detectImportedPackages,
   generateSkillMd,
   getModelLabel,
   linkSkillToAgents,
+  portabilizePrompt,
   sanitizeName,
+  SECTION_OUTPUT_FILES,
 } from '../agent/index.ts'
 import {
   ensureCacheDir,
@@ -23,6 +26,7 @@ import {
   hasShippedDocs,
   isCached,
   linkPkgNamed,
+  listReferenceFiles,
   resolvePkgDir,
 } from '../cache/index.ts'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
@@ -44,6 +48,7 @@ import {
 import { syncGitSkills } from './sync-git.ts'
 import { syncPackagesParallel } from './sync-parallel.ts'
 import {
+  DEFAULT_SECTIONS,
   detectChangelog,
   ejectReferences,
   enhanceSkillWithLLM,
@@ -59,11 +64,12 @@ import {
   resolveBaseDir,
   resolveLocalDep,
   selectLlmConfig,
+  writePromptFiles,
 } from './sync-shared.ts'
 import { runWizard } from './wizard.ts'
 
 // Re-export for external consumers
-export { DEFAULT_SECTIONS, enhanceSkillWithLLM, ensureAgentInstructions, ensureGitignore, selectLlmConfig, selectModel, selectSkillSections, SKILLD_MARKER_END, SKILLD_MARKER_START } from './sync-shared.ts'
+export { DEFAULT_SECTIONS, enhanceSkillWithLLM, ensureAgentInstructions, ensureGitignore, selectLlmConfig, selectModel, selectSkillSections, SKILLD_MARKER_END, SKILLD_MARKER_START, writePromptFiles } from './sync-shared.ts'
 export type { EnhanceOptions, LlmConfig } from './sync-shared.ts'
 
 function showResolveAttempts(attempts: ResolveAttempt[]): void {
@@ -94,6 +100,8 @@ export interface SyncOptions {
   name?: string
   /** Lower-bound date for release/issue/discussion collection (ISO date, e.g. "2025-07-01") */
   from?: string
+  /** Skip search index / embeddings generation */
+  noSearch?: boolean
 }
 
 export async function syncCommand(state: ProjectState, opts: SyncOptions): Promise<void> {
@@ -236,6 +244,7 @@ interface SyncConfig {
   eject?: boolean | string
   name?: string
   from?: string
+  noSearch?: boolean
 }
 
 async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promise<void> {
@@ -317,7 +326,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     const shared = !config.global && getSharedSkillsDir(cwd)
     for (const shipped of shippedResult.shipped) {
       if (shared)
-        linkSkillToAgents(shipped.skillName, shared, cwd)
+        linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
       p.log.success(`Using published SKILL.md: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
     }
     spin.stop(`Using published SKILL.md(s) from ${packageName}`)
@@ -393,7 +402,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
     const mergeShared = !config.global && getSharedSkillsDir(cwd)
     if (mergeShared)
-      linkSkillToAgents(skillDirName, mergeShared, cwd)
+      linkSkillToAgents(skillDirName, mergeShared, cwd, config.agent)
 
     if (!config.global)
       registerProject(cwd)
@@ -402,7 +411,9 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     return
   }
 
-  const features = readConfig().features ?? defaultFeatures
+  const features = { ...(readConfig().features ?? defaultFeatures) }
+  if (config.noSearch)
+    features.search = false
 
   // ── Phase 1: Fetch & cache all resources ──
   const resSpin = timedSpinner()
@@ -512,7 +523,24 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const globalConfig = readConfig()
   if (!globalConfig.skipLlm && (!config.yes || config.model)) {
     const llmConfig = await selectLlmConfig(config.model)
-    if (llmConfig) {
+    if (llmConfig?.promptOnly) {
+      writePromptFiles({
+        packageName,
+        skillDir,
+        version,
+        hasIssues: resources.hasIssues,
+        hasDiscussions: resources.hasDiscussions,
+        hasReleases: resources.hasReleases,
+        hasChangelog,
+        docsType: resources.docsType,
+        hasShippedDocs: shippedDocs,
+        pkgFiles,
+        sections: llmConfig.sections,
+        customPrompt: llmConfig.customPrompt,
+        features,
+      })
+    }
+    else if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))
       await enhanceSkillWithLLM({
         packageName,
@@ -553,7 +581,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     // Link shared dir to per-agent dirs
     const shared = !config.global && getSharedSkillsDir(cwd)
     if (shared)
-      linkSkillToAgents(skillDirName, shared, cwd)
+      linkSkillToAgents(skillDirName, shared, cwd, config.agent)
 
     // Register project in global config (for uninstall tracking)
     if (!config.global) {
@@ -590,16 +618,12 @@ export const addCommandDef = defineCommand({
   },
   async run({ args }) {
     const cwd = process.cwd()
-    let agent = resolveAgent(args.agent)
+    let agent: AgentType | 'none' | null = resolveAgent(args.agent)
     if (!agent) {
       agent = await promptForAgent()
       if (!agent)
         return
     }
-
-    // First-time setup — configure features + LLM model
-    if (!hasCompletedWizard())
-      await runWizard()
 
     // Collect raw inputs (don't split URLs on slashes/spaces yet)
     const rawInputs = [...new Set(
@@ -607,6 +631,18 @@ export const addCommandDef = defineCommand({
         .map((s: string) => s.trim())
         .filter(Boolean),
     )]
+
+    // No-agent mode: export portable prompts
+    if (agent === 'none') {
+      const packages = [...new Set(rawInputs.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      for (const pkg of packages)
+        await exportPortablePrompts(pkg, { force: args.force, agent: 'none' })
+      return
+    }
+
+    // First-time setup — configure features + LLM model
+    if (!hasCompletedWizard())
+      await runWizard()
 
     // Partition: git sources vs npm packages
     const gitSources: GitSkillSource[] = []
@@ -649,31 +685,37 @@ export const addCommandDef = defineCommand({
 export const ejectCommandDef = defineCommand({
   meta: { name: 'eject', description: 'Eject skill with references as real files (portable, no symlinks)' },
   args: {
-    package: {
+    'package': {
       type: 'positional',
       description: 'Package to eject',
       required: true,
     },
-    name: {
+    'name': {
       type: 'string',
       alias: 'n',
       description: 'Custom skill directory name (default: derived from package)',
     },
-    out: {
+    'out': {
       type: 'string',
       alias: 'o',
       description: 'Output directory path override',
     },
-    from: {
+    'from': {
       type: 'string',
       description: 'Collect releases/issues/discussions from this date onward (YYYY-MM-DD)',
+    },
+    'no-search': {
+      type: 'boolean',
+      description: 'Skip search index / embeddings generation',
+      default: false,
     },
     ...sharedArgs,
   },
   async run({ args }) {
     const cwd = process.cwd()
     // Eject skips agent detection — output goes to ./skills/<name> by default
-    const agent = resolveAgent(args.agent) || 'claude-code'
+    const resolved = resolveAgent(args.agent)
+    const agent: AgentType = resolved && resolved !== 'none' ? resolved : 'claude-code'
 
     if (!hasCompletedWizard())
       await runWizard()
@@ -691,6 +733,7 @@ export const ejectCommandDef = defineCommand({
       eject: args.out || true,
       name: args.name,
       from: args.from,
+      noSearch: args['no-search'],
     })
   },
 })
@@ -731,11 +774,25 @@ export const updateCommandDef = defineCommand({
 
     let agent = resolveAgent(args.agent)
     if (!agent) {
-      if (silent)
-        return
       agent = await promptForAgent()
       if (!agent)
         return
+    }
+
+    // No-agent mode: re-export portable prompts for outdated packages
+    if (agent === 'none') {
+      const state = await getProjectState(cwd)
+      const packages = args.package
+        ? [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+        : state.outdated.map(s => s.packageName || s.name)
+      if (packages.length === 0) {
+        if (!silent)
+          p.log.success('All skills up to date')
+        return
+      }
+      for (const pkg of packages)
+        await exportPortablePrompts(pkg, { force: args.force, agent: 'none' })
+      return
     }
 
     const config = readConfig()
@@ -780,3 +837,182 @@ export const updateCommandDef = defineCommand({
     })
   },
 })
+
+// ── Portable prompt export (no-agent mode) ─────────────────────
+
+export async function exportPortablePrompts(packageSpec: string, opts: {
+  out?: string
+  sections?: SkillSection[]
+  force?: boolean
+  agent?: AgentType | 'none'
+}): Promise<void> {
+  const { name: packageName } = parsePackageSpec(packageSpec)
+  const sections = opts.sections ?? DEFAULT_SECTIONS
+
+  const spin = timedSpinner()
+  spin.start(`Resolving ${packageSpec}`)
+
+  const cwd = process.cwd()
+  const localDeps = await readLocalDependencies(cwd).catch(() => [])
+  const localVersion = localDeps.find(d => d.name === packageName)?.version
+
+  const resolveResult = await resolvePackageDocsWithAttempts(packageName, {
+    version: localVersion,
+    cwd,
+    onProgress: step => spin.message(`${packageName}: ${RESOLVE_STEP_LABELS[step]}`),
+  })
+  let resolved = resolveResult.package
+
+  if (!resolved) {
+    spin.message(`Resolving local package: ${packageName}`)
+    resolved = await resolveLocalDep(packageName, cwd)
+  }
+
+  if (!resolved) {
+    spin.stop(`Could not find docs for: ${packageName}`)
+    return
+  }
+
+  const version = localVersion || resolved.version || 'latest'
+  const versionKey = getVersionKey(version)
+  const useCache = !opts.force && isCached(packageName, version)
+
+  // Download npm dist if not in node_modules
+  if (!existsSync(join(cwd, 'node_modules', packageName))) {
+    spin.message(`Downloading ${packageName}@${version} dist`)
+    await fetchPkgDist(packageName, version)
+  }
+
+  spin.stop(`Resolved ${packageName}@${useCache ? versionKey : version}`)
+  ensureCacheDir()
+
+  const skillDirName = computeSkillDirName(packageName)
+  const features = readConfig().features ?? defaultFeatures
+
+  // Resolve skill dir — detect agent unless explicitly 'none'
+  const agent: AgentType | null = opts.agent === 'none'
+    ? null
+    : opts.agent ?? (await import('../agent/detect.ts').then(m => m.detectTargetAgent()))
+  const baseDir = agent
+    ? resolveBaseDir(cwd, agent, false)
+    : join(cwd, '.claude', 'skills') // fallback when no agent detected
+  const skillDir = opts.out ? resolve(cwd, opts.out) : join(baseDir, skillDirName)
+
+  // Warn if output files already exist (user may have pending work)
+  if (existsSync(skillDir) && !opts.force) {
+    const existing = Object.values(SECTION_OUTPUT_FILES).filter(f => existsSync(join(skillDir, f)))
+    if (existing.length > 0)
+      p.log.warn(`Overwriting existing output files in ${relative(cwd, skillDir)}: ${existing.join(', ')}`)
+  }
+  mkdirSync(skillDir, { recursive: true })
+
+  // Fetch & cache resources
+  const resSpin = timedSpinner()
+  resSpin.start('Fetching resources')
+  const resources = await fetchAndCacheResources({
+    packageName,
+    resolved,
+    version,
+    useCache,
+    features,
+    onProgress: msg => resSpin.message(msg),
+  })
+  resSpin.stop('Resources ready')
+  for (const w of resources.warnings)
+    p.log.warn(`\x1B[33m${w}\x1B[0m`)
+
+  // Link references for prompt building
+  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features, resources.repoInfo)
+
+  const pkgDir = resolvePkgDir(packageName, cwd, version)
+  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version))
+  const shippedDocs = hasShippedDocs(packageName, cwd, version)
+  const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
+  const docFiles = listReferenceFiles(skillDir)
+
+  // Build prompts
+  const prompts = buildAllSectionPrompts({
+    packageName,
+    skillDir,
+    version,
+    hasIssues: resources.hasIssues,
+    hasDiscussions: resources.hasDiscussions,
+    hasReleases: resources.hasReleases,
+    hasChangelog,
+    docFiles,
+    docsType: resources.docsType,
+    hasShippedDocs: shippedDocs,
+    pkgFiles,
+    features,
+    sections,
+  })
+
+  // Eject references as real files, then remove .skilld/ symlinks
+  ejectReferences(skillDir, packageName, cwd, version, resources.docsType, features, resources.repoInfo)
+  const skilldDir = join(skillDir, '.skilld')
+  if (existsSync(skilldDir))
+    rmSync(skilldDir, { recursive: true, force: true })
+
+  // Write portable prompts
+  for (const [section, prompt] of prompts) {
+    const portable = portabilizePrompt(prompt, section)
+    writeFileSync(join(skillDir, `PROMPT_${section}.md`), portable)
+  }
+
+  // Generate SKILL.md (ejected — uses ./references/ paths)
+  const relatedSkills = await findRelatedSkills(packageName, join(skillDir, '..'))
+  const skillMd = generateSkillMd({
+    name: packageName,
+    version,
+    releasedAt: resolved.releasedAt,
+    description: resolved.description,
+    dependencies: resolved.dependencies,
+    distTags: resolved.distTags,
+    relatedSkills,
+    hasIssues: resources.hasIssues,
+    hasDiscussions: resources.hasDiscussions,
+    hasReleases: resources.hasReleases,
+    hasChangelog,
+    docsType: resources.docsType,
+    hasShippedDocs: shippedDocs,
+    pkgFiles,
+    repoUrl: resolved.repoUrl,
+    features,
+    eject: true,
+  })
+  writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+
+  // Write lockfile so skilld list/update/assemble can discover this skill
+  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  writeLock(baseDir, skillDirName, {
+    packageName,
+    version,
+    repo: repoSlug,
+    source: resources.docSource,
+    syncedAt: new Date().toISOString().split('T')[0],
+    generator: 'skilld',
+  })
+
+  // Link to agent dirs + setup gitignore/instructions
+  if (agent) {
+    const shared = getSharedSkillsDir(cwd)
+    if (shared)
+      linkSkillToAgents(skillDirName, shared, cwd, agent)
+    await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[agent].skillsDir, cwd, false)
+    await ensureAgentInstructions(agent, cwd, false)
+    registerProject(cwd)
+  }
+  else {
+    // No agent — ensure gitignore for .claude/skills/ fallback dir
+    await ensureGitignore('.claude/skills', cwd, false)
+  }
+
+  const relDir = relative(cwd, skillDir)
+  const sectionList = [...prompts.keys()]
+  p.log.success(`Skill installed to ${relDir}`)
+
+  // Show agent prompt the user can copy-paste
+  const promptFiles = sectionList.map(s => `PROMPT_${s}.md`).join(', ')
+  const outputFileList = sectionList.map(s => SECTION_OUTPUT_FILES[s]).join(', ')
+  p.log.info(`Have your agent enhance the skill. Give it this prompt:\n\x1B[2m\x1B[3m  Read each prompt file (${promptFiles}) in ${relDir}/, read the\n  referenced files, then write your output to the matching file (${outputFileList}).\n  When done, run: skilld assemble\x1B[0m`)
+}
