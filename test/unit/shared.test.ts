@@ -62,12 +62,22 @@ describe('shared skills', () => {
   })
 
   describe('linkSkillToAgents', () => {
-    it('creates symlinks for agents with existing config dirs', async () => {
-      vi.mocked(existsSync).mockImplementation((p: any) => {
-        const s = String(p)
-        // .claude/ exists, .cursor/ does not
-        return s === '/project/.claude'
+    it('creates symlinks and dirs for explicit target agent', async () => {
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(lstatSync).mockImplementation(() => {
+        throw new Error('ENOENT')
       })
+
+      const { linkSkillToAgents } = await import('../../src/agent/install')
+      linkSkillToAgents('vue', '/project/.skills', '/project', 'claude-code')
+
+      expect(mkdirSync).toHaveBeenCalledWith('/project/.claude/skills', { recursive: true })
+      expect(symlinkSync).toHaveBeenCalledWith('../../.skills/vue', '/project/.claude/skills/vue')
+      expect(symlinkSync).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips non-target agents without existing skills dir', async () => {
+      vi.mocked(existsSync).mockReturnValue(false)
       vi.mocked(lstatSync).mockImplementation(() => {
         throw new Error('ENOENT')
       })
@@ -75,21 +85,19 @@ describe('shared skills', () => {
       const { linkSkillToAgents } = await import('../../src/agent/install')
       linkSkillToAgents('vue', '/project/.skills', '/project')
 
-      expect(mkdirSync).toHaveBeenCalledWith('/project/.claude/skills', { recursive: true })
-      expect(symlinkSync).toHaveBeenCalledWith('../../.skills/vue', '/project/.claude/skills/vue')
-      // .cursor/ doesn't exist, so no symlink for it
-      expect(symlinkSync).toHaveBeenCalledTimes(1)
+      expect(mkdirSync).not.toHaveBeenCalled()
+      expect(symlinkSync).not.toHaveBeenCalled()
     })
 
     it('replaces existing symlinks', async () => {
       vi.mocked(existsSync).mockImplementation((p: any) => {
         const s = String(p)
-        return s === '/project/.claude' || s === '/project/.claude/skills/vue'
+        return s === '/project/.claude/skills' || s === '/project/.claude/skills/vue'
       })
       vi.mocked(lstatSync).mockReturnValue({ isSymbolicLink: () => true } as any)
 
       const { linkSkillToAgents } = await import('../../src/agent/install')
-      linkSkillToAgents('vue', '/project/.skills', '/project')
+      linkSkillToAgents('vue', '/project/.skills', '/project', 'claude-code')
 
       expect(unlinkSync).toHaveBeenCalledWith('/project/.claude/skills/vue')
       expect(symlinkSync).toHaveBeenCalled()
@@ -98,12 +106,12 @@ describe('shared skills', () => {
     it('skips real directories', async () => {
       vi.mocked(existsSync).mockImplementation((p: any) => {
         const s = String(p)
-        return s === '/project/.claude' || s === '/project/.claude/skills/vue'
+        return s === '/project/.claude/skills' || s === '/project/.claude/skills/vue'
       })
       vi.mocked(lstatSync).mockReturnValue({ isSymbolicLink: () => false } as any)
 
       const { linkSkillToAgents } = await import('../../src/agent/install')
-      linkSkillToAgents('vue', '/project/.skills', '/project')
+      linkSkillToAgents('vue', '/project/.skills', '/project', 'claude-code')
 
       expect(symlinkSync).not.toHaveBeenCalled()
     })
