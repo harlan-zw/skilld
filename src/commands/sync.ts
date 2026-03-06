@@ -244,6 +244,7 @@ interface SyncConfig {
   eject?: boolean | string
   name?: string
   from?: string
+  noSearch?: boolean
 }
 
 async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promise<void> {
