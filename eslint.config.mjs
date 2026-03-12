@@ -8,6 +8,7 @@ export default antfu({
     'node/prefer-global/buffer': 'off',
     'ts/explicit-function-return-type': 'off',
     'e18e/prefer-static-regex': 'warn',
+    'e18e/prefer-array-to-sorted': 'off',
   },
   ignores: [
     'CLAUDE.md',

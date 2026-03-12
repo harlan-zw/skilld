@@ -317,7 +317,7 @@ export function generateDiscussionIndex(discussions: GitHubDiscussion[]): string
   const sections: string[] = [fm.join('\n'), '', '# Discussions Index', '']
 
   // Sort categories: high-value first
-  const cats = byCategory.keys().toSorted((a, b) => {
+  const cats = [...byCategory.keys()].sort((a, b) => {
     const aHigh = HIGH_VALUE_CATEGORIES.has(a.toLowerCase()) ? 0 : 1
     const bHigh = HIGH_VALUE_CATEGORIES.has(b.toLowerCase()) ? 0 : 1
     return aHigh - bHigh || a.localeCompare(b)

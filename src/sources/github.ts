@@ -248,7 +248,7 @@ function discoverDocFiles(allFiles: string[], packageName?: string): DiscoveredD
   }
 
   if (docsGroups.size > 0) {
-    const largest = docsGroups.entries().toSorted((a, b) => b[1].length - a[1].length)[0]!
+    const largest = [...docsGroups.entries()].sort((a, b) => b[1].length - a[1].length)[0]!
     if (largest[1].length >= 3) {
       const fullPrefix = largest[0]
       const docsIdx = fullPrefix.lastIndexOf('docs/')
