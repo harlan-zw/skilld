@@ -685,29 +685,29 @@ export const addCommandDef = defineCommand({
 export const ejectCommandDef = defineCommand({
   meta: { name: 'eject', description: 'Eject skill with references as real files (portable, no symlinks)' },
   args: {
-    'package': {
+    package: {
       type: 'positional',
       description: 'Package to eject',
       required: true,
     },
-    'name': {
+    name: {
       type: 'string',
       alias: 'n',
       description: 'Custom skill directory name (default: derived from package)',
     },
-    'out': {
+    out: {
       type: 'string',
       alias: 'o',
       description: 'Output directory path override',
     },
-    'from': {
+    from: {
       type: 'string',
       description: 'Collect releases/issues/discussions from this date onward (YYYY-MM-DD)',
     },
-    'no-search': {
+    search: {
       type: 'boolean',
-      description: 'Skip search index / embeddings generation',
-      default: false,
+      description: 'Build search index / embeddings (use --no-search to skip)',
+      default: true,
     },
     ...sharedArgs,
   },
@@ -733,7 +733,7 @@ export const ejectCommandDef = defineCommand({
       eject: args.out || true,
       name: args.name,
       from: args.from,
-      noSearch: args['no-search'],
+      noSearch: !args.search,
     })
   },
 })
