@@ -27,12 +27,14 @@ const { fetchGitDocs, fetchGitHubRepoMeta, fetchGitSource, fetchReadmeContent, i
 
 // Mock gh CLI as unavailable by default so tests exercise fetch path
 vi.mock('../../src/sources/issues', () => ({
-  isGhAvailable: () => false,
+  isGhAvailable: vi.fn(() => false),
 }))
+const { isGhAvailable } = await import('../../src/sources/issues')
 
 describe('sources/github', () => {
   beforeEach(() => {
     mockFetch.mockReset()
+    vi.mocked(isGhAvailable).mockReturnValue(false)
   })
 
   afterEach(() => {
@@ -348,7 +350,7 @@ describe('sources/github', () => {
     it('fetches regular URLs via fetchText', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        text: () => Promise.resolve('# README'),
+        _data: '# README',
       })
 
       const result = await fetchReadmeContent('https://raw.githubusercontent.com/o/r/main/README.md')

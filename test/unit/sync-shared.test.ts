@@ -40,6 +40,7 @@ vi.mock('../../src/cache', () => ({
 
 vi.mock('../../src/sources', () => ({
   $fetch: vi.fn(),
+  fetchGitHubRaw: vi.fn(),
   downloadLlmsDocs: vi.fn(),
   filterFrameworkDocs: vi.fn((files: string[]) => files),
   fetchBlogReleases: vi.fn(),
@@ -100,7 +101,7 @@ vi.mock('../../src/agent', () => ({
 
 const { existsSync, readFileSync, rmSync, mkdirSync, copyFileSync, readdirSync } = await import('node:fs')
 const { getCacheDir, getPackageDbPath, readCachedDocs, writeToCache, writeToRepoCache, clearCache } = await import('../../src/cache')
-const { $fetch, fetchCrawledDocs, fetchGitDocs, fetchGitHubIssues, fetchGitHubDiscussions, fetchLlmsTxt, fetchReadmeContent, fetchReleaseNotes, downloadLlmsDocs, isGhAvailable, isShallowGitDocs, resolveEntryFiles, resolveLocalPackageDocs } = await import('../../src/sources')
+const { $fetch, fetchCrawledDocs, fetchGitDocs, fetchGitHubIssues, fetchGitHubDiscussions, fetchGitHubRaw, fetchLlmsTxt, fetchReadmeContent, fetchReleaseNotes, downloadLlmsDocs, isGhAvailable, isShallowGitDocs, resolveEntryFiles, resolveLocalPackageDocs } = await import('../../src/sources')
 const { registerProject } = await import('../../src/core/config')
 const { writeLock } = await import('../../src/core/lockfile')
 const { createIndex } = await import('../../src/retriv')
@@ -338,7 +339,7 @@ describe('sync-shared', () => {
         ref: 'v1.0',
         docsPrefix: '',
       })
-      vi.mocked($fetch).mockResolvedValue('doc content')
+      vi.mocked(fetchGitHubRaw).mockResolvedValue('doc content')
 
       const result = await fetchAndCacheResources({ ...baseOpts, resolved })
 
@@ -364,7 +365,7 @@ describe('sync-shared', () => {
         ref: 'v1.0',
         docsPrefix: '',
       })
-      vi.mocked($fetch).mockResolvedValue('content')
+      vi.mocked(fetchGitHubRaw).mockResolvedValue('content')
       vi.mocked(isShallowGitDocs).mockReturnValue(true)
       vi.mocked(fetchLlmsTxt).mockResolvedValue({ raw: 'llms content', links: [] })
 
@@ -390,7 +391,7 @@ describe('sync-shared', () => {
         ref: 'v1.0',
         docsPrefix: '',
       })
-      vi.mocked($fetch).mockResolvedValue('content')
+      vi.mocked(fetchGitHubRaw).mockResolvedValue('content')
       vi.mocked(fetchLlmsTxt).mockResolvedValue({ raw: 'llms', links: ['/guide'] })
       vi.mocked(downloadLlmsDocs).mockResolvedValue([{ url: '/guide', content: 'guide content' }])
 
