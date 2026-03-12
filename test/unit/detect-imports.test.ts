@@ -31,6 +31,12 @@ describe('detectImportedPackages', () => {
     expect(names).not.toContain('node:fs')
     expect(names).not.toContain('path')
     expect(names).not.toContain('node:path')
+    expect(names).not.toContain('async_hooks')
+    expect(names).not.toContain('diagnostics_channel')
+    expect(names).not.toContain('http2')
+    expect(names).not.toContain('inspector')
+    expect(names).not.toContain('test')
+    expect(names).not.toContain('trace_events')
   })
 
   it('ignores relative imports', async () => {
