@@ -3,7 +3,7 @@
  */
 
 import { ofetch } from 'ofetch'
-import { getGitHubToken, isKnownPrivateRepo } from './github-common.ts'
+import { getGitHubToken, isKnownPrivateRepo, markRepoPrivate } from './github-common.ts'
 
 export const $fetch = ofetch.create({
   retry: 3,
@@ -19,9 +19,11 @@ export async function fetchText(url: string): Promise<string | null> {
   return $fetch(url, { responseType: 'text' }).catch(() => null)
 }
 
+const RAW_GH_RE = /raw\.githubusercontent\.com\/([^/]+)\/([^/]+)/
+
 /** Extract owner/repo from a GitHub raw content URL */
 function extractGitHubRepo(url: string): { owner: string, repo: string } | null {
-  const match = url.match(/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)/)
+  const match = url.match(RAW_GH_RE)
   return match ? { owner: match[1]!, repo: match[2]! } : null
 }
 
@@ -29,6 +31,9 @@ function extractGitHubRepo(url: string): { owner: string, repo: string } | null 
  * Fetch text from a GitHub raw URL with auth fallback for private repos.
  * Tries unauthenticated first (fast path), falls back to authenticated
  * request when the repo is known to be private or unauthenticated fails.
+ *
+ * Only sends auth tokens to raw.githubusercontent.com — returns null for
+ * non-GitHub URLs that fail unauthenticated to prevent token leakage.
  */
 export async function fetchGitHubRaw(url: string): Promise<string | null> {
   const gh = extractGitHubRepo(url)
@@ -36,24 +41,27 @@ export async function fetchGitHubRaw(url: string): Promise<string | null> {
 
   // Fast path: skip unauthenticated attempt for known private repos
   if (!isKnownPrivate) {
-    const unauthRes = await $fetch.raw(url).catch(() => null)
-    if (unauthRes?.ok && typeof unauthRes._data === 'string')
-      return unauthRes._data
-
-    if (unauthRes?.status === 404)
-      return null
+    const content = await fetchText(url)
+    if (content)
+      return content
   }
 
-  // Fallback: authenticated request
+  // Only send auth tokens to raw.githubusercontent.com
+  if (!gh)
+    return null
+
+  // Fallback: authenticated request for private repos
   const token = getGitHubToken()
   if (!token)
     return null
 
-  const authRes = await $fetch.raw(url, {
+  const content = await $fetch(url, {
+    responseType: 'text',
     headers: { Authorization: `token ${token}` },
-  }).catch(() => null)
-
-  return authRes?.ok && typeof authRes._data === 'string' ? authRes._data : null
+  }).catch(() => null) as string | null
+  if (content)
+    markRepoPrivate(gh.owner, gh.repo)
+  return content
 }
 
 /**

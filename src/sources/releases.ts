@@ -1,10 +1,8 @@
 /**
- * GitHub release notes fetching via gh CLI (preferred) with ungh.cc fallback
+ * GitHub release notes fetching via GitHub API (preferred) with ungh.cc fallback
  */
 
-import { spawnSync } from 'node:child_process'
-import { isoDate } from './github-common.ts'
-import { isGhAvailable } from './issues.ts'
+import { ghApiPaginated, isoDate } from './github-common.ts'
 import { $fetch, fetchGitHubRaw } from './utils.ts'
 
 export interface GitHubRelease {
@@ -94,48 +92,44 @@ export function compareSemver(a: SemVer, b: SemVer): number {
   return a.patch - b.patch
 }
 
-/**
- * Fetch releases via gh CLI (fast, authenticated, paginated)
- */
-function fetchReleasesViaGh(owner: string, repo: string): GitHubRelease[] {
-  try {
-    const { stdout: ndjson } = spawnSync('gh', [
-      'api',
-      `repos/${owner}/${repo}/releases`,
-      '--paginate',
-      '--jq',
-      '.[] | {id: .id, tag: .tag_name, name: .name, prerelease: .prerelease, createdAt: .created_at, publishedAt: .published_at, markdown: .body}',
-    ], { encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'ignore'] })
-    if (!ndjson)
-      return []
-    return ndjson.trim().split('\n').filter(Boolean).map(line => JSON.parse(line))
-  }
-  catch {
-    return []
+interface GitHubApiRelease {
+  id: number
+  tag_name: string
+  name: string
+  prerelease: boolean
+  created_at: string
+  published_at: string
+  body: string
+}
+
+/** Map GitHub API release to our GitHubRelease shape */
+function mapApiRelease(r: GitHubApiRelease): GitHubRelease {
+  return {
+    id: r.id,
+    tag: r.tag_name,
+    name: r.name,
+    prerelease: r.prerelease,
+    createdAt: r.created_at,
+    publishedAt: r.published_at,
+    markdown: r.body,
   }
 }
 
 /**
- * Fetch all releases from a GitHub repo via ungh.cc (fallback)
+ * Fetch all releases — GitHub API first (authenticated, async), ungh.cc fallback
  */
-async function fetchReleasesViaUngh(owner: string, repo: string): Promise<GitHubRelease[]> {
+async function fetchAllReleases(owner: string, repo: string): Promise<GitHubRelease[]> {
+  // Try authenticated GitHub API first (no rate limits, works for private repos)
+  const apiReleases = await ghApiPaginated<GitHubApiRelease>(`repos/${owner}/${repo}/releases`)
+  if (apiReleases.length > 0)
+    return apiReleases.map(mapApiRelease)
+
+  // Fallback: ungh.cc (fast, no auth needed for public repos)
   const data = await $fetch<UnghReleasesResponse>(
     `https://ungh.cc/repos/${owner}/${repo}/releases`,
     { signal: AbortSignal.timeout(15_000) },
   ).catch(() => null)
   return data?.releases ?? []
-}
-
-/**
- * Fetch all releases — gh CLI first, ungh.cc fallback
- */
-async function fetchAllReleases(owner: string, repo: string): Promise<GitHubRelease[]> {
-  if (isGhAvailable()) {
-    const releases = fetchReleasesViaGh(owner, repo)
-    if (releases.length > 0)
-      return releases
-  }
-  return fetchReleasesViaUngh(owner, repo)
 }
 
 /**

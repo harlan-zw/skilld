@@ -31,6 +31,17 @@ vi.mock('../../src/sources/issues', () => ({
 }))
 const { isGhAvailable } = await import('../../src/sources/issues')
 
+// Mock GitHub API helpers to return null (no token) so tests exercise unauthenticated path
+vi.mock('../../src/sources/github-common', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/sources/github-common')>()
+  return {
+    ...actual,
+    getGitHubToken: vi.fn(() => null),
+    ghApi: vi.fn(async () => null),
+    ghApiPaginated: vi.fn(async () => []),
+  }
+})
+
 describe('sources/github', () => {
   beforeEach(() => {
     mockFetch.mockReset()
@@ -350,7 +361,7 @@ describe('sources/github', () => {
     it('fetches regular URLs via fetchText', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        _data: '# README',
+        text: () => Promise.resolve('# README'),
       })
 
       const result = await fetchReadmeContent('https://raw.githubusercontent.com/o/r/main/README.md')

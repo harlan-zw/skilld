@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { mapInsert } from '../core/shared.ts'
-import { getGitHubToken, isKnownPrivateRepo, markRepoPrivate } from './github-common.ts'
+import { getGitHubToken, ghApi, ghApiPaginated, isKnownPrivateRepo, markRepoPrivate } from './github-common.ts'
 import { isGhAvailable } from './issues.ts'
 import { fetchLlmsUrl } from './llms.ts'
 import { getDocOverride } from './package-registry.ts'
@@ -40,26 +40,8 @@ interface UnghFilesResponse {
 }
 
 /**
- * List files via gh api (authenticated, works for private repos)
- */
-function listFilesViaGh(owner: string, repo: string, ref: string): string[] {
-  try {
-    const { stdout } = spawnSync('gh', [
-      'api',
-      `repos/${owner}/${repo}/git/trees/${ref}?recursive=1`,
-      '--jq',
-      '.tree[].path',
-    ], { encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'ignore'] })
-    return stdout?.trim().split('\n').filter(Boolean) ?? []
-  }
-  catch {
-    return []
-  }
-}
-
-/**
  * List files at a git ref. Tries ungh.cc first (fast, no rate limits),
- * falls back to gh api for private repos.
+ * falls back to GitHub API for private repos.
  */
 async function listFilesAtRef(owner: string, repo: string, ref: string): Promise<string[]> {
   // Skip ungh.cc for known private repos
@@ -71,13 +53,13 @@ async function listFilesAtRef(owner: string, repo: string, ref: string): Promise
       return data.files.map(f => f.path)
   }
 
-  // Fallback: gh api for private repos
-  if (isGhAvailable()) {
-    const files = listFilesViaGh(owner, repo, ref)
-    if (files.length > 0) {
-      markRepoPrivate(owner, repo)
-      return files
-    }
+  // Fallback: GitHub API (authenticated, async)
+  const tree = await ghApi<{ tree?: Array<{ path: string }> }>(
+    `repos/${owner}/${repo}/git/trees/${ref}?recursive=1`,
+  )
+  if (tree?.tree?.length) {
+    markRepoPrivate(owner, repo)
+    return tree.tree.map(f => f.path)
   }
 
   return []
@@ -128,40 +110,40 @@ async function findGitTag(owner: string, repo: string, version: string, packageN
   return null
 }
 
+interface GitHubApiRelease {
+  tag_name: string
+  published_at?: string
+}
+
+/**
+ * Fetch releases from ungh.cc first, fall back to GitHub API for private repos.
+ */
+async function fetchUnghReleases(owner: string, repo: string): Promise<Array<{ tag: string, publishedAt?: string }>> {
+  if (!isKnownPrivateRepo(owner, repo)) {
+    const data = await $fetch<{ releases?: Array<{ tag: string, publishedAt?: string }> }>(
+      `https://ungh.cc/repos/${owner}/${repo}/releases`,
+    ).catch(() => null)
+    if (data?.releases?.length)
+      return data.releases
+  }
+
+  // Fallback: GitHub API (paginated, authenticated)
+  const raw = await ghApiPaginated<GitHubApiRelease>(`repos/${owner}/${repo}/releases`)
+  if (raw.length > 0) {
+    markRepoPrivate(owner, repo)
+    return raw.map(r => ({ tag: r.tag_name, publishedAt: r.published_at }))
+  }
+
+  return []
+}
+
 /**
  * Find the latest release tag matching `{packageName}@*`.
- * Tries ungh releases API first, falls back to gh api for private repos.
  */
 async function findLatestReleaseTag(owner: string, repo: string, packageName: string): Promise<string | null> {
   const prefix = `${packageName}@`
-
-  // Try ungh.cc first (for public repos)
-  if (!isKnownPrivateRepo(owner, repo)) {
-    const data = await $fetch<{ releases?: Array<{ tag: string }> }>(
-      `https://ungh.cc/repos/${owner}/${repo}/releases`,
-    ).catch(() => null)
-    const tag = data?.releases?.find(r => r.tag.startsWith(prefix))?.tag
-    if (tag)
-      return tag
-  }
-
-  // Fallback: gh api for private repos
-  if (isGhAvailable()) {
-    try {
-      const { stdout } = spawnSync('gh', [
-        'api',
-        `repos/${owner}/${repo}/releases`,
-        '--paginate',
-        '--jq',
-        '.[].tag_name',
-      ], { encoding: 'utf-8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] })
-      if (stdout)
-        return stdout.trim().split('\n').find(t => t.startsWith(prefix)) ?? null
-    }
-    catch {}
-  }
-
-  return null
+  const releases = await fetchUnghReleases(owner, repo)
+  return releases.find(r => r.tag.startsWith(prefix))?.tag ?? null
 }
 
 /**
@@ -578,26 +560,9 @@ export async function fetchGitHubRepoMeta(owner: string, repo: string, packageNa
   if (override?.homepage)
     return { homepage: override.homepage }
 
-  // Prefer gh CLI to avoid rate limits
-  if (isGhAvailable()) {
-    try {
-      const { stdout: json } = spawnSync('gh', ['api', `repos/${owner}/${repo}`, '-q', '{homepage}'], {
-        encoding: 'utf-8',
-        timeout: 10_000,
-      })
-      if (!json)
-        throw new Error('no output')
-      const data = JSON.parse(json) as { homepage?: string }
-      return data?.homepage ? { homepage: data.homepage } : null
-    }
-    catch {
-      // fall through to fetch
-    }
-  }
-
-  const data = await $fetch<{ homepage?: string }>(
-    `https://api.github.com/repos/${owner}/${repo}`,
-  ).catch(() => null)
+  // Try authenticated API first (no rate limits), fall back to unauthenticated
+  const data = await ghApi<{ homepage?: string }>(`repos/${owner}/${repo}`)
+    ?? await $fetch<{ homepage?: string }>(`https://api.github.com/repos/${owner}/${repo}`).catch(() => null)
   return data?.homepage ? { homepage: data.homepage } : null
 }
 
@@ -622,7 +587,7 @@ export async function fetchReadme(owner: string, repo: string, subdir?: string, 
 
   // Fallback to raw.githubusercontent.com — use GET instead of HEAD
   // because raw.githubusercontent.com sometimes returns HTML on HEAD for valid URLs
-  // For known private repos, use authenticated fetch
+  // Lightweight existence check (no content download), auth-aware for known private repos
   const basePath = subdir ? `${subdir}/` : ''
   const branches = ref ? [ref] : ['main', 'master']
   const token = isKnownPrivateRepo(owner, repo) ? getGitHubToken() : null
@@ -636,26 +601,15 @@ export async function fetchReadme(owner: string, repo: string, subdir?: string, 
     }
   }
 
-  // Last resort: gh api (handles private repos via gh auth)
-  if (isGhAvailable()) {
-    try {
-      const refParam = ref ? `?ref=${ref}` : ''
-      const endpoint = subdir
-        ? `repos/${owner}/${repo}/contents/${subdir}/README.md${refParam}`
-        : `repos/${owner}/${repo}/readme${refParam}`
-      const { stdout } = spawnSync('gh', [
-        'api',
-        endpoint,
-        '--jq',
-        '.download_url // empty',
-      ], { encoding: 'utf-8', timeout: 10_000, stdio: ['ignore', 'pipe', 'ignore'] })
-      const downloadUrl = stdout?.trim()
-      if (downloadUrl) {
-        markRepoPrivate(owner, repo)
-        return downloadUrl
-      }
-    }
-    catch {}
+  // Last resort: GitHub API (handles private repos via token auth)
+  const refParam = ref ? `?ref=${ref}` : ''
+  const endpoint = subdir
+    ? `repos/${owner}/${repo}/contents/${subdir}/README.md${refParam}`
+    : `repos/${owner}/${repo}/readme${refParam}`
+  const apiData = await ghApi<{ download_url?: string }>(endpoint)
+  if (apiData?.download_url) {
+    markRepoPrivate(owner, repo)
+    return apiData.download_url
   }
 
   return null
@@ -802,63 +756,18 @@ export async function resolveGitHubRepo(
 
   // Fetch repo metadata (homepage, description) via gh CLI or GitHub API
   const repoUrl = `https://github.com/${owner}/${repo}`
-  let homepage: string | undefined
-  let description: string | undefined
-
-  if (isGhAvailable()) {
-    try {
-      const { stdout: json } = spawnSync('gh', ['api', `repos/${owner}/${repo}`, '--jq', '{homepage: .homepage, description: .description}'], {
-        encoding: 'utf-8',
-        timeout: 10_000,
-      })
-      if (json) {
-        const data = JSON.parse(json) as { homepage?: string, description?: string }
-        homepage = data.homepage || undefined
-        description = data.description || undefined
-      }
-    }
-    catch { /* fall through */ }
-  }
-
-  if (!homepage && !description) {
-    const data = await $fetch<{ homepage?: string, description?: string }>(
-      `https://api.github.com/repos/${owner}/${repo}`,
-    ).catch(() => null)
-    homepage = data?.homepage || undefined
-    description = data?.description || undefined
-  }
+  const meta = await ghApi<{ homepage?: string, description?: string }>(`repos/${owner}/${repo}`)
+    ?? await $fetch<{ homepage?: string, description?: string }>(`https://api.github.com/repos/${owner}/${repo}`).catch(() => null)
+  const homepage = meta?.homepage || undefined
+  const description = meta?.description || undefined
 
   // Fetch latest release tag for version
   onProgress?.('Fetching latest release')
-  // Try ungh.cc first, fall back to gh api for private repos
-  let releasesData = !isKnownPrivateRepo(owner, repo)
-    ? await $fetch<{ releases?: Array<{ tag: string, publishedAt?: string }> }>(
-        `https://ungh.cc/repos/${owner}/${repo}/releases`,
-      ).catch(() => null)
-    : null
-
-  // Fallback: gh api for private repos
-  if (!releasesData?.releases?.length && isGhAvailable()) {
-    try {
-      const { stdout } = spawnSync('gh', [
-        'api',
-        `repos/${owner}/${repo}/releases`,
-        '--paginate',
-        '--jq',
-        '.[] | {tag: .tag_name, publishedAt: .published_at}',
-      ], { encoding: 'utf-8', timeout: 15_000, stdio: ['ignore', 'pipe', 'ignore'] })
-      if (stdout) {
-        const releases = stdout.trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
-        if (releases.length > 0)
-          releasesData = { releases }
-      }
-    }
-    catch {}
-  }
+  const releases = await fetchUnghReleases(owner, repo)
 
   let version = 'main'
   let releasedAt: string | undefined
-  const latestRelease = releasesData?.releases?.[0]
+  const latestRelease = releases[0]
   if (latestRelease) {
     // Extract version from tag (strip leading "v")
     version = latestRelease.tag.replace(/^v/, '')

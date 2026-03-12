@@ -97,3 +97,10 @@ skills:
     source: "ungh://bombshell-dev/clack/packages/prompts"
     syncedAt: 2026-03-12
     generator: skilld
+  defu-skilld:
+    packageName: defu
+    version: 6.1.4
+    repo: unjs/defu
+    source: "ungh://unjs/defu"
+    syncedAt: 2026-03-12
+    generator: skilld

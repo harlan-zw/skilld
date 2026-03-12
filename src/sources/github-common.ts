@@ -3,6 +3,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
+import { ofetch } from 'ofetch'
 
 export const BOT_USERS = new Set([
   'renovate[bot]',
@@ -64,4 +65,61 @@ export function markRepoPrivate(owner: string, repo: string): void {
 /** Check if a repo is known to need authenticated access */
 export function isKnownPrivateRepo(owner: string, repo: string): boolean {
   return _needsAuth.has(`${owner}/${repo}`)
+}
+
+// ── GitHub API (async, no process spawn) ──
+
+const GH_API = 'https://api.github.com'
+
+const ghApiFetch = ofetch.create({
+  retry: 2,
+  retryDelay: 500,
+  timeout: 15_000,
+  headers: { 'User-Agent': 'skilld/1.0' },
+})
+
+const LINK_NEXT_RE = /<([^>]+)>;\s*rel="next"/
+
+/** Parse GitHub Link header for next page URL */
+function parseLinkNext(header: string | null): string | null {
+  if (!header)
+    return null
+  return header.match(LINK_NEXT_RE)?.[1] ?? null
+}
+
+/**
+ * Authenticated fetch against api.github.com. Returns null if no token or request fails.
+ * Endpoint should be relative, e.g. `repos/owner/repo/releases`.
+ */
+export async function ghApi<T>(endpoint: string): Promise<T | null> {
+  const token = getGitHubToken()
+  if (!token)
+    return null
+  return ghApiFetch<T>(`${GH_API}/${endpoint}`, {
+    headers: { Authorization: `token ${token}` },
+  }).catch(() => null)
+}
+
+/**
+ * Paginated GitHub API fetch. Follows Link headers, returns concatenated arrays.
+ * Endpoint should return a JSON array, e.g. `repos/owner/repo/releases`.
+ */
+export async function ghApiPaginated<T>(endpoint: string): Promise<T[]> {
+  const token = getGitHubToken()
+  if (!token)
+    return []
+
+  const headers = { Authorization: `token ${token}` }
+  const results: T[] = []
+  let url: string | null = `${GH_API}/${endpoint}`
+
+  while (url) {
+    const res = await ghApiFetch.raw<T[]>(url, { headers }).catch(() => null)
+    if (!res?.ok || !Array.isArray(res._data))
+      break
+    results.push(...res._data)
+    url = parseLinkNext(res.headers.get('link'))
+  }
+
+  return results
 }

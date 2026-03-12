@@ -101,7 +101,7 @@ vi.mock('../../src/agent', () => ({
 
 const { existsSync, readFileSync, rmSync, mkdirSync, copyFileSync, readdirSync } = await import('node:fs')
 const { getCacheDir, getPackageDbPath, readCachedDocs, writeToCache, writeToRepoCache, clearCache } = await import('../../src/cache')
-const { $fetch, fetchCrawledDocs, fetchGitDocs, fetchGitHubIssues, fetchGitHubDiscussions, fetchGitHubRaw, fetchLlmsTxt, fetchReadmeContent, fetchReleaseNotes, downloadLlmsDocs, isGhAvailable, isShallowGitDocs, resolveEntryFiles, resolveLocalPackageDocs } = await import('../../src/sources')
+const { fetchCrawledDocs, fetchGitDocs, fetchGitHubIssues, fetchGitHubDiscussions, fetchGitHubRaw, fetchLlmsTxt, fetchReadmeContent, fetchReleaseNotes, downloadLlmsDocs, isGhAvailable, isShallowGitDocs, resolveEntryFiles, resolveLocalPackageDocs } = await import('../../src/sources')
 const { registerProject } = await import('../../src/core/config')
 const { writeLock } = await import('../../src/core/lockfile')
 const { createIndex } = await import('../../src/retriv')
