@@ -42,6 +42,10 @@ export interface SkilldLock {
 
 const SKILL_FM_KEYS: (keyof SkillInfo)[] = ['packageName', 'version', 'packages', 'repo', 'source', 'syncedAt', 'generator', 'path', 'ref', 'commit']
 
+function isSkillInfoKey(key: string): key is keyof SkillInfo {
+  return (SKILL_FM_KEYS as readonly string[]).includes(key)
+}
+
 export function parseSkillFrontmatter(skillPath: string): SkillInfo | null {
   if (!existsSync(skillPath))
     return null
@@ -76,8 +80,8 @@ export function readLock(skillsDir: string): SkilldLock | null {
     }
     if (currentSkill && line.startsWith('    ')) {
       const kv = yamlParseKV(line)
-      if (kv)
-        (skills[currentSkill] as any)[kv[0]] = kv[1]
+      if (kv && isSkillInfoKey(kv[0]))
+        skills[currentSkill]![kv[0]] = kv[1]
     }
   }
   return { skills }
@@ -87,26 +91,10 @@ function serializeLock(lock: SkilldLock): string {
   let yaml = 'skills:\n'
   for (const [name, skill] of Object.entries(lock.skills)) {
     yaml += `  ${name}:\n`
-    if (skill.packageName)
-      yaml += `    packageName: ${yamlEscape(skill.packageName)}\n`
-    if (skill.version)
-      yaml += `    version: ${yamlEscape(skill.version)}\n`
-    if (skill.packages)
-      yaml += `    packages: ${yamlEscape(skill.packages)}\n`
-    if (skill.repo)
-      yaml += `    repo: ${yamlEscape(skill.repo)}\n`
-    if (skill.source)
-      yaml += `    source: ${yamlEscape(skill.source)}\n`
-    if (skill.syncedAt)
-      yaml += `    syncedAt: ${yamlEscape(skill.syncedAt)}\n`
-    if (skill.generator)
-      yaml += `    generator: ${yamlEscape(skill.generator)}\n`
-    if (skill.path)
-      yaml += `    path: ${yamlEscape(skill.path)}\n`
-    if (skill.ref)
-      yaml += `    ref: ${yamlEscape(skill.ref)}\n`
-    if (skill.commit)
-      yaml += `    commit: ${yamlEscape(skill.commit)}\n`
+    for (const key of SKILL_FM_KEYS) {
+      if (skill[key])
+        yaml += `    ${key}: ${yamlEscape(skill[key])}\n`
+    }
   }
   return yaml
 }
