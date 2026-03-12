@@ -148,7 +148,7 @@ export async function searchPooled(
   const { limit = 10, filter } = options
   const fetchLimit = limit * 2 // Over-fetch to compensate for dedup
   const allResults = await Promise.all(
-    [...pool.values()].map(async (db) => {
+    Array.from(pool.values(), async (db) => {
       const results = await db.search(query, { limit: fetchLimit, filter, returnContent: true, returnMetadata: true, returnMeta: true })
       return results.map(r => ({
         id: r.id,
@@ -179,6 +179,6 @@ export async function searchPooled(
 }
 
 export async function closePool(pool: Map<string, RetrivInstance>): Promise<void> {
-  await Promise.all([...pool.values()].map(db => db.close?.()))
+  await Promise.all(Array.from(pool.values(), db => db.close?.()))
   pool.clear()
 }

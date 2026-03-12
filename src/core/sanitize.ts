@@ -287,7 +287,7 @@ function closeUnclosedCodeBlocks(content: string): string {
   // If still inside a code block, close it
   if (inCodeBlock) {
     // Ensure trailing newline before closing fence
-    if (result.length > 0 && result[result.length - 1] !== '')
+    if (result.length > 0 && result.at(-1) !== '')
       result.push('')
     result.push(fence)
   }

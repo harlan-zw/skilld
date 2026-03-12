@@ -342,7 +342,7 @@ const main = defineCommand({
 
             if (result.packages.length === 0) {
               spinner.stop('No imports found, falling back to package.json')
-              usages = [...state.deps.keys()].map(name => ({ name, count: 0 }))
+              usages = Array.from(state.deps.keys(), name => ({ name, count: 0 }))
             }
             else {
               const depSet = new Set(state.deps.keys())
@@ -358,7 +358,7 @@ const main = defineCommand({
             }
           }
           else {
-            usages = [...state.deps.keys()].map(name => ({ name, count: 0 }))
+            usages = Array.from(state.deps.keys(), name => ({ name, count: 0 }))
           }
 
           // Let user select which packages

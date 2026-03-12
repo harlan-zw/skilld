@@ -57,7 +57,7 @@ export function listLockPackages(cwd: string = process.cwd()): string[] {
     if (s.packageName && s.version)
       seen.set(s.packageName, s.version)
   }
-  return [...seen].map(([name, version]) => `${name}@${version}`)
+  return Array.from(seen, ([name, version]) => `${name}@${version}`)
 }
 
 function filterLockDbs(lock: ReturnType<typeof readLock>, packageFilter?: string): string[] {

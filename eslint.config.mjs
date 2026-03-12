@@ -7,6 +7,7 @@ export default antfu({
     'node/prefer-global/process': 'off',
     'node/prefer-global/buffer': 'off',
     'ts/explicit-function-return-type': 'off',
+    'e18e/prefer-static-regex': 'warn',
   },
   ignores: [
     'CLAUDE.md',
@@ -24,5 +25,6 @@ export default antfu({
   rules: {
     'ts/no-unsafe-function-type': 'off',
     'no-console': 'off',
+    'e18e/prefer-static-regex': 'off',
   },
 })

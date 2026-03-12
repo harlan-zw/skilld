@@ -69,8 +69,7 @@ export async function detectImportedPackages(cwd: string = process.cwd()): Promi
     }))
 
     // Sort by usage count (descending), then alphabetically
-    const packages: PackageUsage[] = [...counts.entries()]
-      .map(([name, count]) => ({ name, count, source: 'import' as const }))
+    const packages: PackageUsage[] = Array.from(counts.entries(), ([name, count]) => ({ name, count, source: 'import' as const }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 
     // Merge preset-detected packages (imports take priority)

@@ -166,7 +166,7 @@ async function interactivePicker(state: ProjectState): Promise<string[] | null> 
       return null
     }
     // Fallback to package.json
-    return pickFromList([...declaredMap.entries()].map(([name, version]) => ({
+    return pickFromList(Array.from(declaredMap.entries(), ([name, version]) => ({
       name,
       version: maskPatch(version),
       count: 0,

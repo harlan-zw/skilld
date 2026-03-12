@@ -248,7 +248,7 @@ function discoverDocFiles(allFiles: string[], packageName?: string): DiscoveredD
   }
 
   if (docsGroups.size > 0) {
-    const largest = [...docsGroups.entries()].sort((a, b) => b[1].length - a[1].length)[0]!
+    const largest = docsGroups.entries().toSorted((a, b) => b[1].length - a[1].length)[0]!
     if (largest[1].length >= 3) {
       const fullPrefix = largest[0]
       const docsIdx = fullPrefix.lastIndexOf('docs/')
@@ -277,8 +277,7 @@ function discoverDocFiles(allFiles: string[], packageName?: string): DiscoveredD
     return null
 
   // Score and sort directories
-  const scored = [...dirGroups.entries()]
-    .map(([dir, files]) => ({ dir, files, score: scoreDocDir(dir, files.length) }))
+  const scored = Array.from(dirGroups.entries(), ([dir, files]) => ({ dir, files, score: scoreDocDir(dir, files.length) }))
     .filter(d => d.files.length >= 5) // Minimum threshold
     .sort((a, b) => b.score - a.score)
 

@@ -96,9 +96,9 @@ describe('embedding-cache', () => {
     const result = await embedder(['b', 'c', 'a'])
     // 'b' → cached [2, 20], 'c' → new [3, 30], 'a' → cached [1, 10]
 
-    expect(Array.from(result[0] as Float32Array)).toEqual([2, 20])
-    expect(Array.from(result[1] as Float32Array)).toEqual([3, 30])
-    expect(Array.from(result[2] as Float32Array)).toEqual([1, 10])
+    expect([...result[0] as Float32Array]).toEqual([2, 20])
+    expect([...result[1] as Float32Array]).toEqual([3, 30])
+    expect([...result[2] as Float32Array]).toEqual([1, 10])
   })
 
   it('wipes cache on dimension mismatch', async () => {

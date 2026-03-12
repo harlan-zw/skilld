@@ -135,7 +135,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
   // Render function
   function render() {
     const maxNameLen = Math.max(...packages.map(p => p.length), 20)
-    const lines = [...states.values()].map((s) => {
+    const lines = Array.from(states.values(), (s) => {
       const icon = STATUS_ICONS[s.status]
       const color = STATUS_COLORS[s.status]
       const reset = '\x1B[0m'

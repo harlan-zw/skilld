@@ -230,7 +230,7 @@ export async function statusCommand(opts: StatusOptions = {}): Promise<void> {
         meta.push(`synced ${ago}`)
 
       if (pkg.agents.size > 0) {
-        const agentNames = [...pkg.agents].map(a => agents[a].displayName)
+        const agentNames = Array.from(pkg.agents, a => agents[a].displayName)
         meta.push(agentNames.join(', '))
       }
 

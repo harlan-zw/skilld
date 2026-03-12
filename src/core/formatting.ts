@@ -67,7 +67,7 @@ export function highlightTerms(content: string, terms: string[]): string {
   if (terms.length === 0)
     return content
   // Sort by length desc to match longer terms first
-  const sorted = [...terms].sort((a, b) => b.length - a.length)
+  const sorted = terms.toSorted((a, b) => b.length - a.length)
   const pattern = new RegExp(`(${sorted.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
   return content.replace(pattern, '\x1B[33m$1\x1B[0m')
 }

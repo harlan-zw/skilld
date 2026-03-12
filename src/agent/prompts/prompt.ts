@@ -80,10 +80,7 @@ function formatDocTree(files: string[]): string {
     const dir = dirname(f)
     dirs.set(dir, (dirs.get(dir) || 0) + 1)
   }
-  return [...dirs.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dir, count]) => `- \`${dir}/\` (${count} .md files)`)
-    .join('\n')
+  return dirs.entries().toSorted(([a], [b]) => a.localeCompare(b)).map(([dir, count]) => `- \`${dir}/\` (${count} .md files)`).join('\n')
 }
 
 function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs, skillDir, features, pkgFiles }: {
