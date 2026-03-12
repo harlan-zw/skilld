@@ -18,13 +18,6 @@ vi.mock('node:child_process', () => ({
 // Force fresh module load — _ghToken cache is module-level
 let mod: typeof import('../../src/sources/github-common')
 
-function setToken(token: string | null) {
-  // getGitHubToken caches in _ghToken; reset by reloading module
-  // Instead, mock spawnSync to return the desired token
-  mockSpawnSync.mockReturnValue({ stdout: token ?? '', status: token ? 0 : 1 })
-  // Force cache reset by re-importing (vitest dedupes, so we access internal state via side effect)
-}
-
 beforeEach(async () => {
   mockFetch.mockReset()
   mockFetchRaw.mockReset()
