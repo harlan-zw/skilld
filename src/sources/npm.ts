@@ -424,7 +424,7 @@ export function parseVersionSpecifier(
 
   // Fallback: strip semver prefix if it looks like one
   if (/^[\^~>=<\d]/.test(version))
-    return { name, version: version.replace(/^[\^~>=<]/, '') }
+    return { name, version: version.replace(/^[\^~>=<]+/, '') }
 
   // catalog: and workspace: specifiers - include with wildcard version
   // so the dep isn't silently dropped from state.deps
