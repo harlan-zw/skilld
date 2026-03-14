@@ -624,9 +624,10 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
     })
     writable.on('finish', () => {
       fileStream.end()
-      res()
     })
+    fileStream.on('close', () => res())
     writable.on('error', reject)
+    fileStream.on('error', reject)
 
     function pump() {
       reader.read().then(({ done, value }) => {
