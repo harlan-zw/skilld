@@ -22,7 +22,7 @@ export const codex = defineTarget({
   agent: 'codex',
   displayName: 'Codex',
   detectInstalled: () => existsSync(codexHome),
-  detectEnv: () => !!(process.env.CODEX_HOME || process.env.CODEX_SESSION),
+  detectEnv: () => !!process.env.CODEX_HOME,
   detectProject: cwd => existsSync(join(cwd, '.codex')),
   cli: 'codex',
   instructionFile: 'AGENTS.md',

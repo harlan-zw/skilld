@@ -21,7 +21,7 @@ export const githubCopilot = defineTarget({
   agent: 'github-copilot',
   displayName: 'GitHub Copilot',
   detectInstalled: () => existsSync(join(home, '.copilot')),
-  detectEnv: () => !!process.env.GITHUB_COPILOT_SESSION,
+  detectEnv: () => !!process.env.COPILOT_RUN_APP,
   detectProject: cwd => existsSync(join(cwd, '.github', 'copilot-instructions.md')),
   instructionFile: '.github/copilot-instructions.md',
 

@@ -22,7 +22,7 @@ export const cline = defineTarget({
   agent: 'cline',
   displayName: 'Cline',
   detectInstalled: () => existsSync(join(home, '.cline')),
-  detectEnv: () => !!process.env.CLINE_TASK_ID,
+  detectEnv: () => !!(process.env.CLINE_TASK_ID || process.env.CLINE_ACTIVE),
   detectProject: cwd => existsSync(join(cwd, '.cline')),
   instructionFile: '.clinerules',
 

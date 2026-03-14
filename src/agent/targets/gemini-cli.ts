@@ -21,7 +21,7 @@ export const geminiCli = defineTarget({
   agent: 'gemini-cli',
   displayName: 'Gemini CLI',
   detectInstalled: () => existsSync(join(home, '.gemini')),
-  detectEnv: () => !!(process.env.GEMINI_API_KEY && process.env.GEMINI_SESSION),
+  detectEnv: () => !!process.env.GEMINI_CLI,
   detectProject: cwd => existsSync(join(cwd, '.gemini')) || existsSync(join(cwd, 'AGENTS.md')),
   cli: 'gemini',
   instructionFile: 'GEMINI.md',

@@ -21,7 +21,7 @@ export const opencode = defineTarget({
   agent: 'opencode',
   displayName: 'OpenCode',
   detectInstalled: () => existsSync(join(configHome, 'opencode')),
-  detectEnv: () => !!process.env.OPENCODE_SESSION,
+  detectEnv: () => !!(process.env.OPENCODE_SESSION || process.env.OPENCODE_SESSION_ID),
   detectProject: cwd => existsSync(join(cwd, '.opencode')),
   instructionFile: 'AGENTS.md',
 

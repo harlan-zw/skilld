@@ -60,29 +60,33 @@ describe('agent/detect', () => {
       expect(detectTargetAgent()).toBe('cline')
     })
 
+    it('detects cline from CLINE_ACTIVE env', () => {
+      process.env.CLINE_ACTIVE = 'true'
+      expect(detectTargetAgent()).toBe('cline')
+    })
+
     it('detects codex from CODEX_HOME env', () => {
       process.env.CODEX_HOME = '/home/user/.codex'
       expect(detectTargetAgent()).toBe('codex')
     })
 
-    it('detects github-copilot from GITHUB_COPILOT_SESSION', () => {
-      process.env.GITHUB_COPILOT_SESSION = 'gh-123'
+    it('detects github-copilot from COPILOT_RUN_APP', () => {
+      process.env.COPILOT_RUN_APP = '1'
       expect(detectTargetAgent()).toBe('github-copilot')
     })
 
-    it('detects gemini-cli from GEMINI_API_KEY + GEMINI_SESSION', () => {
-      process.env.GEMINI_API_KEY = 'key'
-      process.env.GEMINI_SESSION = 'session'
+    it('detects gemini-cli from GEMINI_CLI env', () => {
+      process.env.GEMINI_CLI = '1'
       expect(detectTargetAgent()).toBe('gemini-cli')
-    })
-
-    it('does not detect gemini-cli from GEMINI_API_KEY alone', () => {
-      process.env.GEMINI_API_KEY = 'key'
-      expect(detectTargetAgent()).not.toBe('gemini-cli')
     })
 
     it('detects goose from GOOSE_SESSION', () => {
       process.env.GOOSE_SESSION = 'goose-123'
+      expect(detectTargetAgent()).toBe('goose')
+    })
+
+    it('detects goose from AGENT_SESSION_ID', () => {
+      process.env.AGENT_SESSION_ID = 'agent-123'
       expect(detectTargetAgent()).toBe('goose')
     })
 
@@ -93,6 +97,11 @@ describe('agent/detect', () => {
 
     it('detects opencode from OPENCODE_SESSION', () => {
       process.env.OPENCODE_SESSION = 'oc-123'
+      expect(detectTargetAgent()).toBe('opencode')
+    })
+
+    it('detects opencode from OPENCODE_SESSION_ID', () => {
+      process.env.OPENCODE_SESSION_ID = 'oc-456'
       expect(detectTargetAgent()).toBe('opencode')
     })
 
