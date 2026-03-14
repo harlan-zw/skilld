@@ -27,6 +27,58 @@ export function buildFrontmatter(fields: Record<string, string | number | boolea
   return lines.join('\n')
 }
 
+// ── Content Processing ──
+
+/** Check if body contains a code block */
+export function hasCodeBlock(text: string): boolean {
+  return /```[\s\S]*?```/.test(text) || /`[^`]+`/.test(text)
+}
+
+/** Noise patterns in comments — filter these out */
+export const COMMENT_NOISE_RE = /^(?:\+1|👍|same here|any update|bump|following|is there any progress|when will this|me too|i have the same|same issue|thanks|thank you)[\s!?.]*$/i
+
+/**
+ * Smart body truncation — preserves code blocks and error messages.
+ * Instead of slicing at a char limit, finds a safe break point.
+ */
+export function truncateBody(body: string, limit: number): string {
+  if (body.length <= limit)
+    return body
+
+  // Find code block boundaries so we don't cut mid-block
+  const codeBlockRe = /```[\s\S]*?```/g
+  let lastSafeEnd = limit
+  let match: RegExpExecArray | null
+
+  // eslint-disable-next-line no-cond-assign
+  while ((match = codeBlockRe.exec(body)) !== null) {
+    const blockStart = match.index
+    const blockEnd = blockStart + match[0].length
+
+    // If the limit falls inside a code block, move limit to after the block
+    // (if not too far) or before the block
+    if (blockStart < limit && blockEnd > limit) {
+      if (blockEnd <= limit + 500) {
+        // Block ends reasonably close — include it
+        lastSafeEnd = blockEnd
+      }
+      else {
+        // Block is too long — cut before it
+        lastSafeEnd = blockStart
+      }
+      break
+    }
+  }
+
+  // Try to break at a paragraph boundary
+  const slice = body.slice(0, lastSafeEnd)
+  const lastParagraph = slice.lastIndexOf('\n\n')
+  if (lastParagraph > lastSafeEnd * 0.6)
+    return `${slice.slice(0, lastParagraph)}\n\n...`
+
+  return `${slice}...`
+}
+
 // ── GitHub Auth ──
 
 let _ghToken: string | null | undefined

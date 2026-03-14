@@ -6,7 +6,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { mapInsert } from '../core/shared.ts'
-import { BOT_USERS, buildFrontmatter, isoDate } from './github-common.ts'
+import { BOT_USERS, buildFrontmatter, COMMENT_NOISE_RE, hasCodeBlock, isoDate, truncateBody } from './github-common.ts'
 import { isGhAvailable } from './issues.ts'
 
 /** Categories most useful for skill generation (in priority order) */
@@ -42,52 +42,6 @@ export interface GitHubDiscussion {
   isMaintainer?: boolean
   answer?: string
   topComments: DiscussionComment[]
-}
-
-/** Noise patterns in comments — filter these out */
-const COMMENT_NOISE_RE = /^(?:\+1|👍|same here|any update|bump|following|is there any progress|when will this|me too|i have the same|same issue|thanks|thank you)[\s!?.]*$/i
-
-/** Check if body contains a code block */
-function hasCodeBlock(text: string): boolean {
-  return /```[\s\S]*?```/.test(text) || /`[^`]+`/.test(text)
-}
-
-/**
- * Smart body truncation — preserves code blocks and error messages.
- * Instead of slicing at a char limit, finds a safe break point.
- */
-function truncateBody(body: string, limit: number): string {
-  if (body.length <= limit)
-    return body
-
-  // Find code block boundaries so we don't cut mid-block
-  const codeBlockRe = /```[\s\S]*?```/g
-  let lastSafeEnd = limit
-  let match: RegExpExecArray | null
-
-  // eslint-disable-next-line no-cond-assign
-  while ((match = codeBlockRe.exec(body)) !== null) {
-    const blockStart = match.index
-    const blockEnd = blockStart + match[0].length
-
-    if (blockStart < limit && blockEnd > limit) {
-      if (blockEnd <= limit + 500) {
-        lastSafeEnd = blockEnd
-      }
-      else {
-        lastSafeEnd = blockStart
-      }
-      break
-    }
-  }
-
-  // Try to break at a paragraph boundary
-  const slice = body.slice(0, lastSafeEnd)
-  const lastParagraph = slice.lastIndexOf('\n\n')
-  if (lastParagraph > lastSafeEnd * 0.6)
-    return `${slice.slice(0, lastParagraph)}\n\n...`
-
-  return `${slice}...`
 }
 
 /** Off-topic or spam title patterns — instant reject */
