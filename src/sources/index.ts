@@ -2,36 +2,32 @@
  * Doc resolver - resolves documentation for NPM packages
  */
 
-export { fetchBlogReleases } from './blog-releases.ts'
+export { fetchBlogReleases } from "./blog-releases.ts";
 
 // Crawl
-export { fetchCrawledDocs, toCrawlPattern } from './crawl.ts'
+export { fetchCrawledDocs, toCrawlPattern } from "./crawl.ts";
 
 // Discussions
-export type { GitHubDiscussion } from './discussions.ts'
+export type { GitHubDiscussion } from "./discussions.ts";
 
 export {
   fetchGitHubDiscussions,
   formatDiscussionAsMarkdown,
   generateDiscussionIndex,
-} from './discussions.ts'
+} from "./discussions.ts";
 // Docs
-export { generateDocsIndex } from './docs.ts'
+export { generateDocsIndex } from "./docs.ts";
 
 // Entries
-export type { EntryFile } from './entries.ts'
-export { resolveEntryFiles } from './entries.ts'
+export type { EntryFile } from "./entries.ts";
+export { resolveEntryFiles } from "./entries.ts";
 
 // Git skills
-export type { GitSkillSource, RemoteSkill } from './git-skills.ts'
-export {
-  fetchGitSkills,
-  parseGitSkillInput,
-  parseSkillFrontmatterName,
-} from './git-skills.ts'
+export type { GitSkillSource, RemoteSkill } from "./git-skills.ts";
+export { fetchGitSkills, parseGitSkillInput, parseSkillFrontmatterName } from "./git-skills.ts";
 
 // GitHub
-export type { GitDocsResult } from './github.ts'
+export type { GitDocsResult } from "./github.ts";
 
 export {
   fetchGitDocs,
@@ -43,16 +39,16 @@ export {
   MIN_GIT_DOCS,
   resolveGitHubRepo,
   validateGitDocsWithLlms,
-} from './github.ts'
+} from "./github.ts";
 // Issues
-export type { GitHubIssue } from './issues.ts'
+export type { GitHubIssue } from "./issues.ts";
 
 export {
   fetchGitHubIssues,
   formatIssueAsMarkdown,
   generateIssueIndex,
   isGhAvailable,
-} from './issues.ts'
+} from "./issues.ts";
 
 // llms.txt
 export {
@@ -62,9 +58,9 @@ export {
   fetchLlmsUrl,
   normalizeLlmsLinks,
   parseMarkdownLinks,
-} from './llms.ts'
+} from "./llms.ts";
 // NPM
-export type { LocalPackageInfo, ResolveOptions, ResolveStep } from './npm.ts'
+export type { LocalPackageInfo, ResolveOptions, ResolveStep } from "./npm.ts";
 
 export {
   fetchLatestVersion,
@@ -80,16 +76,31 @@ export {
   resolvePackageDocs,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
-} from './npm.ts'
+} from "./npm.ts";
 // Package registry
-export type { BlogPreset, BlogRelease, DocOverride } from './package-registry.ts'
+export type { BlogPreset, BlogRelease, DocOverride } from "./package-registry.ts";
 
-export { getBlogPreset, getCrawlUrl, getDocOverride, getFilePatterns, getPrereleaseChangelogRef, getRelatedPackages, getRepoEntry, getRepoKeyForPackage } from './package-registry.ts'
+export {
+  getBlogPreset,
+  getCrawlUrl,
+  getDocOverride,
+  getFilePatterns,
+  getPrereleaseChangelogRef,
+  getRelatedPackages,
+  getRepoEntry,
+  getRepoKeyForPackage,
+} from "./package-registry.ts";
 
 // Releases
-export type { GitHubRelease, ReleaseIndexOptions, SemVer } from './releases.ts'
+export type { GitHubRelease, ReleaseIndexOptions, SemVer } from "./releases.ts";
 
-export { compareSemver, fetchReleaseNotes, generateReleaseIndex, isPrerelease, parseSemver } from './releases.ts'
+export {
+  compareSemver,
+  fetchReleaseNotes,
+  generateReleaseIndex,
+  isPrerelease,
+  parseSemver,
+} from "./releases.ts";
 
 // Types
 export type {
@@ -101,7 +112,7 @@ export type {
   ResolveAttempt,
   ResolvedPackage,
   ResolveResult,
-} from './types.ts'
+} from "./types.ts";
 // Utils
 export {
   $fetch,
@@ -113,4 +124,4 @@ export {
   parseGitHubUrl,
   parsePackageSpec,
   verifyUrl,
-} from './utils.ts'
+} from "./utils.ts";

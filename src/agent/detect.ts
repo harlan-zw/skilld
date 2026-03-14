@@ -2,10 +2,10 @@
  * Agent detection - identify installed and active agents
  */
 
-import type { AgentType } from './types.ts'
-import { spawnSync } from 'node:child_process'
-import { isWindows } from 'std-env'
-import { agents } from './registry.ts'
+import type { AgentType } from "./types.ts";
+import { spawnSync } from "node:child_process";
+import { isWindows } from "std-env";
+import { agents } from "./registry.ts";
 
 /**
  * Detect which agents are installed on the system
@@ -13,7 +13,7 @@ import { agents } from './registry.ts'
 export function detectInstalledAgents(): AgentType[] {
   return Object.entries(agents)
     .filter(([_, config]) => config.detectInstalled())
-    .map(([type]) => type as AgentType)
+    .map(([type]) => type as AgentType);
 }
 
 /**
@@ -25,44 +25,39 @@ export function detectInstalledAgents(): AgentType[] {
  */
 export function detectTargetAgent(): AgentType | null {
   for (const [type, target] of Object.entries(agents)) {
-    if (target.detectEnv())
-      return type as AgentType
+    if (target.detectEnv()) return type as AgentType;
   }
 
-  const cwd = process.cwd()
+  const cwd = process.cwd();
   for (const [type, target] of Object.entries(agents)) {
-    if (target.detectProject(cwd))
-      return type as AgentType
+    if (target.detectProject(cwd)) return type as AgentType;
   }
 
-  return null
+  return null;
 }
 
 /**
  * Get the version of an agent's CLI (if available)
  */
 export function getAgentVersion(agentType: AgentType): string | null {
-  const agent = agents[agentType]
-  if (!agent.cli)
-    return null
+  const agent = agents[agentType];
+  if (!agent.cli) return null;
 
   try {
-    const result = spawnSync(agent.cli, ['--version'], {
-      encoding: 'utf-8',
+    const result = spawnSync(agent.cli, ["--version"], {
+      encoding: "utf-8",
       timeout: 3000,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      stdio: ["pipe", "pipe", "pipe"],
       shell: isWindows,
-    })
-    if (result.status !== 0)
-      return null
-    const output = (result.stdout || '').trim()
+    });
+    if (result.status !== 0) return null;
+    const output = (result.stdout || "").trim();
 
     // Extract version number from output
     // Common formats: "v1.2.3", "1.2.3", "cli 1.2.3", "name v1.2.3"
-    const match = output.match(/v?(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)/)
-    return match ? match[1] : output.split('\n')[0]
-  }
-  catch {
-    return null
+    const match = output.match(/v?(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)/);
+    return match ? match[1] : output.split("\n")[0];
+  } catch {
+    return null;
   }
 }

@@ -46,7 +46,7 @@ Run skilld in a project to generate skills for your dependencies through a simpl
 npx -y skilld
 ```
 
-__Requires Node 22.6.0 or higher.__
+**Requires Node 22.6.0 or higher.**
 
 Or add a specific package directly:
 
@@ -173,21 +173,21 @@ skilld config
 
 ### Commands
 
-| Command | Description |
-|---------|-------------|
-| `skilld` | Interactive wizard (first run) or status menu (existing skills) |
-| `skilld add <pkg...>` | Add skills for package(s), space or comma-separated |
-| `skilld update [pkg]` | Update outdated skills (all or specific) |
-| `skilld search <query>` | Search indexed docs (`-p` to filter by package) |
-| `skilld list`           | List installed skills (`--json` for machine-readable output) |
-| `skilld info`           | Show skill info and config |
-| `skilld config`         | Configure agent, model, preferences |
-| `skilld install`        | Restore references from lockfile |
-| `skilld remove`         | Remove installed skills |
-| `skilld uninstall`      | Remove all skilld data |
-| `skilld cache`          | Cache management (clean expired LLM cache entries) |
-| `skilld eject <pkg>`    | Eject skill as portable directory (no symlinks) |
-| `skilld assemble [dir]` | Merge LLM output files back into SKILL.md (auto-discovers) |
+| Command                 | Description                                                     |
+| ----------------------- | --------------------------------------------------------------- |
+| `skilld`                | Interactive wizard (first run) or status menu (existing skills) |
+| `skilld add <pkg...>`   | Add skills for package(s), space or comma-separated             |
+| `skilld update [pkg]`   | Update outdated skills (all or specific)                        |
+| `skilld search <query>` | Search indexed docs (`-p` to filter by package)                 |
+| `skilld list`           | List installed skills (`--json` for machine-readable output)    |
+| `skilld info`           | Show skill info and config                                      |
+| `skilld config`         | Configure agent, model, preferences                             |
+| `skilld install`        | Restore references from lockfile                                |
+| `skilld remove`         | Remove installed skills                                         |
+| `skilld uninstall`      | Remove all skilld data                                          |
+| `skilld cache`          | Cache management (clean expired LLM cache entries)              |
+| `skilld eject <pkg>`    | Eject skill as portable directory (no symlinks)                 |
+| `skilld assemble [dir]` | Merge LLM output files back into SKILL.md (auto-discovers)      |
 
 ### Works Without an Agent CLI
 
@@ -224,30 +224,30 @@ Share via `skilld add owner/repo` — consumers get fully functional skills with
 
 ### CLI Options
 
-| Option | Alias | Default | Description |
-|--------|-------|---------|-------------|
-| `--global` | `-g` | `false` | Install globally to `~/<agent>/skills` |
-| `--agent` | `-a` | auto-detect | Target specific agent (claude-code, cursor, etc.) |
-| `--yes` | `-y` | `false` | Skip prompts, use defaults |
-| `--force` | `-f` | `false` | Ignore all caches, re-fetch docs and regenerate |
-| `--model`      | `-m` | config default | LLM model for skill generation (sonnet, haiku, opus, etc.) |
-| `--name`       | `-n` |                | Custom skill directory name (eject only) |
-| `--out`        | `-o` |                | Output directory path override (eject only) |
-| `--from`       |      |                | Collect releases/issues/discussions from this date (YYYY-MM-DD, eject only) |
-| `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
+| Option     | Alias | Default        | Description                                                                 |
+| ---------- | ----- | -------------- | --------------------------------------------------------------------------- |
+| `--global` | `-g`  | `false`        | Install globally to `~/<agent>/skills`                                      |
+| `--agent`  | `-a`  | auto-detect    | Target specific agent (claude-code, cursor, etc.)                           |
+| `--yes`    | `-y`  | `false`        | Skip prompts, use defaults                                                  |
+| `--force`  | `-f`  | `false`        | Ignore all caches, re-fetch docs and regenerate                             |
+| `--model`  | `-m`  | config default | LLM model for skill generation (sonnet, haiku, opus, etc.)                  |
+| `--name`   | `-n`  |                | Custom skill directory name (eject only)                                    |
+| `--out`    | `-o`  |                | Output directory path override (eject only)                                 |
+| `--from`   |       |                | Collect releases/issues/discussions from this date (YYYY-MM-DD, eject only) |
+| `--debug`  |       | `false`        | Save raw LLM output to logs/ for each section                               |
 
 ## The Landscape
 
 Several approaches exist for steering agent knowledge. Each fills a different niche:
 
-| Approach | Versioned | Curated | No Opt-in | Local | Any LLM |
-|:---------|:---------:|:-------:|:---------:|:-----:|:-------:|
-| **Manual rules** | ✗ | ✓ | ✓ | ✓ | ✓ |
-| **llms.txt** | ~ | ✗ | ✗ | ✗ | ✓ |
-| **MCP servers** | ✓ | ✗ | ✗ | ✗ | ✗ |
-| **skills.sh** | ✗ | ~ | ✓ | ✗ | ✗ |
-| **skills-npm** | ✓ | ✓ | ✗ | ✓ | ✗ |
-| **skilld** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Approach         | Versioned | Curated | No Opt-in | Local | Any LLM |
+| :--------------- | :-------: | :-----: | :-------: | :---: | :-----: |
+| **Manual rules** |     ✗     |    ✓    |     ✓     |   ✓   |    ✓    |
+| **llms.txt**     |     ~     |    ✗    |     ✗     |   ✗   |    ✓    |
+| **MCP servers**  |     ✓     |    ✗    |     ✗     |   ✗   |    ✗    |
+| **skills.sh**    |     ✗     |    ~    |     ✓     |   ✗   |    ✗    |
+| **skills-npm**   |     ✓     |    ✓    |     ✗     |   ✓   |    ✗    |
+| **skilld**       |     ✓     |    ✓    |     ✓     |   ✓   |    ✓    |
 
 > **Versioned** — tied to your installed package version. **Curated** — distilled best practices, not raw docs. **No Opt-in** — works without the package author doing anything. **Local** — runs on your machine, no external service dependency. **Any LLM** — works with any LLM, not just agent CLIs.
 

@@ -1,3 +1,3 @@
-import { describePreset } from './run-preset'
+import { describePreset } from "./run-preset";
 
-describePreset('cross-framework')
+describePreset("cross-framework");

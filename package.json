@@ -1,38 +1,28 @@
 {
   "name": "skilld",
-  "type": "module",
   "version": "1.2.1",
-  "packageManager": "pnpm@10.32.1",
   "description": "Generate AI agent skills from npm package documentation",
+  "keywords": [
+    "agent",
+    "ai",
+    "claude",
+    "codex",
+    "cursor",
+    "documentation",
+    "llm",
+    "npm",
+    "skills"
+  ],
+  "license": "MIT",
   "author": {
     "name": "Harlan Wilton",
     "email": "harlan@harlanzw.com",
     "url": "https://harlanzw.com/"
   },
-  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/harlan-zw/skilld"
   },
-  "keywords": [
-    "ai",
-    "agent",
-    "skills",
-    "npm",
-    "documentation",
-    "claude",
-    "llm",
-    "cursor",
-    "codex"
-  ],
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
-    }
-  },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
   "bin": {
     "skilld": "./dist/cli.mjs"
   },
@@ -40,14 +30,20 @@
     "dist",
     "skills"
   ],
-  "engines": {
-    "node": ">=22.6.0"
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
   },
   "scripts": {
     "build": "obuild",
     "dev:prepare": "obuild --stub",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "oxlint . && oxfmt --check .",
+    "lint:fix": "oxlint . --fix && oxfmt .",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
@@ -83,14 +79,19 @@
     "unist-util-visit": "catalog:deps"
   },
   "devDependencies": {
-    "@antfu/eslint-config": "catalog:dev-lint",
     "@types/node": "catalog:dev-build",
     "@types/semver": "catalog:",
     "@vitest/coverage-v8": "catalog:dev-test",
     "bumpp": "catalog:",
     "evalite": "catalog:dev-test",
     "obuild": "catalog:dev-build",
+    "oxfmt": "catalog:dev-lint",
+    "oxlint": "catalog:dev-lint",
     "tsx": "catalog:",
     "vitest": "catalog:dev-test"
-  }
+  },
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "packageManager": "pnpm@10.32.1"
 }

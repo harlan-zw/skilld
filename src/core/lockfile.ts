@@ -1,157 +1,159 @@
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'pathe'
-import { parseFrontmatter } from './markdown.ts'
-import { yamlEscape, yamlParseKV } from './yaml.ts'
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { join } from "pathe";
+import { parseFrontmatter } from "./markdown.ts";
+import { yamlEscape, yamlParseKV } from "./yaml.ts";
 
 export interface SkillInfo {
-  packageName?: string
-  version?: string
+  packageName?: string;
+  version?: string;
   /** All tracked packages as comma-separated "name@version" pairs (multi-package skills) */
-  packages?: string
-  repo?: string
-  source?: string
-  syncedAt?: string
-  generator?: string
+  packages?: string;
+  repo?: string;
+  source?: string;
+  syncedAt?: string;
+  generator?: string;
   /** Skill path within repo (git-sourced skills) */
-  path?: string
+  path?: string;
   /** Git ref tracked for updates */
-  ref?: string
+  ref?: string;
   /** Git commit SHA at install time */
-  commit?: string
+  commit?: string;
 }
 
-export function parsePackages(packages?: string): Array<{ name: string, version: string }> {
-  if (!packages)
-    return []
-  return packages.split(',').map((s) => {
-    const trimmed = s.trim()
-    const atIdx = trimmed.lastIndexOf('@')
-    if (atIdx <= 0)
-      return { name: trimmed, version: '' }
-    return { name: trimmed.slice(0, atIdx), version: trimmed.slice(atIdx + 1) }
-  }).filter(p => p.name)
+export function parsePackages(packages?: string): Array<{ name: string; version: string }> {
+  if (!packages) return [];
+  return packages
+    .split(",")
+    .map((s) => {
+      const trimmed = s.trim();
+      const atIdx = trimmed.lastIndexOf("@");
+      if (atIdx <= 0) return { name: trimmed, version: "" };
+      return { name: trimmed.slice(0, atIdx), version: trimmed.slice(atIdx + 1) };
+    })
+    .filter((p) => p.name);
 }
 
-export function serializePackages(pkgs: Array<{ name: string, version: string }>): string {
-  return pkgs.map(p => `${p.name}@${p.version}`).join(', ')
+export function serializePackages(pkgs: Array<{ name: string; version: string }>): string {
+  return pkgs.map((p) => `${p.name}@${p.version}`).join(", ");
 }
 
 export interface SkilldLock {
-  skills: Record<string, SkillInfo>
+  skills: Record<string, SkillInfo>;
 }
 
-const SKILL_FM_KEYS: (keyof SkillInfo)[] = ['packageName', 'version', 'packages', 'repo', 'source', 'syncedAt', 'generator', 'path', 'ref', 'commit']
+const SKILL_FM_KEYS: (keyof SkillInfo)[] = [
+  "packageName",
+  "version",
+  "packages",
+  "repo",
+  "source",
+  "syncedAt",
+  "generator",
+  "path",
+  "ref",
+  "commit",
+];
 
 function isSkillInfoKey(key: string): key is keyof SkillInfo {
-  return (SKILL_FM_KEYS as readonly string[]).includes(key)
+  return (SKILL_FM_KEYS as readonly string[]).includes(key);
 }
 
 export function parseSkillFrontmatter(skillPath: string): SkillInfo | null {
-  if (!existsSync(skillPath))
-    return null
-  const content = readFileSync(skillPath, 'utf-8')
-  const fm = parseFrontmatter(content)
-  if (Object.keys(fm).length === 0)
-    return null
+  if (!existsSync(skillPath)) return null;
+  const content = readFileSync(skillPath, "utf-8");
+  const fm = parseFrontmatter(content);
+  if (Object.keys(fm).length === 0) return null;
 
-  const info: SkillInfo = {}
+  const info: SkillInfo = {};
   for (const key of SKILL_FM_KEYS) {
-    if (fm[key])
-      info[key] = fm[key]
+    if (fm[key]) info[key] = fm[key];
   }
-  return info
+  return info;
 }
 
 export function readLock(skillsDir: string): SkilldLock | null {
-  const lockPath = join(skillsDir, 'skilld-lock.yaml')
-  if (!existsSync(lockPath))
-    return null
-  const content = readFileSync(lockPath, 'utf-8')
+  const lockPath = join(skillsDir, "skilld-lock.yaml");
+  if (!existsSync(lockPath)) return null;
+  const content = readFileSync(lockPath, "utf-8");
 
-  const skills: Record<string, SkillInfo> = {}
-  let currentSkill: string | null = null
+  const skills: Record<string, SkillInfo> = {};
+  let currentSkill: string | null = null;
 
-  for (const line of content.split('\n')) {
-    const skillMatch = line.match(/^ {2}(\S+):$/)
+  for (const line of content.split("\n")) {
+    const skillMatch = line.match(/^ {2}(\S+):$/);
     if (skillMatch) {
-      currentSkill = skillMatch[1]
-      skills[currentSkill] = {}
-      continue
+      currentSkill = skillMatch[1];
+      skills[currentSkill] = {};
+      continue;
     }
-    if (currentSkill && line.startsWith('    ')) {
-      const kv = yamlParseKV(line)
-      if (kv && isSkillInfoKey(kv[0]))
-        skills[currentSkill]![kv[0]] = kv[1]
+    if (currentSkill && line.startsWith("    ")) {
+      const kv = yamlParseKV(line);
+      if (kv && isSkillInfoKey(kv[0])) skills[currentSkill]![kv[0]] = kv[1];
     }
   }
-  return { skills }
+  return { skills };
 }
 
 function serializeLock(lock: SkilldLock): string {
-  let yaml = 'skills:\n'
+  let yaml = "skills:\n";
   for (const [name, skill] of Object.entries(lock.skills)) {
-    yaml += `  ${name}:\n`
+    yaml += `  ${name}:\n`;
     for (const key of SKILL_FM_KEYS) {
-      if (skill[key])
-        yaml += `    ${key}: ${yamlEscape(skill[key])}\n`
+      if (skill[key]) yaml += `    ${key}: ${yamlEscape(skill[key])}\n`;
     }
   }
-  return yaml
+  return yaml;
 }
 
 export function writeLock(skillsDir: string, skillName: string, info: SkillInfo): void {
-  const lockPath = join(skillsDir, 'skilld-lock.yaml')
-  let lock: SkilldLock = { skills: {} }
+  const lockPath = join(skillsDir, "skilld-lock.yaml");
+  let lock: SkilldLock = { skills: {} };
   if (existsSync(lockPath)) {
-    lock = readLock(skillsDir) || { skills: {} }
+    lock = readLock(skillsDir) || { skills: {} };
   }
 
-  const existing = lock.skills[skillName]
+  const existing = lock.skills[skillName];
   if (existing && info.packageName) {
     // Merge packages list
-    const existingPkgs = parsePackages(existing.packages)
+    const existingPkgs = parsePackages(existing.packages);
     // Also include existing primary if not yet in packages list
-    if (existing.packageName && !existingPkgs.some(p => p.name === existing.packageName)) {
-      existingPkgs.unshift({ name: existing.packageName, version: existing.version || '' })
+    if (existing.packageName && !existingPkgs.some((p) => p.name === existing.packageName)) {
+      existingPkgs.unshift({ name: existing.packageName, version: existing.version || "" });
     }
     // Add/update new package
-    const idx = existingPkgs.findIndex(p => p.name === info.packageName)
+    const idx = existingPkgs.findIndex((p) => p.name === info.packageName);
     if (idx >= 0) {
-      existingPkgs[idx]!.version = info.version || ''
+      existingPkgs[idx]!.version = info.version || "";
+    } else {
+      existingPkgs.push({ name: info.packageName, version: info.version || "" });
     }
-    else {
-      existingPkgs.push({ name: info.packageName, version: info.version || '' })
-    }
-    info.packages = serializePackages(existingPkgs)
+    info.packages = serializePackages(existingPkgs);
     // Keep primary as first package
-    info.packageName = existingPkgs[0]!.name
-    info.version = existingPkgs[0]!.version
+    info.packageName = existingPkgs[0]!.name;
+    info.version = existingPkgs[0]!.version;
     // Preserve fields from existing entry that aren't in new info
-    if (!info.repo && existing.repo)
-      info.repo = existing.repo
-    if (!info.source && existing.source)
-      info.source = existing.source
-    if (!info.generator && existing.generator)
-      info.generator = existing.generator
+    if (!info.repo && existing.repo) info.repo = existing.repo;
+    if (!info.source && existing.source) info.source = existing.source;
+    if (!info.generator && existing.generator) info.generator = existing.generator;
   }
 
-  lock.skills[skillName] = info
-  writeFileSync(lockPath, serializeLock(lock))
+  lock.skills[skillName] = info;
+  writeFileSync(lockPath, serializeLock(lock));
 }
 
 /**
  * Merge multiple lockfiles, preferring the most recently synced entry per skill.
  */
 export function mergeLocks(locks: SkilldLock[]): SkilldLock {
-  const merged: Record<string, SkillInfo> = {}
+  const merged: Record<string, SkillInfo> = {};
   for (const lock of locks) {
     for (const [name, info] of Object.entries(lock.skills)) {
-      const existing = merged[name]
+      const existing = merged[name];
       if (!existing || (info.syncedAt && (!existing.syncedAt || info.syncedAt > existing.syncedAt)))
-        merged[name] = info
+        merged[name] = info;
     }
   }
-  return { skills: merged }
+  return { skills: merged };
 }
 
 /**
@@ -160,30 +162,27 @@ export function mergeLocks(locks: SkilldLock[]): SkilldLock {
  */
 export function syncLockfilesToDirs(sourceLock: SkilldLock, dirs: string[]): void {
   for (const dir of dirs) {
-    const lockPath = join(dir, 'skilld-lock.yaml')
-    if (!existsSync(lockPath))
-      continue
-    const existing = readLock(dir)
-    if (!existing)
-      continue
+    const lockPath = join(dir, "skilld-lock.yaml");
+    if (!existsSync(lockPath)) continue;
+    const existing = readLock(dir);
+    if (!existing) continue;
     // Merge source into existing
-    const merged = mergeLocks([existing, sourceLock])
-    writeFileSync(lockPath, serializeLock(merged))
+    const merged = mergeLocks([existing, sourceLock]);
+    writeFileSync(lockPath, serializeLock(merged));
   }
 }
 
 export function removeLockEntry(skillsDir: string, skillName: string): void {
-  const lockPath = join(skillsDir, 'skilld-lock.yaml')
-  const lock = readLock(skillsDir)
-  if (!lock)
-    return
+  const lockPath = join(skillsDir, "skilld-lock.yaml");
+  const lock = readLock(skillsDir);
+  if (!lock) return;
 
-  delete lock.skills[skillName]
+  delete lock.skills[skillName];
 
   if (Object.keys(lock.skills).length === 0) {
-    unlinkSync(lockPath)
-    return
+    unlinkSync(lockPath);
+    return;
   }
 
-  writeFileSync(lockPath, serializeLock(lock))
+  writeFileSync(lockPath, serializeLock(lock));
 }

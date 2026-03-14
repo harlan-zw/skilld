@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/oxlint/configuration_schema.json",
+  "plugins": ["unicorn", "typescript", "oxc"],
+  "rules": {},
+  "ignorePatterns": ["CLAUDE.md", "docs/**", ".claude/skills/**", "test/fixtures/**"]
+}

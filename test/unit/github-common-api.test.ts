@@ -1,94 +1,93 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockFetchRaw = vi.fn()
-const mockFetch = vi.fn()
+const mockFetchRaw = vi.fn();
+const mockFetch = vi.fn();
 
-vi.mock('ofetch', () => ({
+vi.mock("ofetch", () => ({
   ofetch: {
     create: () => Object.assign(mockFetch, { raw: mockFetchRaw }),
   },
-}))
+}));
 
 // Mock spawnSync to control getGitHubToken's return value
-const mockSpawnSync = vi.fn(() => ({ stdout: '', status: 1 }))
-vi.mock('node:child_process', () => ({
+const mockSpawnSync = vi.fn(() => ({ stdout: "", status: 1 }));
+vi.mock("node:child_process", () => ({
   spawnSync: (...args: any[]) => mockSpawnSync(...args),
-}))
+}));
 
 // Force fresh module load — _ghToken cache is module-level
-let mod: typeof import('../../src/sources/github-common')
+let mod: typeof import("../../src/sources/github-common");
 
 beforeEach(async () => {
-  mockFetch.mockReset()
-  mockFetchRaw.mockReset()
-  mockSpawnSync.mockReset()
-  mockSpawnSync.mockReturnValue({ stdout: '', status: 1 })
+  mockFetch.mockReset();
+  mockFetchRaw.mockReset();
+  mockSpawnSync.mockReset();
+  mockSpawnSync.mockReturnValue({ stdout: "", status: 1 });
   // Re-import to reset _ghToken cache
-  vi.resetModules()
+  vi.resetModules();
   // Re-mock after resetModules
-  vi.doMock('ofetch', () => ({
+  vi.doMock("ofetch", () => ({
     ofetch: {
       create: () => Object.assign(mockFetch, { raw: mockFetchRaw }),
     },
-  }))
-  vi.doMock('node:child_process', () => ({
+  }));
+  vi.doMock("node:child_process", () => ({
     spawnSync: (...args: any[]) => mockSpawnSync(...args),
-  }))
-  mod = await import('../../src/sources/github-common')
-})
+  }));
+  mod = await import("../../src/sources/github-common");
+});
 
-describe('ghApi', () => {
-  it('returns null when no token available', async () => {
-    const result = await mod.ghApi('repos/owner/repo')
-    expect(result).toBeNull()
-    expect(mockFetch).not.toHaveBeenCalled()
-  })
+describe("ghApi", () => {
+  it("returns null when no token available", async () => {
+    const result = await mod.ghApi("repos/owner/repo");
+    expect(result).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
 
-  it('fetches with auth header when token available', async () => {
-    mockSpawnSync.mockReturnValue({ stdout: 'ghs_abc\n' })
-    mockFetch.mockResolvedValueOnce({ homepage: 'https://example.com' })
+  it("fetches with auth header when token available", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "ghs_abc\n" });
+    mockFetch.mockResolvedValueOnce({ homepage: "https://example.com" });
 
-    const result = await mod.ghApi<{ homepage: string }>('repos/owner/repo')
+    const result = await mod.ghApi<{ homepage: string }>("repos/owner/repo");
 
-    expect(result).toEqual({ homepage: 'https://example.com' })
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://api.github.com/repos/owner/repo',
-      { headers: { Authorization: 'token ghs_abc' } },
-    )
-  })
+    expect(result).toEqual({ homepage: "https://example.com" });
+    expect(mockFetch).toHaveBeenCalledWith("https://api.github.com/repos/owner/repo", {
+      headers: { Authorization: "token ghs_abc" },
+    });
+  });
 
-  it('returns null on fetch error', async () => {
-    mockSpawnSync.mockReturnValue({ stdout: 'ghs_abc\n' })
-    mockFetch.mockRejectedValueOnce(new Error('500'))
+  it("returns null on fetch error", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "ghs_abc\n" });
+    mockFetch.mockRejectedValueOnce(new Error("500"));
 
-    const result = await mod.ghApi('repos/owner/repo')
-    expect(result).toBeNull()
-  })
-})
+    const result = await mod.ghApi("repos/owner/repo");
+    expect(result).toBeNull();
+  });
+});
 
-describe('ghApiPaginated', () => {
-  it('returns empty array when no token available', async () => {
-    const result = await mod.ghApiPaginated('repos/owner/repo/releases')
-    expect(result).toEqual([])
-    expect(mockFetchRaw).not.toHaveBeenCalled()
-  })
+describe("ghApiPaginated", () => {
+  it("returns empty array when no token available", async () => {
+    const result = await mod.ghApiPaginated("repos/owner/repo/releases");
+    expect(result).toEqual([]);
+    expect(mockFetchRaw).not.toHaveBeenCalled();
+  });
 
-  it('fetches single page', async () => {
-    mockSpawnSync.mockReturnValue({ stdout: 'ghs_abc\n' })
+  it("fetches single page", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "ghs_abc\n" });
     mockFetchRaw.mockResolvedValueOnce({
       ok: true,
       _data: [{ id: 1 }, { id: 2 }],
       headers: new Headers(),
-    })
+    });
 
-    const result = await mod.ghApiPaginated<{ id: number }>('repos/o/r/releases')
+    const result = await mod.ghApiPaginated<{ id: number }>("repos/o/r/releases");
 
-    expect(result).toEqual([{ id: 1 }, { id: 2 }])
-    expect(mockFetchRaw).toHaveBeenCalledTimes(1)
-  })
+    expect(result).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(mockFetchRaw).toHaveBeenCalledTimes(1);
+  });
 
-  it('follows Link next header across pages', async () => {
-    mockSpawnSync.mockReturnValue({ stdout: 'ghs_abc\n' })
+  it("follows Link next header across pages", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "ghs_abc\n" });
     mockFetchRaw
       .mockResolvedValueOnce({
         ok: true,
@@ -108,21 +107,21 @@ describe('ghApiPaginated', () => {
         ok: true,
         _data: [{ id: 3 }],
         headers: new Headers(),
-      })
+      });
 
-    const result = await mod.ghApiPaginated<{ id: number }>('repos/o/r/releases')
+    const result = await mod.ghApiPaginated<{ id: number }>("repos/o/r/releases");
 
-    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }])
-    expect(mockFetchRaw).toHaveBeenCalledTimes(3)
+    expect(result).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    expect(mockFetchRaw).toHaveBeenCalledTimes(3);
     expect(mockFetchRaw).toHaveBeenNthCalledWith(
       2,
-      'https://api.github.com/repos/o/r/releases?page=2',
-      expect.objectContaining({ headers: { Authorization: 'token ghs_abc' } }),
-    )
-  })
+      "https://api.github.com/repos/o/r/releases?page=2",
+      expect.objectContaining({ headers: { Authorization: "token ghs_abc" } }),
+    );
+  });
 
-  it('stops on fetch error mid-pagination and returns partial results', async () => {
-    mockSpawnSync.mockReturnValue({ stdout: 'ghs_abc\n' })
+  it("stops on fetch error mid-pagination and returns partial results", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "ghs_abc\n" });
     mockFetchRaw
       .mockResolvedValueOnce({
         ok: true,
@@ -131,22 +130,22 @@ describe('ghApiPaginated', () => {
           link: '<https://api.github.com/repos/o/r/releases?page=2>; rel="next"',
         }),
       })
-      .mockRejectedValueOnce(new Error('network error'))
+      .mockRejectedValueOnce(new Error("network error"));
 
-    const result = await mod.ghApiPaginated<{ id: number }>('repos/o/r/releases')
+    const result = await mod.ghApiPaginated<{ id: number }>("repos/o/r/releases");
 
-    expect(result).toEqual([{ id: 1 }])
-  })
+    expect(result).toEqual([{ id: 1 }]);
+  });
 
-  it('stops when response data is not an array', async () => {
-    mockSpawnSync.mockReturnValue({ stdout: 'ghs_abc\n' })
+  it("stops when response data is not an array", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "ghs_abc\n" });
     mockFetchRaw.mockResolvedValueOnce({
       ok: true,
-      _data: { message: 'not found' },
+      _data: { message: "not found" },
       headers: new Headers(),
-    })
+    });
 
-    const result = await mod.ghApiPaginated('repos/o/r/releases')
-    expect(result).toEqual([])
-  })
-})
+    const result = await mod.ghApiPaginated("repos/o/r/releases");
+    expect(result).toEqual([]);
+  });
+});

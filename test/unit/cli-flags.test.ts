@@ -1,5 +1,5 @@
-import { parseArgs } from 'citty'
-import { describe, expect, it } from 'vitest'
+import { parseArgs } from "citty";
+import { describe, expect, it } from "vitest";
 
 /**
  * Validates that CLI flag definitions parse correctly via citty.
@@ -10,45 +10,45 @@ import { describe, expect, it } from 'vitest'
  *
  * The fix: define as `search` (default true) so `--no-search` flips it to false.
  */
-describe('eject --no-search flag', () => {
+describe("eject --no-search flag", () => {
   const ejectArgs = {
-    package: { type: 'positional' as const },
-    search: { type: 'boolean' as const, default: true },
-    yes: { type: 'boolean' as const, default: false },
-    force: { type: 'boolean' as const, default: false },
-  }
+    package: { type: "positional" as const },
+    search: { type: "boolean" as const, default: true },
+    yes: { type: "boolean" as const, default: false },
+    force: { type: "boolean" as const, default: false },
+  };
 
-  it('defaults search to true when flag is omitted', () => {
-    const args = parseArgs(['vue', '--yes'], ejectArgs)
-    expect(args.search).toBe(true)
-  })
+  it("defaults search to true when flag is omitted", () => {
+    const args = parseArgs(["vue", "--yes"], ejectArgs);
+    expect(args.search).toBe(true);
+  });
 
-  it('sets search to false when --no-search is passed', () => {
-    const args = parseArgs(['vue', '--no-search', '--yes'], ejectArgs)
-    expect(args.search).toBe(false)
-    expect(!args.search).toBe(true) // noSearch value passed to syncCommand
-  })
+  it("sets search to false when --no-search is passed", () => {
+    const args = parseArgs(["vue", "--no-search", "--yes"], ejectArgs);
+    expect(args.search).toBe(false);
+    expect(!args.search).toBe(true); // noSearch value passed to syncCommand
+  });
 
-  it('keeps search true when --search is explicitly passed', () => {
-    const args = parseArgs(['vue', '--search', '--yes'], ejectArgs)
-    expect(args.search).toBe(true)
-  })
-})
+  it("keeps search true when --search is explicitly passed", () => {
+    const args = parseArgs(["vue", "--search", "--yes"], ejectArgs);
+    expect(args.search).toBe(true);
+  });
+});
 
 /**
  * Regression guard: a flag named `no-X` with default false is always false
  * in citty, regardless of whether `--no-X` is passed. This test documents
  * the broken pattern so it's never reintroduced.
  */
-describe('citty --no-X flag gotcha', () => {
-  it('no-search flag (default false) is always false — broken pattern', () => {
+describe("citty --no-X flag gotcha", () => {
+  it("no-search flag (default false) is always false — broken pattern", () => {
     const brokenArgs = {
-      'no-search': { type: 'boolean' as const, default: false },
-    }
-    const withFlag = parseArgs(['--no-search'], brokenArgs)
-    const withoutFlag = parseArgs([], brokenArgs)
+      "no-search": { type: "boolean" as const, default: false },
+    };
+    const withFlag = parseArgs(["--no-search"], brokenArgs);
+    const withoutFlag = parseArgs([], brokenArgs);
     // Both are false — the flag has no effect
-    expect(withFlag['no-search']).toBe(false)
-    expect(withoutFlag['no-search']).toBe(false)
-  })
-})
+    expect(withFlag["no-search"]).toBe(false);
+    expect(withoutFlag["no-search"]).toBe(false);
+  });
+});
