@@ -306,8 +306,8 @@ export function listCached(): CachedPackage[] {
   return readdirSync(REFERENCES_DIR)
     .filter(name => name.includes('@'))
     .map((dir) => {
-      const [name, version] = dir.split('@')
-      return { name: name!, version: version!, dir: join(REFERENCES_DIR, dir) }
+      const atIdx = dir.lastIndexOf('@')
+      return { name: dir.slice(0, atIdx), version: dir.slice(atIdx + 1), dir: join(REFERENCES_DIR, dir) }
     })
 }
 
