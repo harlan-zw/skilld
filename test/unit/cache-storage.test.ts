@@ -96,6 +96,19 @@ describe('cache/storage', () => {
       expect(result[1]).toMatchObject({ name: 'nuxt', version: '3.10' })
     })
 
+    it('parses scoped package entries', async () => {
+      const { existsSync, readdirSync } = await import('node:fs')
+      const { listCached } = await import('../../src/cache/storage')
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readdirSync).mockReturnValue(['@vue/reactivity@3.5.0', '@nuxtjs/tailwindcss@6.12.0'] as any)
+
+      const result = listCached()
+
+      expect(result).toHaveLength(2)
+      expect(result[0]).toMatchObject({ name: '@vue/reactivity', version: '3.5.0' })
+      expect(result[1]).toMatchObject({ name: '@nuxtjs/tailwindcss', version: '6.12.0' })
+    })
+
     it('filters entries without @', async () => {
       const { existsSync, readdirSync } = await import('node:fs')
       const { listCached } = await import('../../src/cache/storage')
