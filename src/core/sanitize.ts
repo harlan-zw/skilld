@@ -176,13 +176,10 @@ export function sanitizeMarkdown(content: string): string {
   // Layer 1: Strip zero-width characters (global, including in code blocks)
   let result = content.replace(ZERO_WIDTH_RE, '')
 
-  // Layer 2: Strip HTML comments (global, including in code blocks)
-  result = result.replace(HTML_COMMENT_RE, '')
-
-  // Layer 3a: Strip agent directive tags globally (never legitimate, even in code blocks)
+  // Layer 2: Strip agent directive tags globally (never legitimate, even in code blocks)
   result = stripTags(result, AGENT_DIRECTIVE_TAGS)
 
-  // Layers 3b-8: Only outside fenced code blocks
+  // Layers 3-9: Only outside fenced code blocks
   result = processOutsideCodeBlocks(result, (text) => {
     // Protect inline code spans from tag stripping (e.g. `<script setup>` in Vue docs)
     const inlineCodeSpans: string[] = []
@@ -192,28 +189,32 @@ export function sanitizeMarkdown(content: string): string {
       return `\x00IC${idx}\x00`
     })
 
-    // Layer 3b: Decode entities + strip remaining dangerous tags (HTML + entity-encoded agent directives)
+    // Layer 3: Strip HTML comments (outside code blocks where they're hidden from review;
+    // inside code blocks they render as visible text and are legitimate documentation)
+    t = t.replace(HTML_COMMENT_RE, '')
+
+    // Layer 4: Decode entities + strip remaining dangerous tags (HTML + entity-encoded agent directives)
     t = decodeAngleBracketEntities(t)
     t = stripTags(t, [...AGENT_DIRECTIVE_TAGS, ...DANGEROUS_HTML_TAGS])
 
-    // Layer 4: Strip external images (exfil via query params)
+    // Layer 5: Strip external images (exfil via query params)
     t = t.replace(EXTERNAL_IMAGE_RE, '')
 
-    // Layer 5: Convert external links to plain text
+    // Layer 6: Convert external links to plain text
     t = t.replace(EXTERNAL_LINK_RE, '$1')
 
-    // Layer 6: Strip dangerous protocols (raw and URL-encoded)
+    // Layer 7: Strip dangerous protocols (raw and URL-encoded)
     t = t.replace(DANGEROUS_PROTOCOL_RE, '')
     t = t.replace(DANGEROUS_PROTOCOL_ENCODED_RE, '')
 
-    // Layer 7: Strip directive-style lines
+    // Layer 8: Strip directive-style lines
     t = t.replace(DIRECTIVE_LINE_RE, '')
 
-    // Layer 8: Strip encoded payloads
+    // Layer 9: Strip encoded payloads
     t = t.replace(BASE64_BLOB_RE, '')
     t = t.replace(UNICODE_ESCAPE_SPAM_RE, '')
 
-    // Layer 9: Strip emoji (token-inefficient, distort embeddings, semantically ambiguous)
+    // Layer 10: Strip emoji (token-inefficient, distort embeddings, semantically ambiguous)
     t = t.replace(EMOJI_RE, '')
 
     // Restore inline code spans
