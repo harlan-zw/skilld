@@ -33,7 +33,7 @@ catalogs:
     mdast-util-to-string: ^4.0.0
     micromark-extension-frontmatter: ^2.0.0
     mlly: ^1.8.1
-    oxc-parser: ^0.117.0
+    oxc-parser: ^0.118.0
     p-limit: ^7.3.0
     retriv: ^0.10.4
     sqlite-vec: ^0.1.7-alpha.10
@@ -41,14 +41,14 @@ catalogs:
     typescript: 6.0.0-beta
     unist-util-visit: ^5.1.0
   dev-build:
-    '@types/node': ^25.4.0
+    '@types/node': ^25.5.0
     obuild: ^0.4.32
   dev-lint:
-    '@antfu/eslint-config': ^7.7.0
+    '@antfu/eslint-config': ^7.7.2
   dev-test:
-    '@vitest/coverage-v8': ^4.0.18
+    '@vitest/coverage-v8': ^4.1.0
     evalite: ^0.19.0
-    vitest: ^4.0.18
+    vitest: ^4.1.0
 
 onlyBuiltDependencies:
   - esbuild
