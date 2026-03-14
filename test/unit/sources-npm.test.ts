@@ -91,6 +91,8 @@ describe('sources/npm', () => {
           'pkg-caret': '^1.0.0',
           'pkg-tilde': '~2.0.0',
           'pkg-exact': '4.0.0',
+          'pkg-gte': '>=1.5.0',
+          'pkg-lte': '<=3.0.0',
         },
       }))
       vi.mocked(resolvePathSync).mockImplementation(() => {
@@ -102,6 +104,8 @@ describe('sources/npm', () => {
       expect(deps).toContainEqual({ name: 'pkg-caret', version: '1.0.0' })
       expect(deps).toContainEqual({ name: 'pkg-tilde', version: '2.0.0' })
       expect(deps).toContainEqual({ name: 'pkg-exact', version: '4.0.0' })
+      expect(deps).toContainEqual({ name: 'pkg-gte', version: '1.5.0' })
+      expect(deps).toContainEqual({ name: 'pkg-lte', version: '3.0.0' })
     })
 
     it('throws if package.json not found', async () => {
