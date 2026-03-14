@@ -1,124 +1,124 @@
-import type { FeaturesConfig } from '../../core/config.ts'
-import type { CustomPrompt, SkillSection } from '../prompts/index.ts'
-import type { AgentType } from '../types.ts'
+import type { FeaturesConfig } from "../../core/config.ts";
+import type { CustomPrompt, SkillSection } from "../prompts/index.ts";
+import type { AgentType } from "../types.ts";
 
 export interface ParsedEvent {
   /** Token-level text delta */
-  textDelta?: string
+  textDelta?: string;
   /** Complete text from a full message (non-partial) */
-  fullText?: string
+  fullText?: string;
   /** Tool name being invoked */
-  toolName?: string
+  toolName?: string;
   /** Tool input hint (file path, query, etc) */
-  toolHint?: string
+  toolHint?: string;
   /** Content from a Write tool call (fallback if Write is denied) */
-  writeContent?: string
+  writeContent?: string;
   /** Stream finished */
-  done?: boolean
+  done?: boolean;
   /** Token usage */
-  usage?: { input: number, output: number }
+  usage?: { input: number; output: number };
   /** Cost in USD */
-  cost?: number
+  cost?: number;
   /** Number of agentic turns */
-  turns?: number
+  turns?: number;
 }
 
-export type OptimizeModel
-  = | 'opus'
-    | 'sonnet'
-    | 'haiku'
-    | 'gemini-3.1-pro'
-    | 'gemini-3-flash'
-    | 'gpt-5.3-codex'
-    | 'gpt-5.3-codex-spark'
-    | 'gpt-5.2-codex'
+export type OptimizeModel =
+  | "opus"
+  | "sonnet"
+  | "haiku"
+  | "gemini-3.1-pro"
+  | "gemini-3-flash"
+  | "gpt-5.3-codex"
+  | "gpt-5.3-codex-spark"
+  | "gpt-5.2-codex";
 
 export interface ModelInfo {
-  id: OptimizeModel
-  name: string
-  hint: string
-  recommended?: boolean
-  agentId: string
-  agentName: string
+  id: OptimizeModel;
+  name: string;
+  hint: string;
+  recommended?: boolean;
+  agentId: string;
+  agentName: string;
 }
 
 export interface StreamProgress {
-  chunk: string
-  type: 'reasoning' | 'text'
-  text: string
-  reasoning: string
-  section?: SkillSection
+  chunk: string;
+  type: "reasoning" | "text";
+  text: string;
+  reasoning: string;
+  section?: SkillSection;
 }
 
 export interface OptimizeDocsOptions {
-  packageName: string
-  skillDir: string
-  model?: OptimizeModel
-  version?: string
-  hasGithub?: boolean
-  hasReleases?: boolean
-  hasChangelog?: string | false
-  docFiles?: string[]
-  docsType?: 'llms.txt' | 'readme' | 'docs'
-  hasShippedDocs?: boolean
-  onProgress?: (progress: StreamProgress) => void
-  timeout?: number
-  verbose?: boolean
-  debug?: boolean
-  noCache?: boolean
+  packageName: string;
+  skillDir: string;
+  model?: OptimizeModel;
+  version?: string;
+  hasGithub?: boolean;
+  hasReleases?: boolean;
+  hasChangelog?: string | false;
+  docFiles?: string[];
+  docsType?: "llms.txt" | "readme" | "docs";
+  hasShippedDocs?: boolean;
+  onProgress?: (progress: StreamProgress) => void;
+  timeout?: number;
+  verbose?: boolean;
+  debug?: boolean;
+  noCache?: boolean;
   /** Which sections to generate */
-  sections?: SkillSection[]
+  sections?: SkillSection[];
   /** Custom instructions from the user */
-  customPrompt?: CustomPrompt
+  customPrompt?: CustomPrompt;
   /** Resolved feature flags */
-  features?: FeaturesConfig
+  features?: FeaturesConfig;
   /** Key files from the package (e.g., dist/pkg.d.ts) */
-  pkgFiles?: string[]
+  pkgFiles?: string[];
 }
 
 export interface OptimizeResult {
-  optimized: string
-  wasOptimized: boolean
-  error?: string
-  warnings?: string[]
-  reasoning?: string
-  finishReason?: string
-  usage?: { inputTokens: number, outputTokens: number, totalTokens: number }
-  cost?: number
-  debugLogsDir?: string
+  optimized: string;
+  wasOptimized: boolean;
+  error?: string;
+  warnings?: string[];
+  reasoning?: string;
+  finishReason?: string;
+  usage?: { inputTokens: number; outputTokens: number; totalTokens: number };
+  cost?: number;
+  debugLogsDir?: string;
 }
 
 export interface SectionResult {
-  section: SkillSection
-  content: string
-  wasOptimized: boolean
-  error?: string
-  warnings?: ValidationWarning[]
-  usage?: { input: number, output: number }
-  cost?: number
+  section: SkillSection;
+  content: string;
+  wasOptimized: boolean;
+  error?: string;
+  warnings?: ValidationWarning[];
+  usage?: { input: number; output: number };
+  cost?: number;
 }
 
 export interface ValidationWarning {
-  section: string
-  warning: string
+  section: string;
+  warning: string;
 }
 
 /** Per-model config without redundant cli/agentId (those come from the CLI file) */
 export interface CliModelEntry {
   /** Model flag passed to the CLI */
-  model: string
+  model: string;
   /** Human-readable model name */
-  name: string
+  name: string;
   /** Short description hint */
-  hint: string
+  hint: string;
   /** Whether this is the recommended model for this CLI */
-  recommended?: boolean
+  recommended?: boolean;
 }
 
 /** Full model config (assembled from CLI files + their models) */
 export interface CliModelConfig extends CliModelEntry {
-  cli: CliName
-  agentId: AgentType
+  cli: CliName;
+  agentId: AgentType;
 }
 
-export type CliName = 'claude' | 'gemini' | 'codex'
+export type CliName = "claude" | "gemini" | "codex";

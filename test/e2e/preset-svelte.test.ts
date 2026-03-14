@@ -1,3 +1,3 @@
-import { describePreset } from './run-preset'
+import { describePreset } from "./run-preset";
 
-describePreset('svelte')
+describePreset("svelte");

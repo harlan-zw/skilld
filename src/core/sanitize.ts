@@ -10,97 +10,90 @@
 
 /** Zero-width and invisible formatting characters used to hide text from human review */
 // eslint-disable-next-line no-misleading-character-class -- intentionally matching individual invisible chars
-const ZERO_WIDTH_RE = /[\u200B\u200C\uFEFF\u2060\u200D\u061C\u180E\u200E\u200F\u2028\u2029]/gu
+const ZERO_WIDTH_RE = /[\u200B\u200C\uFEFF\u2060\u200D\u061C\u180E\u200E\u200F\u2028\u2029]/gu;
 
 /** HTML comments (single-line and multi-line), except skilld section markers */
-const HTML_COMMENT_RE = /<!--(?!\s*\/?skilld:)[\s\S]*?-->/g
+const HTML_COMMENT_RE = /<!--(?!\s*\/?skilld:)[\s\S]*?-->/g;
 
 /**
  * Agent directive tags — stripped globally (including inside code blocks).
  * These are never legitimate in any context; they're purely injection vectors.
  */
 const AGENT_DIRECTIVE_TAGS = [
-  'system',
-  'instructions',
-  'override',
-  'prompt',
-  'context',
-  'role',
-  'user-prompt',
-  'assistant',
-  'tool-use',
-  'tool-result',
-  'system-prompt',
-  'human',
-  'admin',
-]
+  "system",
+  "instructions",
+  "override",
+  "prompt",
+  "context",
+  "role",
+  "user-prompt",
+  "assistant",
+  "tool-use",
+  "tool-result",
+  "system-prompt",
+  "human",
+  "admin",
+];
 
 /**
  * Dangerous HTML tags — stripped only outside fenced code blocks.
  * May appear legitimately in code examples (e.g. `<script setup>` in Vue docs).
  */
-const DANGEROUS_HTML_TAGS = [
-  'script',
-  'iframe',
-  'style',
-  'meta',
-  'object',
-  'embed',
-  'form',
-]
+const DANGEROUS_HTML_TAGS = ["script", "iframe", "style", "meta", "object", "embed", "form"];
 /**
  * Decode HTML entity-encoded angle brackets so tag stripping catches encoded variants.
  * Only decodes < and > (named, decimal, hex) — minimal to avoid false positives.
  */
 function decodeAngleBracketEntities(text: string): string {
   return text
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&#0*60;/g, '<')
-    .replace(/&#0*62;/g, '>')
-    .replace(/&#x0*3c;/gi, '<')
-    .replace(/&#x0*3e;/gi, '>')
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#0*60;/g, "<")
+    .replace(/&#0*62;/g, ">")
+    .replace(/&#x0*3c;/gi, "<")
+    .replace(/&#x0*3e;/gi, ">");
 }
 
 /** Strip paired and standalone instances of the given tag names */
 function stripTags(text: string, tags: string[]): string {
-  if (!tags.length)
-    return text
-  const tagGroup = tags.join('|')
+  if (!tags.length) return text;
+  const tagGroup = tags.join("|");
   // First strip paired tags with content between them
-  const pairedRe = new RegExp(`<(${tagGroup})(\\s[^>]*)?>([\\s\\S]*?)<\\/\\1>`, 'gi')
-  let result = text.replace(pairedRe, '')
+  const pairedRe = new RegExp(`<(${tagGroup})(\\s[^>]*)?>([\\s\\S]*?)<\\/\\1>`, "gi");
+  let result = text.replace(pairedRe, "");
   // Then strip any remaining standalone open/close/self-closing tags
-  const standaloneRe = new RegExp(`<\\/?(${tagGroup})(\\s[^>]*)?\\/?>`, 'gi')
-  result = result.replace(standaloneRe, '')
-  return result
+  const standaloneRe = new RegExp(`<\\/?(${tagGroup})(\\s[^>]*)?\\/?>`, "gi");
+  result = result.replace(standaloneRe, "");
+  return result;
 }
 
 /** External image markdown: ![alt](https://...) or ![alt](http://...) */
-const EXTERNAL_IMAGE_RE = /!\[([^\]]*)\]\(https?:\/\/[^)]+\)/gi
+const EXTERNAL_IMAGE_RE = /!\[([^\]]*)\]\(https?:\/\/[^)]+\)/gi;
 
 /**
  * External link markdown: [text](https://...) or [text](http://...)
  * Preserves relative links and anchors.
  */
-const EXTERNAL_LINK_RE = /\[([^\]]*)\]\((https?:\/\/[^)]+)\)/gi
+const EXTERNAL_LINK_RE = /\[([^\]]*)\]\((https?:\/\/[^)]+)\)/gi;
 
 /** Dangerous URI protocols in links/images — match entire [text](protocol:...) */
-const DANGEROUS_PROTOCOL_RE = /!?\[([^\]]*)\]\(\s*(javascript|data|vbscript|file)\s*:[^)]*\)/gi
-const DANGEROUS_PROTOCOL_ENCODED_RE = /!?\[([^\]]*)\]\(\s*(?:(?:j|%6a|%4a)(?:a|%61|%41)(?:v|%76|%56)(?:a|%61|%41)(?:s|%73|%53)(?:c|%63|%43)(?:r|%72|%52)(?:i|%69|%49)(?:p|%70|%50)(?:t|%74|%54)|(?:d|%64|%44)(?:a|%61|%41)(?:t|%74|%54)(?:a|%61|%41)|(?:v|%76|%56)(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:r|%72|%52)(?:i|%69|%49)(?:p|%70|%50)(?:t|%74|%54))\s*:[^)]*\)/gi
+const DANGEROUS_PROTOCOL_RE = /!?\[([^\]]*)\]\(\s*(javascript|data|vbscript|file)\s*:[^)]*\)/gi;
+const DANGEROUS_PROTOCOL_ENCODED_RE =
+  /!?\[([^\]]*)\]\(\s*(?:(?:j|%6a|%4a)(?:a|%61|%41)(?:v|%76|%56)(?:a|%61|%41)(?:s|%73|%53)(?:c|%63|%43)(?:r|%72|%52)(?:i|%69|%49)(?:p|%70|%50)(?:t|%74|%54)|(?:d|%64|%44)(?:a|%61|%41)(?:t|%74|%54)(?:a|%61|%41)|(?:v|%76|%56)(?:b|%62|%42)(?:s|%73|%53)(?:c|%63|%43)(?:r|%72|%52)(?:i|%69|%49)(?:p|%70|%50)(?:t|%74|%54))\s*:[^)]*\)/gi;
 
 /** Directive-style lines that look like agent instructions */
-const DIRECTIVE_LINE_RE = /^[ \t]*(SYSTEM|OVERRIDE|INSTRUCTION|NOTE TO AI|IGNORE PREVIOUS|IGNORE ALL PREVIOUS|DISREGARD|FORGET ALL|NEW INSTRUCTIONS?|IMPORTANT SYSTEM|ADMIN OVERRIDE)\s*[:>].*/gim
+const DIRECTIVE_LINE_RE =
+  /^[ \t]*(SYSTEM|OVERRIDE|INSTRUCTION|NOTE TO AI|IGNORE PREVIOUS|IGNORE ALL PREVIOUS|DISREGARD|FORGET ALL|NEW INSTRUCTIONS?|IMPORTANT SYSTEM|ADMIN OVERRIDE)\s*[:>].*/gim;
 
 /** Base64 blob: 100+ chars of pure base64 alphabet on a single line */
-const BASE64_BLOB_RE = /^[A-Z0-9+/=]{100,}$/gim
+const BASE64_BLOB_RE = /^[A-Z0-9+/=]{100,}$/gim;
 
 /** Unicode escape spam: 4+ consecutive \uXXXX sequences */
-const UNICODE_ESCAPE_SPAM_RE = /(\\u[\dA-Fa-f]{4}){4,}/g
+const UNICODE_ESCAPE_SPAM_RE = /(\\u[\dA-Fa-f]{4}){4,}/g;
 
 /** Emoji characters — token-inefficient (2-3x cost), distort embeddings, semantically ambiguous for LLMs */
 // Also strips variation selectors (\uFE0E text, \uFE0F emoji) which dangle after emoji removal
-const EMOJI_RE = /[\p{Extended_Pictographic}\uFE0E\uFE0F]/gu
+const EMOJI_RE = /[\p{Extended_Pictographic}\uFE0E\uFE0F]/gu;
 
 /**
  * Process content outside of fenced code blocks.
@@ -109,60 +102,59 @@ const EMOJI_RE = /[\p{Extended_Pictographic}\uFE0E\uFE0F]/gu
  * Unclosed fences are treated as non-code for security (prevents bypass via malformed fences).
  */
 export function processOutsideCodeBlocks(content: string, fn: (text: string) => string): string {
-  const lines = content.split('\n')
-  const result: string[] = []
-  let nonCodeBuffer: string[] = []
-  let codeBuffer: string[] = []
-  let inCodeBlock = false
-  let fenceChar = ''
-  let fenceLen = 0
+  const lines = content.split("\n");
+  const result: string[] = [];
+  let nonCodeBuffer: string[] = [];
+  let codeBuffer: string[] = [];
+  let inCodeBlock = false;
+  let fenceChar = "";
+  let fenceLen = 0;
 
   function flushNonCode() {
     if (nonCodeBuffer.length > 0) {
-      result.push(fn(nonCodeBuffer.join('\n')))
-      nonCodeBuffer = []
+      result.push(fn(nonCodeBuffer.join("\n")));
+      nonCodeBuffer = [];
     }
   }
 
   for (const line of lines) {
-    const trimmed = line.trimStart()
+    const trimmed = line.trimStart();
 
     if (!inCodeBlock) {
-      const match = trimmed.match(/^(`{3,}|~{3,})/)
+      const match = trimmed.match(/^(`{3,}|~{3,})/);
       if (match) {
-        flushNonCode()
-        inCodeBlock = true
-        fenceChar = match[1][0]!
-        fenceLen = match[1].length
-        codeBuffer = [line]
-        continue
+        flushNonCode();
+        inCodeBlock = true;
+        fenceChar = match[1][0]!;
+        fenceLen = match[1].length;
+        codeBuffer = [line];
+        continue;
       }
-      nonCodeBuffer.push(line)
-    }
-    else {
-      const match = trimmed.match(/^(`{3,}|~{3,})\s*$/)
+      nonCodeBuffer.push(line);
+    } else {
+      const match = trimmed.match(/^(`{3,}|~{3,})\s*$/);
       if (match && match[1][0] === fenceChar && match[1].length >= fenceLen) {
         // Properly closed — emit code block as-is
-        result.push(codeBuffer.join('\n'))
-        result.push(line)
-        codeBuffer = []
-        inCodeBlock = false
-        fenceChar = ''
-        fenceLen = 0
-        continue
+        result.push(codeBuffer.join("\n"));
+        result.push(line);
+        codeBuffer = [];
+        inCodeBlock = false;
+        fenceChar = "";
+        fenceLen = 0;
+        continue;
       }
-      codeBuffer.push(line)
+      codeBuffer.push(line);
     }
   }
 
-  flushNonCode()
+  flushNonCode();
 
   // Unclosed fence: treat as non-code so sanitization still applies
   if (inCodeBlock && codeBuffer.length > 0) {
-    result.push(fn(codeBuffer.join('\n')))
+    result.push(fn(codeBuffer.join("\n")));
   }
 
-  return result.join('\n')
+  return result.join("\n");
 }
 
 /**
@@ -170,130 +162,126 @@ export function processOutsideCodeBlocks(content: string, fn: (text: string) => 
  * Applied at every markdown emission point (cache writes, SKILL.md, search output).
  */
 export function sanitizeMarkdown(content: string): string {
-  if (!content)
-    return content
+  if (!content) return content;
 
   // Layer 1: Strip zero-width characters (global, including in code blocks)
-  let result = content.replace(ZERO_WIDTH_RE, '')
+  let result = content.replace(ZERO_WIDTH_RE, "");
 
   // Layer 2: Strip agent directive tags globally (never legitimate, even in code blocks)
-  result = stripTags(result, AGENT_DIRECTIVE_TAGS)
+  result = stripTags(result, AGENT_DIRECTIVE_TAGS);
 
   // Layers 3-9: Only outside fenced code blocks
   result = processOutsideCodeBlocks(result, (text) => {
     // Protect inline code spans from tag stripping (e.g. `<script setup>` in Vue docs)
-    const inlineCodeSpans: string[] = []
+    const inlineCodeSpans: string[] = [];
     let t = text.replace(/(`+)([^`]+)\1/g, (match) => {
-      const idx = inlineCodeSpans.length
-      inlineCodeSpans.push(match)
-      return `\x00IC${idx}\x00`
-    })
+      const idx = inlineCodeSpans.length;
+      inlineCodeSpans.push(match);
+      return `\x00IC${idx}\x00`;
+    });
 
     // Layer 3: Strip HTML comments (outside code blocks where they're hidden from review;
     // inside code blocks they render as visible text and are legitimate documentation)
-    t = t.replace(HTML_COMMENT_RE, '')
+    t = t.replace(HTML_COMMENT_RE, "");
 
     // Layer 4: Decode entities + strip remaining dangerous tags (HTML + entity-encoded agent directives)
-    t = decodeAngleBracketEntities(t)
-    t = stripTags(t, [...AGENT_DIRECTIVE_TAGS, ...DANGEROUS_HTML_TAGS])
+    t = decodeAngleBracketEntities(t);
+    t = stripTags(t, [...AGENT_DIRECTIVE_TAGS, ...DANGEROUS_HTML_TAGS]);
 
     // Layer 5: Strip external images (exfil via query params)
-    t = t.replace(EXTERNAL_IMAGE_RE, '')
+    t = t.replace(EXTERNAL_IMAGE_RE, "");
 
     // Layer 6: Convert external links to plain text
-    t = t.replace(EXTERNAL_LINK_RE, '$1')
+    t = t.replace(EXTERNAL_LINK_RE, "$1");
 
     // Layer 7: Strip dangerous protocols (raw and URL-encoded)
-    t = t.replace(DANGEROUS_PROTOCOL_RE, '')
-    t = t.replace(DANGEROUS_PROTOCOL_ENCODED_RE, '')
+    t = t.replace(DANGEROUS_PROTOCOL_RE, "");
+    t = t.replace(DANGEROUS_PROTOCOL_ENCODED_RE, "");
 
     // Layer 8: Strip directive-style lines
-    t = t.replace(DIRECTIVE_LINE_RE, '')
+    t = t.replace(DIRECTIVE_LINE_RE, "");
 
     // Layer 9: Strip encoded payloads
-    t = t.replace(BASE64_BLOB_RE, '')
-    t = t.replace(UNICODE_ESCAPE_SPAM_RE, '')
+    t = t.replace(BASE64_BLOB_RE, "");
+    t = t.replace(UNICODE_ESCAPE_SPAM_RE, "");
 
     // Layer 10: Strip emoji (token-inefficient, distort embeddings, semantically ambiguous)
-    t = t.replace(EMOJI_RE, '')
+    t = t.replace(EMOJI_RE, "");
 
     // Restore inline code spans
-    t = t.replace(/\0IC(\d+)\0/g, (_, idx) => inlineCodeSpans[Number(idx)] || '')
+    t = t.replace(/\0IC(\d+)\0/g, (_, idx) => inlineCodeSpans[Number(idx)] || "");
 
-    return t
-  })
+    return t;
+  });
 
-  return result
+  return result;
 }
 
 // --- Markdown repair ---
 
 /** Heading missing space after #: `##Heading` → `## Heading` */
-const HEADING_NO_SPACE_RE = /^(#{1,6})([^\s#])/gm
+const HEADING_NO_SPACE_RE = /^(#{1,6})([^\s#])/gm;
 
 /** 3+ consecutive blank lines → 2 */
-const EXCESSIVE_BLANKS_RE = /\n{4,}/g
+const EXCESSIVE_BLANKS_RE = /\n{4,}/g;
 
 /** Trailing whitespace on lines (preserve intentional double-space line breaks) */
-const TRAILING_WHITESPACE_RE = /[ \t]+$/gm
+const TRAILING_WHITESPACE_RE = /[ \t]+$/gm;
 
 /** Emoji at start of line inside a code block — LLM forgot to close the block */
-const EMOJI_LINE_START_RE = /^\p{Extended_Pictographic}/u
+const EMOJI_LINE_START_RE = /^\p{Extended_Pictographic}/u;
 
 /**
  * Close unclosed fenced code blocks.
  * Walks line-by-line tracking open/close state.
  */
 function closeUnclosedCodeBlocks(content: string): string {
-  const lines = content.split('\n')
-  const result: string[] = []
-  let inCodeBlock = false
-  let fence = ''
+  const lines = content.split("\n");
+  const result: string[] = [];
+  let inCodeBlock = false;
+  let fence = "";
 
   for (const line of lines) {
-    const trimmed = line.trimStart()
+    const trimmed = line.trimStart();
     if (!inCodeBlock) {
-      const match = trimmed.match(/^(`{3,}|~{3,})/)
+      const match = trimmed.match(/^(`{3,}|~{3,})/);
       if (match) {
-        inCodeBlock = true
-        fence = match[1][0]!.repeat(match[1].length)
+        inCodeBlock = true;
+        fence = match[1][0]!.repeat(match[1].length);
       }
-    }
-    else {
+    } else {
       // Check for closing fence (same char, at least same length)
-      const match = trimmed.match(/^(`{3,}|~{3,})\s*$/)
+      const match = trimmed.match(/^(`{3,}|~{3,})\s*$/);
       if (match && match[1][0] === fence[0] && match[1].length >= fence.length) {
-        inCodeBlock = false
-        fence = ''
-      }
-      else {
+        inCodeBlock = false;
+        fence = "";
+      } else {
         // New fence opener inside unclosed block (same char, same length, with lang tag)
         // LLMs commonly forget to close a code block before starting a new one
-        const openMatch = trimmed.match(/^(`{3,}|~{3,})\S/)
+        const openMatch = trimmed.match(/^(`{3,}|~{3,})\S/);
         if (openMatch && openMatch[1][0] === fence[0] && openMatch[1].length === fence.length) {
-          result.push(fence)
+          result.push(fence);
           // fence char/length stays the same since both match
         }
         // Emoji at line start → LLM forgot to close code block before markdown content
         else if (EMOJI_LINE_START_RE.test(trimmed)) {
-          result.push(fence)
-          inCodeBlock = false
-          fence = ''
+          result.push(fence);
+          inCodeBlock = false;
+          fence = "";
         }
       }
     }
-    result.push(line)
+    result.push(line);
   }
 
   // If still inside a code block, close it
   if (inCodeBlock) {
     // Ensure trailing newline before closing fence
-    if (result.length > 0 && result.at(-1) !== '')
-      result.push('')
-    result.push(fence)
+    if (result.length > 0 && result.at(-1) !== "") result.push("");
+    result.push(fence);
   }
 
-  return result.join('\n')
+  return result.join("\n");
 }
 
 /**
@@ -302,58 +290,56 @@ function closeUnclosedCodeBlocks(content: string): string {
  * Duplicate blocks arise when LLMs repeat the same code example.
  */
 function cleanupCodeBlocks(content: string): string {
-  const lines = content.split('\n')
-  const toRemove = new Set<number>()
-  let prevCodeContent: string | undefined
-  let i = 0
+  const lines = content.split("\n");
+  const toRemove = new Set<number>();
+  let prevCodeContent: string | undefined;
+  let i = 0;
 
   while (i < lines.length) {
-    const trimmed = lines[i]!.trimStart()
-    const fm = trimmed.match(/^(`{3,}|~{3,})/)
+    const trimmed = lines[i]!.trimStart();
+    const fm = trimmed.match(/^(`{3,}|~{3,})/);
     if (!fm) {
       // Non-blank text between code blocks resets dedup tracking
-      if (trimmed)
-        prevCodeContent = undefined
-      i++
-      continue
+      if (trimmed) prevCodeContent = undefined;
+      i++;
+      continue;
     }
 
-    const fChar = fm[1][0]!
-    const fLen = fm[1].length
-    const openIdx = i
-    i++
+    const fChar = fm[1][0]!;
+    const fLen = fm[1].length;
+    const openIdx = i;
+    i++;
 
-    let closeIdx = -1
+    let closeIdx = -1;
     while (i < lines.length) {
-      const ct = lines[i]!.trimStart()
-      const cm = ct.match(/^(`{3,}|~{3,})\s*$/)
+      const ct = lines[i]!.trimStart();
+      const cm = ct.match(/^(`{3,}|~{3,})\s*$/);
       if (cm && cm[1][0] === fChar && cm[1].length >= fLen) {
-        closeIdx = i
-        i++
-        break
+        closeIdx = i;
+        i++;
+        break;
       }
-      i++
+      i++;
     }
 
-    if (closeIdx === -1)
-      continue
+    if (closeIdx === -1) continue;
 
-    const inner = lines.slice(openIdx + 1, closeIdx).join('\n').trim()
+    const inner = lines
+      .slice(openIdx + 1, closeIdx)
+      .join("\n")
+      .trim();
 
     if (!inner) {
-      for (let j = openIdx; j <= closeIdx; j++) toRemove.add(j)
-    }
-    else if (inner === prevCodeContent) {
-      for (let j = openIdx; j <= closeIdx; j++) toRemove.add(j)
-    }
-    else {
-      prevCodeContent = inner
+      for (let j = openIdx; j <= closeIdx; j++) toRemove.add(j);
+    } else if (inner === prevCodeContent) {
+      for (let j = openIdx; j <= closeIdx; j++) toRemove.add(j);
+    } else {
+      prevCodeContent = inner;
     }
   }
 
-  if (!toRemove.size)
-    return content
-  return lines.filter((_, idx) => !toRemove.has(idx)).join('\n')
+  if (!toRemove.size) return content;
+  return lines.filter((_, idx) => !toRemove.has(idx)).join("\n");
 }
 
 /**
@@ -362,64 +348,63 @@ function cleanupCodeBlocks(content: string): string {
  * Tracks fenced code blocks internally to handle any fence length.
  */
 function closeUnclosedInlineCode(content: string): string {
-  const lines = content.split('\n')
-  let inFence = false
-  let fenceChar = ''
-  let fenceLen = 0
+  const lines = content.split("\n");
+  let inFence = false;
+  let fenceChar = "";
+  let fenceLen = 0;
 
-  return lines.map((line) => {
-    const trimmed = line.trimStart()
-    if (!inFence) {
-      const m = trimmed.match(/^(`{3,}|~{3,})/)
-      if (m) {
-        inFence = true
-        fenceChar = m[1][0]!
-        fenceLen = m[1].length
-        return line
+  return lines
+    .map((line) => {
+      const trimmed = line.trimStart();
+      if (!inFence) {
+        const m = trimmed.match(/^(`{3,}|~{3,})/);
+        if (m) {
+          inFence = true;
+          fenceChar = m[1][0]!;
+          fenceLen = m[1].length;
+          return line;
+        }
+      } else {
+        const m = trimmed.match(/^(`{3,}|~{3,})\s*$/);
+        if (m && m[1][0] === fenceChar && m[1].length >= fenceLen) {
+          inFence = false;
+        }
+        return line;
       }
-    }
-    else {
-      const m = trimmed.match(/^(`{3,}|~{3,})\s*$/)
-      if (m && m[1][0] === fenceChar && m[1].length >= fenceLen) {
-        inFence = false
-      }
-      return line
-    }
 
-    // Outside fenced code blocks — fix unclosed inline backticks
-    let i = 0
-    while (i < line.length) {
-      if (line[i] === '`') {
-        const seqStart = i
-        while (i < line.length && line[i] === '`') i++
-        const seqLen = i - seqStart
-        let found = false
-        let j = i
-        while (j < line.length) {
-          if (line[j] === '`') {
-            const closeStart = j
-            while (j < line.length && line[j] === '`') j++
-            if (j - closeStart === seqLen) {
-              found = true
-              i = j
-              break
+      // Outside fenced code blocks — fix unclosed inline backticks
+      let i = 0;
+      while (i < line.length) {
+        if (line[i] === "`") {
+          const seqStart = i;
+          while (i < line.length && line[i] === "`") i++;
+          const seqLen = i - seqStart;
+          let found = false;
+          let j = i;
+          while (j < line.length) {
+            if (line[j] === "`") {
+              const closeStart = j;
+              while (j < line.length && line[j] === "`") j++;
+              if (j - closeStart === seqLen) {
+                found = true;
+                i = j;
+                break;
+              }
+            } else {
+              j++;
             }
           }
-          else {
-            j++
+          if (!found) {
+            line = `${line}${"`".repeat(seqLen)}`;
+            i = line.length;
           }
-        }
-        if (!found) {
-          line = `${line}${'`'.repeat(seqLen)}`
-          i = line.length
+        } else {
+          i++;
         }
       }
-      else {
-        i++
-      }
-    }
-    return line
-  }).join('\n')
+      return line;
+    })
+    .join("\n");
 }
 
 /**
@@ -432,29 +417,27 @@ function closeUnclosedInlineCode(content: string): string {
  * - Trailing whitespace
  */
 export function repairMarkdown(content: string): string {
-  if (!content)
-    return content
+  if (!content) return content;
 
-  let result = content
+  let result = content;
 
   // Fix unclosed fenced code blocks (must run before other line-level fixes)
-  result = closeUnclosedCodeBlocks(result)
+  result = closeUnclosedCodeBlocks(result);
 
   // Remove empty and duplicate code blocks (artifacts from fence recovery)
-  result = cleanupCodeBlocks(result)
+  result = cleanupCodeBlocks(result);
 
   // Fix unclosed inline code spans
-  result = closeUnclosedInlineCode(result)
+  result = closeUnclosedInlineCode(result);
 
   // Fix heading spacing (only outside code blocks)
-  result = processOutsideCodeBlocks(result, text =>
-    text.replace(HEADING_NO_SPACE_RE, '$1 $2'))
+  result = processOutsideCodeBlocks(result, (text) => text.replace(HEADING_NO_SPACE_RE, "$1 $2"));
 
   // Normalize excessive blank lines
-  result = result.replace(EXCESSIVE_BLANKS_RE, '\n\n\n')
+  result = result.replace(EXCESSIVE_BLANKS_RE, "\n\n\n");
 
   // Strip trailing whitespace
-  result = result.replace(TRAILING_WHITESPACE_RE, '')
+  result = result.replace(TRAILING_WHITESPACE_RE, "");
 
-  return result
+  return result;
 }

@@ -2,76 +2,76 @@
  * Types for agent target definitions
  */
 
-import type { AgentType } from '../types.ts'
+import type { AgentType } from "../types.ts";
 
 export interface FrontmatterField {
   /** Field name in YAML frontmatter */
-  name: string
+  name: string;
   /** Whether the field is required by the agent */
-  required: boolean
+  required: boolean;
   /** Description of what the field does */
-  description: string
+  description: string;
   /** Constraints (max length, regex, etc.) */
-  constraints?: string
+  constraints?: string;
 }
 
 export interface AgentTarget {
   /** Agent identifier */
-  agent: AgentType
+  agent: AgentType;
   /** Human-readable agent name */
-  displayName: string
+  displayName: string;
 
   // --- Runtime ---
 
   /** Check if agent is installed on the system */
-  detectInstalled: () => boolean
+  detectInstalled: () => boolean;
   /** Check env vars to detect if running inside this agent */
-  detectEnv: () => boolean
+  detectEnv: () => boolean;
   /** Check project-level config dirs/files to detect this agent */
-  detectProject: (cwd: string) => boolean
+  detectProject: (cwd: string) => boolean;
   /** CLI command name (if agent has a CLI for skill generation) */
-  cli?: string
+  cli?: string;
   /** Project-level instruction file for always-on rules (e.g. CLAUDE.md, AGENTS.md) */
-  instructionFile?: string
+  instructionFile?: string;
 
   // --- Skill file conventions ---
 
   /** Required skill filename (always SKILL.md for Agent Skills spec agents) */
-  skillFilename: string
+  skillFilename: string;
   /** Project-level skill directory */
-  skillsDir: string
+  skillsDir: string;
   /** Global (user-level) skill directory (resolved absolute path) */
-  globalSkillsDir: string
+  globalSkillsDir: string;
   /** Additional directories this agent scans for skills (cross-compat) */
-  additionalSkillsDirs: string[]
+  additionalSkillsDirs: string[];
 
   // --- Frontmatter ---
 
   /** Supported frontmatter fields */
-  frontmatter: FrontmatterField[]
+  frontmatter: FrontmatterField[];
   /** Whether `name` must exactly match the parent directory name */
-  nameMatchesDir: boolean
+  nameMatchesDir: boolean;
   /** Name field regex constraint */
-  namePattern: string
+  namePattern: string;
 
   // --- Discovery ---
 
   /** How skills are discovered: 'eager' (startup scan) or 'lazy' (on-demand) */
-  discoveryStrategy: 'eager' | 'lazy'
+  discoveryStrategy: "eager" | "lazy";
   /** Brief description of how discovery works */
-  discoveryNotes: string
+  discoveryNotes: string;
 
   // --- Spec compliance ---
 
   /** Whether this agent follows the agentskills.io spec */
-  agentSkillsSpec: boolean
+  agentSkillsSpec: boolean;
   /** Agent-specific extensions beyond the spec */
-  extensions: string[]
+  extensions: string[];
 
   // --- Docs ---
 
   /** Link to official documentation */
-  docs: string
+  docs: string;
   /** Additional notes, quirks, known issues */
-  notes: string[]
+  notes: string[];
 }

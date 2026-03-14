@@ -63,9 +63,10 @@ skills:
   log-update-skilld:
     packageName: log-update
     version: 7.2.0
+    packages: "log-update@7.2.0"
     repo: sindresorhus/log-update
     source: "https://raw.githubusercontent.com/sindresorhus/log-update/main/readme.md"
-    syncedAt: 2026-02-27
+    syncedAt: 2026-03-13
     generator: skilld
   tinyglobby-skilld:
     packageName: tinyglobby
@@ -93,9 +94,10 @@ skills:
   clack-prompts-skilld:
     packageName: "@clack/prompts"
     version: 1.1.0
+    packages: "@clack/prompts@1.1.0"
     repo: bombshell-dev/clack
-    source: "ungh://bombshell-dev/clack/packages/prompts"
-    syncedAt: 2026-03-12
+    source: "https://raw.githubusercontent.com/bombshell-dev/clack/main/packages/prompts/README.md"
+    syncedAt: 2026-03-13
     generator: skilld
   defu-skilld:
     packageName: defu

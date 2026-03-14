@@ -1,326 +1,317 @@
-import type { SearchFilter, SearchSnippet } from '../retriv/index.ts'
-import { createLogUpdate } from 'log-update'
-import { formatCompactSnippet, highlightTerms, normalizeScores, sanitizeMarkdown, scoreLabel } from '../core/index.ts'
-import { closePool, openPool, SearchDepsUnavailableError, searchPooled } from '../retriv/index.ts'
-import { findPackageDbs, getPackageVersions, listLockPackages, parseFilterPrefix } from './search.ts'
+import type { SearchFilter, SearchSnippet } from "../retriv/index.ts";
+import { createLogUpdate } from "log-update";
+import {
+  formatCompactSnippet,
+  highlightTerms,
+  normalizeScores,
+  sanitizeMarkdown,
+  scoreLabel,
+} from "../core/index.ts";
+import { closePool, openPool, SearchDepsUnavailableError, searchPooled } from "../retriv/index.ts";
+import {
+  findPackageDbs,
+  getPackageVersions,
+  listLockPackages,
+  parseFilterPrefix,
+} from "./search.ts";
 
-const FILTER_CYCLE = [undefined, 'docs', 'issues', 'releases'] as const
-type FilterLabel = typeof FILTER_CYCLE[number]
+const FILTER_CYCLE = [undefined, "docs", "issues", "releases"] as const;
+type FilterLabel = (typeof FILTER_CYCLE)[number];
 
 function filterToSearchFilter(label: FilterLabel): SearchFilter | undefined {
-  if (!label)
-    return undefined
-  if (label === 'issues')
-    return { type: 'issue' }
-  if (label === 'releases')
-    return { type: 'release' }
-  return { type: { $in: ['doc', 'docs'] } }
+  if (!label) return undefined;
+  if (label === "issues") return { type: "issue" };
+  if (label === "releases") return { type: "release" };
+  return { type: { $in: ["doc", "docs"] } };
 }
 
-const SPINNER_FRAMES = ['◐', '◓', '◑', '◒']
+const SPINNER_FRAMES = ["◐", "◓", "◑", "◒"];
 
 export async function interactiveSearch(packageFilter?: string): Promise<void> {
-  const dbs = findPackageDbs(packageFilter)
-  const versions = getPackageVersions()
+  const dbs = findPackageDbs(packageFilter);
+  const versions = getPackageVersions();
   if (dbs.length === 0) {
-    let msg: string
+    let msg: string;
     if (packageFilter) {
-      const available = listLockPackages()
-      msg = available.length > 0
-        ? `No docs indexed for "${packageFilter}". Available: ${available.join(', ')}`
-        : `No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`
+      const available = listLockPackages();
+      msg =
+        available.length > 0
+          ? `No docs indexed for "${packageFilter}". Available: ${available.join(", ")}`
+          : `No docs indexed for "${packageFilter}". Run \`skilld add ${packageFilter}\` first.`;
+    } else {
+      msg = "No docs indexed yet. Run `skilld add <package>` first.";
     }
-    else {
-      msg = 'No docs indexed yet. Run `skilld add <package>` first.'
-    }
-    process.stderr.write(`\x1B[33m${msg}\x1B[0m\n`)
-    return
+    process.stderr.write(`\x1B[33m${msg}\x1B[0m\n`);
+    return;
   }
 
-  const logUpdate = createLogUpdate(process.stderr, { showCursor: true })
-  let pool: Awaited<ReturnType<typeof openPool>>
+  const logUpdate = createLogUpdate(process.stderr, { showCursor: true });
+  let pool: Awaited<ReturnType<typeof openPool>>;
   try {
-    pool = await openPool(dbs)
-  }
-  catch (err) {
+    pool = await openPool(dbs);
+  } catch (err) {
     if (err instanceof SearchDepsUnavailableError) {
-      process.stderr.write('\x1B[31mSearch requires native dependencies (sqlite-vec) that are not installed.\nInstall skilld globally or in a project to use search: npm i -g skilld\x1B[0m\n')
-      return
+      process.stderr.write(
+        "\x1B[31mSearch requires native dependencies (sqlite-vec) that are not installed.\nInstall skilld globally or in a project to use search: npm i -g skilld\x1B[0m\n",
+      );
+      return;
     }
-    throw err
+    throw err;
   }
 
   // State
-  let query = ''
-  let results: SearchSnippet[] = []
-  let selectedIndex = 0
-  let isSearching = false
-  let searchId = 0
-  let filterIndex = 0
-  let error = ''
-  let elapsed = 0
-  let spinFrame = 0
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  let query = "";
+  let results: SearchSnippet[] = [];
+  let selectedIndex = 0;
+  let isSearching = false;
+  let searchId = 0;
+  let filterIndex = 0;
+  let error = "";
+  let elapsed = 0;
+  let spinFrame = 0;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const cols = process.stdout.columns || 80
-  const maxResults = 7
-  const titleLabel = packageFilter ? `Search ${packageFilter} docs` : 'Search docs'
+  const cols = process.stdout.columns || 80;
+  const maxResults = 7;
+  const titleLabel = packageFilter ? `Search ${packageFilter} docs` : "Search docs";
 
   function getFilterLabel(): string {
-    const f = FILTER_CYCLE[filterIndex]
-    if (!f)
-      return ''
-    return `\x1B[36m${f}:\x1B[0m`
+    const f = FILTER_CYCLE[filterIndex];
+    if (!f) return "";
+    return `\x1B[36m${f}:\x1B[0m`;
   }
 
   function render() {
-    const lines: string[] = []
+    const lines: string[] = [];
 
     // Title
-    lines.push('')
-    lines.push(`  \x1B[1m${titleLabel}\x1B[0m`)
-    lines.push('')
+    lines.push("");
+    lines.push(`  \x1B[1m${titleLabel}\x1B[0m`);
+    lines.push("");
 
     // Input line
-    const filterPrefix = getFilterLabel()
-    const prefix = filterPrefix ? `${filterPrefix}` : ''
-    lines.push(`  \x1B[36m❯\x1B[0m ${prefix}${query}\x1B[7m \x1B[0m`)
+    const filterPrefix = getFilterLabel();
+    const prefix = filterPrefix ? `${filterPrefix}` : "";
+    lines.push(`  \x1B[36m❯\x1B[0m ${prefix}${query}\x1B[7m \x1B[0m`);
 
     // Separator / spinner
     if (isSearching) {
-      const frame = SPINNER_FRAMES[spinFrame % SPINNER_FRAMES.length]
-      lines.push(`  \x1B[36m${frame}\x1B[0m \x1B[90mSearching…\x1B[0m`)
-    }
-    else {
-      lines.push(`  \x1B[90m${'─'.repeat(Math.min(cols - 4, 40))}\x1B[0m`)
+      const frame = SPINNER_FRAMES[spinFrame % SPINNER_FRAMES.length];
+      lines.push(`  \x1B[36m${frame}\x1B[0m \x1B[90mSearching…\x1B[0m`);
+    } else {
+      lines.push(`  \x1B[90m${"─".repeat(Math.min(cols - 4, 40))}\x1B[0m`);
     }
 
     // Results or empty state
     if (error) {
-      lines.push('')
-      lines.push(`  \x1B[31m${error}\x1B[0m`)
-    }
-    else if (query.length === 0) {
-      lines.push('')
-      lines.push('  \x1B[90mType to search…\x1B[0m')
-    }
-    else if (query.length < 2 && !isSearching) {
-      lines.push('')
-      lines.push('  \x1B[90mKeep typing…\x1B[0m')
-    }
-    else if (results.length === 0 && !isSearching) {
-      lines.push('')
-      lines.push('  \x1B[90mNo results\x1B[0m')
-    }
-    else {
-      lines.push('')
-      const shown = results.slice(0, maxResults)
-      const scores = normalizeScores(results)
+      lines.push("");
+      lines.push(`  \x1B[31m${error}\x1B[0m`);
+    } else if (query.length === 0) {
+      lines.push("");
+      lines.push("  \x1B[90mType to search…\x1B[0m");
+    } else if (query.length < 2 && !isSearching) {
+      lines.push("");
+      lines.push("  \x1B[90mKeep typing…\x1B[0m");
+    } else if (results.length === 0 && !isSearching) {
+      lines.push("");
+      lines.push("  \x1B[90mNo results\x1B[0m");
+    } else {
+      lines.push("");
+      const shown = results.slice(0, maxResults);
+      const scores = normalizeScores(results);
       for (let i = 0; i < shown.length; i++) {
-        const r = shown[i]!
-        const selected = i === selectedIndex
-        const bullet = selected ? '\x1B[36m●\x1B[0m' : '\x1B[90m○\x1B[0m'
-        const sc = scoreLabel(scores.get(r) ?? 0)
-        const { title, path, preview } = formatCompactSnippet(r, cols)
-        const highlighted = highlightTerms(preview, r.highlights)
+        const r = shown[i]!;
+        const selected = i === selectedIndex;
+        const bullet = selected ? "\x1B[36m●\x1B[0m" : "\x1B[90m○\x1B[0m";
+        const sc = scoreLabel(scores.get(r) ?? 0);
+        const { title, path, preview } = formatCompactSnippet(r, cols);
+        const highlighted = highlightTerms(preview, r.highlights);
 
-        const ver = versions.get(r.package)
-        const pkgLabel = ver ? `${r.package}@${ver}` : r.package
+        const ver = versions.get(r.package);
+        const pkgLabel = ver ? `${r.package}@${ver}` : r.package;
 
         if (selected) {
-          lines.push(`  ${bullet} \x1B[1m${pkgLabel}\x1B[0m ${sc}  \x1B[36m${title}\x1B[0m`)
-          lines.push(`    \x1B[90m${path}\x1B[0m`)
-          lines.push(`    ${highlighted}`)
-        }
-        else {
-          lines.push(`  ${bullet} \x1B[90m${pkgLabel}\x1B[0m ${sc}  \x1B[90m${title}\x1B[0m`)
+          lines.push(`  ${bullet} \x1B[1m${pkgLabel}\x1B[0m ${sc}  \x1B[36m${title}\x1B[0m`);
+          lines.push(`    \x1B[90m${path}\x1B[0m`);
+          lines.push(`    ${highlighted}`);
+        } else {
+          lines.push(`  ${bullet} \x1B[90m${pkgLabel}\x1B[0m ${sc}  \x1B[90m${title}\x1B[0m`);
         }
       }
     }
 
     // Footer
-    lines.push('')
-    const parts: string[] = []
-    if (results.length > 0)
-      parts.push(`${results.length} results`)
-    if (elapsed > 0 && !isSearching)
-      parts.push(`${elapsed.toFixed(2)}s`)
-    const footer = parts.length > 0 ? `${parts.join(' · ')}    ` : ''
-    lines.push(`  \x1B[90m${footer}↑↓ navigate  ↵ select  tab filter  esc quit\x1B[0m`)
-    lines.push('')
+    lines.push("");
+    const parts: string[] = [];
+    if (results.length > 0) parts.push(`${results.length} results`);
+    if (elapsed > 0 && !isSearching) parts.push(`${elapsed.toFixed(2)}s`);
+    const footer = parts.length > 0 ? `${parts.join(" · ")}    ` : "";
+    lines.push(`  \x1B[90m${footer}↑↓ navigate  ↵ select  tab filter  esc quit\x1B[0m`);
+    lines.push("");
 
-    logUpdate(lines.join('\n'))
+    logUpdate(lines.join("\n"));
   }
 
   async function doSearch() {
-    const id = ++searchId
-    const fullQuery = query.trim()
+    const id = ++searchId;
+    const fullQuery = query.trim();
     if (fullQuery.length < 2) {
-      results = []
-      isSearching = false
-      render()
-      return
+      results = [];
+      isSearching = false;
+      render();
+      return;
     }
 
-    isSearching = true
-    error = ''
-    render()
+    isSearching = true;
+    error = "";
+    render();
 
     // Spin animation
     const spinInterval = setInterval(() => {
-      spinFrame++
-      if (isSearching)
-        render()
-    }, 80)
+      spinFrame++;
+      if (isSearching) render();
+    }, 80);
 
-    const { query: parsed, filter: parsedFilter } = parseFilterPrefix(fullQuery)
-    const filter = parsedFilter || filterToSearchFilter(FILTER_CYCLE[filterIndex])
-    const start = performance.now()
+    const { query: parsed, filter: parsedFilter } = parseFilterPrefix(fullQuery);
+    const filter = parsedFilter || filterToSearchFilter(FILTER_CYCLE[filterIndex]);
+    const start = performance.now();
 
     const res = await searchPooled(parsed, pool, { limit: maxResults, filter }).catch((e) => {
-      if (id === searchId)
-        error = e instanceof Error ? e.message : String(e)
-      return [] as SearchSnippet[]
-    })
+      if (id === searchId) error = e instanceof Error ? e.message : String(e);
+      return [] as SearchSnippet[];
+    });
 
-    clearInterval(spinInterval)
+    clearInterval(spinInterval);
 
     // Discard stale results
-    if (id !== searchId)
-      return
+    if (id !== searchId) return;
 
-    results = res
-    elapsed = (performance.now() - start) / 1000
-    selectedIndex = 0
-    isSearching = false
-    render()
+    results = res;
+    elapsed = (performance.now() - start) / 1000;
+    selectedIndex = 0;
+    isSearching = false;
+    render();
   }
 
   function scheduleSearch() {
-    if (debounceTimer)
-      clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(doSearch, 100)
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(doSearch, 100);
   }
 
   // Show initial state
-  render()
+  render();
 
   // Raw stdin for keystroke handling
-  const { stdin } = process
-  if (stdin.isTTY)
-    stdin.setRawMode(true)
-  stdin.resume()
-  stdin.setEncoding('utf-8')
+  const { stdin } = process;
+  if (stdin.isTTY) stdin.setRawMode(true);
+  stdin.resume();
+  stdin.setEncoding("utf-8");
 
   return new Promise<void>((resolve) => {
     function cleanup() {
-      if (debounceTimer)
-        clearTimeout(debounceTimer)
-      if (stdin.isTTY)
-        stdin.setRawMode(false)
-      stdin.removeListener('data', onData)
-      stdin.pause()
-      closePool(pool)
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (stdin.isTTY) stdin.setRawMode(false);
+      stdin.removeListener("data", onData);
+      stdin.pause();
+      closePool(pool);
     }
 
     function exit() {
-      cleanup()
-      logUpdate.done()
-      resolve()
+      cleanup();
+      logUpdate.done();
+      resolve();
     }
 
     function selectResult() {
-      if (results.length === 0 || selectedIndex >= results.length)
-        return
-      const r = results[selectedIndex]!
-      cleanup()
-      logUpdate.done()
+      if (results.length === 0 || selectedIndex >= results.length) return;
+      const r = results[selectedIndex]!;
+      cleanup();
+      logUpdate.done();
 
       // Print full result
-      const refPath = `.claude/skills/${r.package}/.skilld/${r.source}`
-      const lineRange = r.lineStart === r.lineEnd ? `L${r.lineStart}` : `L${r.lineStart}-${r.lineEnd}`
-      const highlighted = highlightTerms(sanitizeMarkdown(r.content), r.highlights)
-      const rVer = versions.get(r.package)
-      const rLabel = rVer ? `${r.package}@${rVer}` : r.package
-      const rScores = normalizeScores(results)
+      const refPath = `.claude/skills/${r.package}/.skilld/${r.source}`;
+      const lineRange =
+        r.lineStart === r.lineEnd ? `L${r.lineStart}` : `L${r.lineStart}-${r.lineEnd}`;
+      const highlighted = highlightTerms(sanitizeMarkdown(r.content), r.highlights);
+      const rVer = versions.get(r.package);
+      const rLabel = rVer ? `${r.package}@${rVer}` : r.package;
+      const rScores = normalizeScores(results);
       const out = [
-        '',
+        "",
         `  \x1B[1m${rLabel}\x1B[0m ${scoreLabel(rScores.get(r) ?? 0)}`,
         `  \x1B[90m${refPath}:${lineRange}\x1B[0m`,
-        '',
-        `  ${highlighted.replace(/\n/g, '\n  ')}`,
-        '',
-      ].join('\n')
-      process.stdout.write(`${out}\n`)
-      resolve()
+        "",
+        `  ${highlighted.replace(/\n/g, "\n  ")}`,
+        "",
+      ].join("\n");
+      process.stdout.write(`${out}\n`);
+      resolve();
     }
 
     function onData(data: string) {
       // Ctrl+C
-      if (data === '\x03') {
-        exit()
-        return
+      if (data === "\x03") {
+        exit();
+        return;
       }
 
       // Escape
-      if (data === '\x1B' || data === '\x1B\x1B') {
-        exit()
-        return
+      if (data === "\x1B" || data === "\x1B\x1B") {
+        exit();
+        return;
       }
 
       // Enter
-      if (data === '\r' || data === '\n') {
-        selectResult()
-        return
+      if (data === "\r" || data === "\n") {
+        selectResult();
+        return;
       }
 
       // Tab — cycle filter
-      if (data === '\t') {
-        filterIndex = (filterIndex + 1) % FILTER_CYCLE.length
-        if (query.length >= 2)
-          scheduleSearch()
-        render()
-        return
+      if (data === "\t") {
+        filterIndex = (filterIndex + 1) % FILTER_CYCLE.length;
+        if (query.length >= 2) scheduleSearch();
+        render();
+        return;
       }
 
       // Backspace
-      if (data === '\x7F' || data === '\b') {
+      if (data === "\x7F" || data === "\b") {
         if (query.length > 0) {
-          query = query.slice(0, -1)
-          scheduleSearch()
-          render()
+          query = query.slice(0, -1);
+          scheduleSearch();
+          render();
         }
-        return
+        return;
       }
 
       // Arrow keys (escape sequences)
-      if (data === '\x1B[A' || data === '\x1BOA') {
+      if (data === "\x1B[A" || data === "\x1BOA") {
         // Up
         if (selectedIndex > 0) {
-          selectedIndex--
-          render()
+          selectedIndex--;
+          render();
         }
-        return
+        return;
       }
-      if (data === '\x1B[B' || data === '\x1BOB') {
+      if (data === "\x1B[B" || data === "\x1BOB") {
         // Down
         if (selectedIndex < results.length - 1) {
-          selectedIndex++
-          render()
+          selectedIndex++;
+          render();
         }
-        return
+        return;
       }
 
       // Ignore other escape sequences
-      if (data.startsWith('\x1B'))
-        return
+      if (data.startsWith("\x1B")) return;
 
       // Printable characters
-      query += data
-      scheduleSearch()
-      render()
+      query += data;
+      scheduleSearch();
+      render();
     }
 
-    stdin.on('data', onData)
-  })
+    stdin.on("data", onData);
+  });
 }

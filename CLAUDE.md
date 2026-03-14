@@ -8,8 +8,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 pnpm build          # Build with obuild
 pnpm dev:prepare    # Stub for development (obuild --stub)
 pnpm typecheck      # TypeScript check (tsc --noEmit)
-pnpm lint           # ESLint (@antfu/eslint-config)
-pnpm lint:fix       # ESLint with auto-fix
+pnpm lint           # oxlint + oxfmt --check
+pnpm lint:fix       # oxlint --fix + oxfmt (auto-fix)
 pnpm test           # Run vitest in watch mode
 pnpm test:run       # Run vitest once (CI-style)
 pnpm test -- test/unit/cache.test.ts     # Single test file

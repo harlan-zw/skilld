@@ -1,21 +1,19 @@
-import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index.ts'
-import type { FeaturesConfig } from '../core/config.ts'
-import type { ResolvedPackage } from '../sources/index.ts'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
-import * as p from '@clack/prompts'
-import logUpdate from 'log-update'
-import pLimit from 'p-limit'
-import { join } from 'pathe'
+import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from "../agent/index.ts";
+import type { FeaturesConfig } from "../core/config.ts";
+import type { ResolvedPackage } from "../sources/index.ts";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import * as p from "@clack/prompts";
+import logUpdate from "log-update";
+import pLimit from "p-limit";
+import { join } from "pathe";
 import {
   agents,
   computeSkillDirName,
-
   generateSkillMd,
   getModelLabel,
   linkSkillToAgents,
   optimizeDocs,
-
-} from '../agent/index.ts'
+} from "../agent/index.ts";
 import {
   ensureCacheDir,
   getCacheDir,
@@ -26,19 +24,19 @@ import {
   linkPkgNamed,
   listReferenceFiles,
   resolvePkgDir,
-} from '../cache/index.ts'
-import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
-import { formatDuration } from '../core/formatting.ts'
-import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
-import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
-import { shutdownWorker } from '../retriv/pool.ts'
+} from "../cache/index.ts";
+import { defaultFeatures, readConfig, registerProject } from "../core/config.ts";
+import { formatDuration } from "../core/formatting.ts";
+import { parsePackages, readLock, writeLock } from "../core/lockfile.ts";
+import { getSharedSkillsDir, SHARED_SKILLS_DIR } from "../core/shared.ts";
+import { shutdownWorker } from "../retriv/pool.ts";
 import {
   fetchPkgDist,
   parsePackageSpec,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
-} from '../sources/index.ts'
+} from "../sources/index.ts";
 
 import {
   detectChangelog,
@@ -51,186 +49,194 @@ import {
   RESOLVE_STEP_LABELS,
   resolveBaseDir,
   resolveLocalDep,
-} from './sync-shared.ts'
-import { ensureAgentInstructions, ensureGitignore, selectLlmConfig, writePromptFiles } from './sync.ts'
+} from "./sync-shared.ts";
+import {
+  ensureAgentInstructions,
+  ensureGitignore,
+  selectLlmConfig,
+  writePromptFiles,
+} from "./sync.ts";
 
-type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'exploring' | 'thinking' | 'generating' | 'done' | 'error'
+type PackageStatus =
+  | "pending"
+  | "resolving"
+  | "downloading"
+  | "embedding"
+  | "exploring"
+  | "thinking"
+  | "generating"
+  | "done"
+  | "error";
 
 interface PackageState {
-  name: string
-  status: PackageStatus
-  message: string
-  version?: string
-  streamPreview?: string
-  startedAt?: number
-  completedAt?: number
+  name: string;
+  status: PackageStatus;
+  message: string;
+  version?: string;
+  streamPreview?: string;
+  startedAt?: number;
+  completedAt?: number;
 }
 
 const STATUS_ICONS: Record<PackageStatus, string> = {
-  pending: '○',
-  resolving: '◐',
-  downloading: '◒',
-  embedding: '◓',
-  exploring: '◔',
-  thinking: '◔',
-  generating: '◑',
-  done: '✓',
-  error: '✗',
-}
+  pending: "○",
+  resolving: "◐",
+  downloading: "◒",
+  embedding: "◓",
+  exploring: "◔",
+  thinking: "◔",
+  generating: "◑",
+  done: "✓",
+  error: "✗",
+};
 
 const STATUS_COLORS: Record<PackageStatus, string> = {
-  pending: '\x1B[90m',
-  resolving: '\x1B[36m',
-  downloading: '\x1B[36m',
-  embedding: '\x1B[36m',
-  exploring: '\x1B[34m', // Blue for exploring
-  thinking: '\x1B[35m', // Magenta for thinking
-  generating: '\x1B[33m',
-  done: '\x1B[32m',
-  error: '\x1B[31m',
-}
+  pending: "\x1B[90m",
+  resolving: "\x1B[36m",
+  downloading: "\x1B[36m",
+  embedding: "\x1B[36m",
+  exploring: "\x1B[34m", // Blue for exploring
+  thinking: "\x1B[35m", // Magenta for thinking
+  generating: "\x1B[33m",
+  done: "\x1B[32m",
+  error: "\x1B[31m",
+};
 
 export interface ParallelSyncConfig {
-  packages: string[]
-  global: boolean
-  agent: AgentType
-  model?: OptimizeModel
-  yes?: boolean
-  force?: boolean
-  debug?: boolean
-  concurrency?: number
-  mode?: 'add' | 'update'
+  packages: string[];
+  global: boolean;
+  agent: AgentType;
+  model?: OptimizeModel;
+  yes?: boolean;
+  force?: boolean;
+  debug?: boolean;
+  concurrency?: number;
+  mode?: "add" | "update";
 }
 
 /** Data passed from phase 1 (base skill) to phase 2 (LLM enhancement) */
 interface BaseSkillData {
-  resolved: ResolvedPackage
-  version: string
-  skillDirName: string
-  docsType: 'llms.txt' | 'readme' | 'docs'
-  hasIssues: boolean
-  hasDiscussions: boolean
-  hasReleases: boolean
-  hasChangelog: string | false
-  shippedDocs: boolean
-  pkgFiles: string[]
-  relatedSkills: string[]
-  packages?: Array<{ name: string }>
-  warnings: string[]
-  features?: FeaturesConfig
-  usedCache: boolean
+  resolved: ResolvedPackage;
+  version: string;
+  skillDirName: string;
+  docsType: "llms.txt" | "readme" | "docs";
+  hasIssues: boolean;
+  hasDiscussions: boolean;
+  hasReleases: boolean;
+  hasChangelog: string | false;
+  shippedDocs: boolean;
+  pkgFiles: string[];
+  relatedSkills: string[];
+  packages?: Array<{ name: string }>;
+  warnings: string[];
+  features?: FeaturesConfig;
+  usedCache: boolean;
 }
 
 export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<void> {
-  const { packages, concurrency = 5 } = config
-  const agent = agents[config.agent]
-  const states = new Map<string, PackageState>()
-  const cwd = process.cwd()
+  const { packages, concurrency = 5 } = config;
+  const agent = agents[config.agent];
+  const states = new Map<string, PackageState>();
+  const cwd = process.cwd();
 
   // Initialize all packages as pending
   for (const pkg of packages) {
-    states.set(pkg, { name: pkg, status: 'pending', message: 'Waiting...' })
+    states.set(pkg, { name: pkg, status: "pending", message: "Waiting..." });
   }
 
   // Render function
   function render() {
-    const maxNameLen = Math.max(...packages.map(p => p.length), 20)
+    const maxNameLen = Math.max(...packages.map((p) => p.length), 20);
     const lines = Array.from(states.values(), (s) => {
-      const icon = STATUS_ICONS[s.status]
-      const color = STATUS_COLORS[s.status]
-      const reset = '\x1B[0m'
-      const dim = '\x1B[90m'
-      const name = s.name.padEnd(maxNameLen)
-      const version = s.version ? `${dim}${s.version}${reset} ` : ''
-      const elapsed = (s.status === 'done' || s.status === 'error') && s.startedAt && s.completedAt
-        ? ` ${dim}(${formatDuration(s.completedAt - s.startedAt)})${reset}`
-        : ''
-      const preview = s.streamPreview ? ` ${dim}${s.streamPreview}${reset}` : ''
-      return `  ${color}${icon}${reset} ${name} ${version}${s.message}${elapsed}${preview}`
-    })
+      const icon = STATUS_ICONS[s.status];
+      const color = STATUS_COLORS[s.status];
+      const reset = "\x1B[0m";
+      const dim = "\x1B[90m";
+      const name = s.name.padEnd(maxNameLen);
+      const version = s.version ? `${dim}${s.version}${reset} ` : "";
+      const elapsed =
+        (s.status === "done" || s.status === "error") && s.startedAt && s.completedAt
+          ? ` ${dim}(${formatDuration(s.completedAt - s.startedAt)})${reset}`
+          : "";
+      const preview = s.streamPreview ? ` ${dim}${s.streamPreview}${reset}` : "";
+      return `  ${color}${icon}${reset} ${name} ${version}${s.message}${elapsed}${preview}`;
+    });
 
-    const doneCount = [...states.values()].filter(s => s.status === 'done').length
-    const errorCount = [...states.values()].filter(s => s.status === 'error').length
-    const verb = config.mode === 'update' ? 'Updating' : 'Syncing'
-    const header = `\x1B[1m${verb} ${packages.length} packages\x1B[0m (${doneCount} done${errorCount > 0 ? `, ${errorCount} failed` : ''})\n`
+    const doneCount = [...states.values()].filter((s) => s.status === "done").length;
+    const errorCount = [...states.values()].filter((s) => s.status === "error").length;
+    const verb = config.mode === "update" ? "Updating" : "Syncing";
+    const header = `\x1B[1m${verb} ${packages.length} packages\x1B[0m (${doneCount} done${errorCount > 0 ? `, ${errorCount} failed` : ""})\n`;
 
-    logUpdate(header + lines.join('\n'))
+    logUpdate(header + lines.join("\n"));
   }
 
   function update(pkg: string, status: PackageStatus, message: string, version?: string) {
-    const state = states.get(pkg)!
-    if (!state.startedAt && status !== 'pending')
-      state.startedAt = performance.now()
-    if ((status === 'done' || status === 'error') && !state.completedAt)
-      state.completedAt = performance.now()
-    state.status = status
-    state.message = message
-    state.streamPreview = undefined // Clear preview on status change
-    if (version)
-      state.version = version
-    render()
+    const state = states.get(pkg)!;
+    if (!state.startedAt && status !== "pending") state.startedAt = performance.now();
+    if ((status === "done" || status === "error") && !state.completedAt)
+      state.completedAt = performance.now();
+    state.status = status;
+    state.message = message;
+    state.streamPreview = undefined; // Clear preview on status change
+    if (version) state.version = version;
+    render();
   }
 
-  ensureCacheDir()
-  render()
+  ensureCacheDir();
+  render();
 
-  const limit = pLimit(concurrency)
+  const limit = pLimit(concurrency);
 
   // Phase 1: Generate base skills (no LLM)
-  const skillData = new Map<string, BaseSkillData>()
+  const skillData = new Map<string, BaseSkillData>();
   const baseResults = await Promise.allSettled(
-    packages.map(pkg =>
-      limit(() => syncBaseSkill(pkg, config, cwd, update)),
-    ),
-  )
+    packages.map((pkg) => limit(() => syncBaseSkill(pkg, config, cwd, update))),
+  );
 
-  logUpdate.done()
+  logUpdate.done();
 
   // Collect successful packages for LLM phase (exclude shipped — they need no LLM)
-  const successfulPkgs: string[] = []
-  const shippedPkgs: string[] = []
-  const errors: Array<{ pkg: string, reason: string }> = []
+  const successfulPkgs: string[] = [];
+  const shippedPkgs: string[] = [];
+  const errors: Array<{ pkg: string; reason: string }> = [];
   for (let i = 0; i < baseResults.length; i++) {
-    const r = baseResults[i]!
-    if (r.status === 'fulfilled' && r.value !== 'shipped') {
-      successfulPkgs.push(packages[i]!)
-      skillData.set(packages[i]!, r.value)
-    }
-    else if (r.status === 'fulfilled' && r.value === 'shipped') {
-      shippedPkgs.push(packages[i]!)
-    }
-    else if (r.status === 'rejected') {
-      const err = r.reason
-      const reason = err instanceof Error ? `${err.message}\n${err.stack}` : String(err)
-      errors.push({ pkg: packages[i]!, reason })
+    const r = baseResults[i]!;
+    if (r.status === "fulfilled" && r.value !== "shipped") {
+      successfulPkgs.push(packages[i]!);
+      skillData.set(packages[i]!, r.value);
+    } else if (r.status === "fulfilled" && r.value === "shipped") {
+      shippedPkgs.push(packages[i]!);
+    } else if (r.status === "rejected") {
+      const err = r.reason;
+      const reason = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+      errors.push({ pkg: packages[i]!, reason });
     }
   }
 
-  const pastVerb = config.mode === 'update' ? 'Updated' : 'Created'
-  const skillMsg = `${pastVerb} ${successfulPkgs.length} base skills${shippedPkgs.length > 1 ? ` (Skipping ${shippedPkgs.length})` : ''}`
-  p.log.success(skillMsg)
+  const pastVerb = config.mode === "update" ? "Updated" : "Created";
+  const skillMsg = `${pastVerb} ${successfulPkgs.length} base skills${shippedPkgs.length > 1 ? ` (Skipping ${shippedPkgs.length})` : ""}`;
+  p.log.success(skillMsg);
 
   for (const [, data] of skillData) {
-    for (const w of data.warnings)
-      p.log.warn(`\x1B[33m${w}\x1B[0m`)
+    for (const w of data.warnings) p.log.warn(`\x1B[33m${w}\x1B[0m`);
   }
 
   if (errors.length > 0) {
     for (const { pkg, reason } of errors) {
-      p.log.error(`  ${pkg}: ${reason}`)
+      p.log.error(`  ${pkg}: ${reason}`);
     }
   }
 
   // Phase 2: Ask about LLM enhancement (skip if -y without model, or skipLlm config)
-  const globalConfig = readConfig()
+  const globalConfig = readConfig();
   if (successfulPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !config.model)) {
-    const llmConfig = await selectLlmConfig(config.model)
+    const llmConfig = await selectLlmConfig(config.model);
 
     if (llmConfig?.promptOnly) {
       for (const pkg of successfulPkgs) {
-        const data = skillData.get(pkg)!
-        const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-        const skillDir = join(baseDir, data.skillDirName)
+        const data = skillData.get(pkg)!;
+        const baseDir = resolveBaseDir(cwd, config.agent, config.global);
+        const skillDir = join(baseDir, data.skillDirName);
         writePromptFiles({
           packageName: pkg,
           skillDir,
@@ -245,40 +251,49 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
           sections: llmConfig.sections,
           customPrompt: llmConfig.customPrompt,
           features: data.features,
-        })
+        });
       }
-    }
-    else if (llmConfig) {
-      p.log.step(getModelLabel(llmConfig.model))
+    } else if (llmConfig) {
+      p.log.step(getModelLabel(llmConfig.model));
       // Reset states for LLM phase
       for (const pkg of successfulPkgs) {
-        states.set(pkg, { name: pkg, status: 'pending', message: 'Waiting...' })
+        states.set(pkg, { name: pkg, status: "pending", message: "Waiting..." });
       }
-      render()
+      render();
 
       const llmResults = await Promise.allSettled(
-        successfulPkgs.map(pkg =>
-          limit(() => enhanceWithLLM(pkg, skillData.get(pkg)!, { ...config, model: llmConfig.model }, cwd, update, llmConfig.sections, llmConfig.customPrompt)),
+        successfulPkgs.map((pkg) =>
+          limit(() =>
+            enhanceWithLLM(
+              pkg,
+              skillData.get(pkg)!,
+              { ...config, model: llmConfig.model },
+              cwd,
+              update,
+              llmConfig.sections,
+              llmConfig.customPrompt,
+            ),
+          ),
         ),
-      )
+      );
 
-      logUpdate.done()
+      logUpdate.done();
 
-      const llmSucceeded = llmResults.filter(r => r.status === 'fulfilled').length
-      p.log.success(`Enhanced ${llmSucceeded}/${successfulPkgs.length} skills with LLM`)
+      const llmSucceeded = llmResults.filter((r) => r.status === "fulfilled").length;
+      p.log.success(`Enhanced ${llmSucceeded}/${successfulPkgs.length} skills with LLM`);
     }
   }
 
-  const parallelShared = getSharedSkillsDir(cwd)
-  await ensureGitignore(parallelShared ? SHARED_SKILLS_DIR : agent.skillsDir, cwd, config.global)
-  await ensureAgentInstructions(config.agent, cwd, config.global)
+  const parallelShared = getSharedSkillsDir(cwd);
+  await ensureGitignore(parallelShared ? SHARED_SKILLS_DIR : agent.skillsDir, cwd, config.global);
+  await ensureAgentInstructions(config.agent, cwd, config.global);
 
-  await shutdownWorker()
+  await shutdownWorker();
 
-  p.outro(`${pastVerb} ${successfulPkgs.length}/${packages.length} packages`)
+  p.outro(`${pastVerb} ${successfulPkgs.length}/${packages.length} packages`);
 }
 
-type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: string) => void
+type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: string) => void;
 
 /** Phase 1: Generate base skill (no LLM). Returns 'shipped' if shipped skill was linked, or BaseSkillData. */
 async function syncBaseSkill(
@@ -286,84 +301,89 @@ async function syncBaseSkill(
   config: ParallelSyncConfig,
   cwd: string,
   update: UpdateFn,
-): Promise<'shipped' | BaseSkillData> {
+): Promise<"shipped" | BaseSkillData> {
   // Parse dist-tag from spec: "vue@beta" → name="vue", tag="beta"
-  const { name: packageName, tag: requestedTag } = parsePackageSpec(packageSpec)
+  const { name: packageName, tag: requestedTag } = parsePackageSpec(packageSpec);
 
-  const localDeps = await readLocalDependencies(cwd).catch(() => [])
-  const localVersion = localDeps.find(d => d.name === packageName)?.version
+  const localDeps = await readLocalDependencies(cwd).catch(() => []);
+  const localVersion = localDeps.find((d) => d.name === packageName)?.version;
 
-  const { package: resolvedPkg, attempts } = await resolvePackageDocsWithAttempts(requestedTag ? packageSpec : packageName, {
-    version: localVersion,
-    cwd,
-    onProgress: step => update(packageName, 'resolving', RESOLVE_STEP_LABELS[step]),
-  })
-  let resolved = resolvedPkg
+  const { package: resolvedPkg, attempts } = await resolvePackageDocsWithAttempts(
+    requestedTag ? packageSpec : packageName,
+    {
+      version: localVersion,
+      cwd,
+      onProgress: (step) => update(packageName, "resolving", RESOLVE_STEP_LABELS[step]),
+    },
+  );
+  let resolved = resolvedPkg;
 
   if (!resolved) {
-    update(packageName, 'resolving', 'Local package...')
-    resolved = await resolveLocalDep(packageName, cwd)
+    update(packageName, "resolving", "Local package...");
+    resolved = await resolveLocalDep(packageName, cwd);
   }
 
   if (!resolved) {
-    const npmAttempt = attempts.find(a => a.source === 'npm')
-    let reason: string
-    if (npmAttempt?.status === 'not-found') {
-      const suggestions = await searchNpmPackages(packageName, 3)
-      const hint = suggestions.length > 0
-        ? ` (try: ${suggestions.map(s => s.name).join(', ')})`
-        : ''
-      reason = (npmAttempt.message || 'Not on npm') + hint
+    const npmAttempt = attempts.find((a) => a.source === "npm");
+    let reason: string;
+    if (npmAttempt?.status === "not-found") {
+      const suggestions = await searchNpmPackages(packageName, 3);
+      const hint =
+        suggestions.length > 0 ? ` (try: ${suggestions.map((s) => s.name).join(", ")})` : "";
+      reason = (npmAttempt.message || "Not on npm") + hint;
+    } else {
+      const failed = attempts.filter((a) => a.status !== "success");
+      const messages = failed.map((a) => a.message || a.source).join("; ");
+      reason = messages || "No docs found";
     }
-    else {
-      const failed = attempts.filter(a => a.status !== 'success')
-      const messages = failed.map(a => a.message || a.source).join('; ')
-      reason = messages || 'No docs found'
-    }
-    update(packageName, 'error', reason)
-    throw new Error(`Could not find docs for: ${packageName}`)
+    update(packageName, "error", reason);
+    throw new Error(`Could not find docs for: ${packageName}`);
   }
 
-  const version = localVersion || resolved.version || 'latest'
-  const versionKey = getVersionKey(version)
+  const version = localVersion || resolved.version || "latest";
+  const versionKey = getVersionKey(version);
 
   // Download npm dist if not in node_modules
-  if (!existsSync(join(cwd, 'node_modules', packageName))) {
-    update(packageName, 'downloading', 'Downloading dist...', versionKey)
-    await fetchPkgDist(packageName, version)
+  if (!existsSync(join(cwd, "node_modules", packageName))) {
+    update(packageName, "downloading", "Downloading dist...", versionKey);
+    await fetchPkgDist(packageName, version);
   }
 
   // Shipped skills: symlink directly, skip all doc fetching/caching/LLM
-  const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global)
+  const shippedResult = handleShippedSkills(packageName, version, cwd, config.agent, config.global);
   if (shippedResult) {
-    const shared = !config.global && getSharedSkillsDir(cwd)
+    const shared = !config.global && getSharedSkillsDir(cwd);
     if (shared) {
       for (const shipped of shippedResult.shipped)
-        linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
+        linkSkillToAgents(shipped.skillName, shared, cwd, config.agent);
     }
-    update(packageName, 'done', 'Published SKILL.md', versionKey)
-    return 'shipped'
+    update(packageName, "done", "Published SKILL.md", versionKey);
+    return "shipped";
   }
 
   // Force: nuke cached references + search index so all existsSync guards re-fetch
   if (config.force) {
-    forceClearCache(packageName, version)
+    forceClearCache(packageName, version);
   }
 
-  const useCache = isCached(packageName, version)
+  const useCache = isCached(packageName, version);
   if (useCache) {
-    update(packageName, 'downloading', 'Using cache', versionKey)
-  }
-  else {
-    update(packageName, 'downloading', config.force ? 'Re-fetching docs...' : 'Fetching docs...', versionKey)
+    update(packageName, "downloading", "Using cache", versionKey);
+  } else {
+    update(
+      packageName,
+      "downloading",
+      config.force ? "Re-fetching docs..." : "Fetching docs...",
+      versionKey,
+    );
   }
 
-  const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-  const skillDirName = computeSkillDirName(packageName)
-  const skillDir = join(baseDir, skillDirName)
-  mkdirSync(skillDir, { recursive: true })
+  const baseDir = resolveBaseDir(cwd, config.agent, config.global);
+  const skillDirName = computeSkillDirName(packageName);
+  const skillDir = join(baseDir, skillDirName);
+  mkdirSync(skillDir, { recursive: true });
 
-  const features = readConfig().features ?? defaultFeatures
+  const features = readConfig().features ?? defaultFeatures;
 
   // Fetch & cache all resources (docs cascade + issues + discussions + releases)
   const resources = await fetchAndCacheResources({
@@ -372,50 +392,59 @@ async function syncBaseSkill(
     version,
     useCache,
     features,
-    onProgress: msg => update(packageName, 'downloading', msg, versionKey),
-  })
+    onProgress: (msg) => update(packageName, "downloading", msg, versionKey),
+  });
 
   // Create symlinks
-  update(packageName, 'downloading', 'Linking references...', versionKey)
-  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features, resources.repoInfo)
+  update(packageName, "downloading", "Linking references...", versionKey);
+  linkAllReferences(
+    skillDir,
+    packageName,
+    cwd,
+    version,
+    resources.docsType,
+    undefined,
+    features,
+    resources.repoInfo,
+  );
 
   // Index all resources (single batch)
   if (features.search) {
-    update(packageName, 'embedding', 'Indexing docs', versionKey)
+    update(packageName, "embedding", "Indexing docs", versionKey);
     await indexResources({
       packageName,
       version,
       cwd,
       docsToIndex: resources.docsToIndex,
       features,
-      onProgress: msg => update(packageName, 'embedding', msg, versionKey),
-    })
+      onProgress: (msg) => update(packageName, "embedding", msg, versionKey),
+    });
   }
 
-  const pkgDir = resolvePkgDir(packageName, cwd, version)
-  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version))
-  const relatedSkills = await findRelatedSkills(packageName, baseDir)
-  const shippedDocs = hasShippedDocs(packageName, cwd, version)
-  const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
+  const pkgDir = resolvePkgDir(packageName, cwd, version);
+  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version));
+  const relatedSkills = await findRelatedSkills(packageName, baseDir);
+  const shippedDocs = hasShippedDocs(packageName, cwd, version);
+  const pkgFiles = getPkgKeyFiles(packageName, cwd, version);
 
   // Write base SKILL.md
-  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1];
 
   // Create named symlink for this package
-  linkPkgNamed(skillDir, packageName, cwd, version)
+  linkPkgNamed(skillDir, packageName, cwd, version);
 
   writeLock(baseDir, skillDirName, {
     packageName,
     version,
     repo: repoSlug,
     source: resources.docSource,
-    syncedAt: new Date().toISOString().split('T')[0],
-    generator: 'skilld',
-  })
+    syncedAt: new Date().toISOString().split("T")[0],
+    generator: "skilld",
+  });
 
   // Read back merged packages from lockfile
-  const updatedLock = readLock(baseDir)?.skills[skillDirName]
-  const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+  const updatedLock = readLock(baseDir)?.skills[skillDirName];
+  const allPackages = parsePackages(updatedLock?.packages).map((p) => ({ name: p.name }));
 
   const skillMd = generateSkillMd({
     name: packageName,
@@ -436,19 +465,23 @@ async function syncBaseSkill(
     packages: allPackages.length > 1 ? allPackages : undefined,
     repoUrl: resolved.repoUrl,
     features,
-  })
-  writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+  });
+  writeFileSync(join(skillDir, "SKILL.md"), skillMd);
 
   // Link shared dir to per-agent dirs
-  const shared = !config.global && getSharedSkillsDir(cwd)
-  if (shared)
-    linkSkillToAgents(skillDirName, shared, cwd, config.agent)
+  const shared = !config.global && getSharedSkillsDir(cwd);
+  if (shared) linkSkillToAgents(skillDirName, shared, cwd, config.agent);
 
   if (!config.global) {
-    registerProject(cwd)
+    registerProject(cwd);
   }
 
-  update(packageName, 'done', config.mode === 'update' ? 'Skill updated' : 'Base skill created', versionKey)
+  update(
+    packageName,
+    "done",
+    config.mode === "update" ? "Skill updated" : "Base skill created",
+    versionKey,
+  );
 
   return {
     resolved,
@@ -466,7 +499,7 @@ async function syncBaseSkill(
     warnings: resources.warnings,
     features,
     usedCache: resources.usedCache,
-  }
+  };
 }
 
 /** Phase 2: Enhance skill with LLM */
@@ -479,14 +512,14 @@ async function enhanceWithLLM(
   sections?: SkillSection[],
   customPrompt?: CustomPrompt,
 ): Promise<void> {
-  const versionKey = getVersionKey(data.version)
-  const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-  const skillDir = join(baseDir, data.skillDirName)
+  const versionKey = getVersionKey(data.version);
+  const baseDir = resolveBaseDir(cwd, config.agent, config.global);
+  const skillDir = join(baseDir, data.skillDirName);
 
-  const hasGithub = data.hasIssues || data.hasDiscussions
-  const docFiles = listReferenceFiles(skillDir)
+  const hasGithub = data.hasIssues || data.hasDiscussions;
+  const docFiles = listReferenceFiles(skillDir);
 
-  update(packageName, 'generating', config.model, versionKey)
+  update(packageName, "generating", config.model, versionKey);
   const { optimized, wasOptimized, error } = await optimizeDocs({
     packageName,
     skillDir,
@@ -505,17 +538,19 @@ async function enhanceWithLLM(
     features: data.features,
     pkgFiles: data.pkgFiles,
     onProgress: (progress) => {
-      const isReasoning = progress.type === 'reasoning'
-      const status = isReasoning ? 'exploring' : 'generating'
-      const sectionPrefix = progress.section ? `[${progress.section}] ` : ''
-      const label = progress.chunk.startsWith('[') ? `${sectionPrefix}${progress.chunk}` : `${sectionPrefix}${config.model}`
-      update(packageName, status, label, versionKey)
+      const isReasoning = progress.type === "reasoning";
+      const status = isReasoning ? "exploring" : "generating";
+      const sectionPrefix = progress.section ? `[${progress.section}] ` : "";
+      const label = progress.chunk.startsWith("[")
+        ? `${sectionPrefix}${progress.chunk}`
+        : `${sectionPrefix}${config.model}`;
+      update(packageName, status, label, versionKey);
     },
-  })
+  });
 
   if (error) {
-    update(packageName, 'error', error, versionKey)
-    throw new Error(error)
+    update(packageName, "error", error, versionKey);
+    throw new Error(error);
   }
 
   if (wasOptimized) {
@@ -538,9 +573,9 @@ async function enhanceWithLLM(
       packages: data.packages,
       repoUrl: data.resolved.repoUrl,
       features: data.features,
-    })
-    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+    });
+    writeFileSync(join(skillDir, "SKILL.md"), skillMd);
   }
 
-  update(packageName, 'done', 'Skill optimized', versionKey)
+  update(packageName, "done", "Skill optimized", versionKey);
 }
