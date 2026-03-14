@@ -34,14 +34,19 @@ export function yamlUnescape(raw: string): string {
   if (!trimmed)
     return ''
 
-  // Double-quoted: process escape sequences
+  // Double-quoted: single-pass escape processing to handle backslashes correctly
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
     return trimmed.slice(1, -1)
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\r')
-      .replace(/\\t/g, '\t')
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\')
+      .replace(/\\([\\nrt"])/g, (_, c) => {
+        switch (c) {
+          case '\\': return '\\'
+          case 'n': return '\n'
+          case 'r': return '\r'
+          case 't': return '\t'
+          case '"': return '"'
+          default: return c
+        }
+      })
   }
 
   // Single-quoted: no escape processing, just strip quotes

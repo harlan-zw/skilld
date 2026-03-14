@@ -52,6 +52,19 @@ describe('yaml', () => {
       expect(yamlUnescape('"C:\\\\Users"')).toBe('C:\\Users')
     })
 
+    it('does not corrupt backslash followed by escape char (#18)', () => {
+      // literal backslash + n must not become newline
+      expect(yamlUnescape('"hello\\\\nworld"')).toBe('hello\\nworld')
+      // literal backslash + t must not become tab
+      expect(yamlUnescape('"hello\\\\tworld"')).toBe('hello\\tworld')
+      // literal backslash + r must not become carriage return
+      expect(yamlUnescape('"hello\\\\rworld"')).toBe('hello\\rworld')
+      // literal backslash + quote
+      expect(yamlUnescape('"hello\\\\\\"world"')).toBe('hello\\"world')
+      // double backslash stays as double backslash
+      expect(yamlUnescape('"a\\\\\\\\b"')).toBe('a\\\\b')
+    })
+
     it('returns empty for empty/whitespace', () => {
       expect(yamlUnescape('')).toBe('')
       expect(yamlUnescape('   ')).toBe('')
@@ -111,10 +124,27 @@ describe('yaml', () => {
         'has "quotes"',
         'line1\nline2',
         'C:\\Users\\path',
+        'hello\\nworld',
         'mix: "all"\nchars',
         '#comment-like',
         '{object}',
         'it\'s a test',
+      ]
+      for (const val of cases) {
+        expect(yamlUnescape(yamlEscape(val))).toBe(val)
+      }
+    })
+
+    it('escape → unescape roundtrips backslash + escape char combos (#18)', () => {
+      const cases = [
+        'hello\\nworld',
+        'path\\to\\ndir',
+        'tab\\there',
+        'cr\\return',
+        'quote\\"here',
+        'double\\\\backslash',
+        'mixed\\n\\t\\r\\"\\\\end',
+        'trailing\\',
       ]
       for (const val of cases) {
         expect(yamlUnescape(yamlEscape(val))).toBe(val)
@@ -127,6 +157,19 @@ describe('yaml', () => {
         'has: colon',
         'Vue.js: The Progressive JavaScript Framework',
         'say "hello"',
+      ]
+      for (const val of cases) {
+        const line = `key: ${yamlEscape(val)}`
+        const result = yamlParseKV(line)
+        expect(result).toEqual(['key', val])
+      }
+    })
+
+    it('escape → parseKV roundtrips backslash values (#18)', () => {
+      const cases = [
+        'hello\\nworld',
+        'C:\\Users\\new',
+        'path\\to\\ndir\\tfile',
       ]
       for (const val of cases) {
         const line = `key: ${yamlEscape(val)}`
