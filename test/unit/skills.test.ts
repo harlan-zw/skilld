@@ -1,6 +1,6 @@
+import type { SkillEntry } from '../../src/core/skills.ts'
 import { describe, expect, it } from 'vitest'
 import { isOutdated } from '../../src/core/skills.ts'
-import type { SkillEntry } from '../../src/core/skills.ts'
 
 function makeSkill(version: string | undefined): SkillEntry {
   return {
