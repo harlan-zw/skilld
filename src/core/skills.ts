@@ -5,7 +5,7 @@ import { join } from 'pathe'
 import { agents } from '../agent/index.ts'
 import { readLocalDependencies } from '../sources/index.ts'
 import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile.ts'
-import { getSharedSkillsDir, semverGt } from './shared.ts'
+import { getSharedSkillsDir, semverGt, semverValid } from './shared.ts'
 
 export interface SkillEntry {
   name: string
@@ -117,6 +117,10 @@ export function isOutdated(skill: SkillEntry, depVersion: string): boolean {
     return true
 
   const depClean = depVersion.replace(/^[\^~]/, '')
+
+  // Non-semver versions (e.g. '*' from catalog:/workspace: specifiers) can't be compared
+  if (!semverValid(depClean))
+    return false
 
   return semverGt(depClean, skill.info.version)
 }
