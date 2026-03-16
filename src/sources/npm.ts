@@ -4,7 +4,7 @@
 
 import type { LocalDependency, NpmPackageInfo, ResolveAttempt, ResolvedPackage, ResolveResult } from './types.ts'
 import { spawnSync } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync } from 'node:fs'
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { Writable } from 'node:stream'
 import { pathToFileURL } from 'node:url'
 import { resolvePathSync } from 'mlly'
@@ -619,43 +619,53 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
   const tmpTarball = join(cacheDir, '_pkg.tgz')
   const fileStream = createWriteStream(tmpTarball)
 
-  // Stream response body to file
   const reader = tarballRes.body.getReader()
-  await new Promise<void>((res, reject) => {
-    const writable = new Writable({
-      write(chunk, _encoding, callback) {
-        fileStream.write(chunk, callback)
-      },
-    })
-    writable.on('finish', () => {
-      fileStream.end()
-    })
-    fileStream.on('close', () => res())
-    writable.on('error', reject)
-    fileStream.on('error', reject)
 
-    function pump() {
-      reader.read().then(({ done, value }) => {
-        if (done) {
-          writable.end()
-          return
-        }
-        writable.write(value, () => pump())
-      }).catch(reject)
+  try {
+    // Stream response body to file
+    await new Promise<void>((res, reject) => {
+      const writable = new Writable({
+        write(chunk, _encoding, callback) {
+          fileStream.write(chunk, callback)
+        },
+      })
+      writable.on('finish', () => {
+        fileStream.end()
+      })
+      fileStream.on('close', () => res())
+      writable.on('error', reject)
+      fileStream.on('error', reject)
+
+      function pump() {
+        reader.read().then(({ done, value }) => {
+          if (done) {
+            writable.end()
+            return
+          }
+          writable.write(value, () => pump())
+        }).catch(reject)
+      }
+      pump()
+    })
+
+    // Extract tarball — npm tarballs have a "package/" prefix
+    const { status } = spawnSync('tar', ['xzf', tmpTarball, '--strip-components=1', '-C', pkgDir], { stdio: 'ignore' })
+    if (status !== 0) {
+      rmSync(pkgDir, { recursive: true, force: true })
+      return null
     }
-    pump()
-  })
 
-  // Extract tarball — npm tarballs have a "package/" prefix
-  const { status } = spawnSync('tar', ['xzf', tmpTarball, '--strip-components=1', '-C', pkgDir], { stdio: 'ignore' })
-  if (status !== 0) {
+    return pkgDir
+  }
+  catch {
     rmSync(pkgDir, { recursive: true, force: true })
-    rmSync(tmpTarball, { force: true })
     return null
   }
-
-  unlinkSync(tmpTarball)
-  return pkgDir
+  finally {
+    reader.cancel().catch(() => {})
+    fileStream.destroy()
+    rmSync(tmpTarball, { force: true })
+  }
 }
 
 /**

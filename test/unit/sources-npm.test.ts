@@ -46,11 +46,23 @@ vi.mock('node:fs', async () => {
     ...actual,
     existsSync: vi.fn(),
     readFileSync: vi.fn(),
+    createWriteStream: vi.fn(),
+    mkdirSync: vi.fn(),
+    rmSync: vi.fn(),
+  }
+})
+
+// Mock child_process for spawnSync
+vi.mock('node:child_process', async () => {
+  const actual = await vi.importActual<typeof import('node:child_process')>('node:child_process')
+  return {
+    ...actual,
+    spawnSync: vi.fn(),
   }
 })
 
 // Must import after vi.mock
-const { fetchNpmPackage, getInstalledSkillVersion, readLocalDependencies, resolveInstalledVersion, resolvePackageDocs } = await import('../../src/sources/npm')
+const { fetchNpmPackage, fetchPkgDist, getInstalledSkillVersion, readLocalDependencies, resolveInstalledVersion, resolvePackageDocs } = await import('../../src/sources/npm')
 
 describe('sources/npm', () => {
   describe('readLocalDependencies', () => {
@@ -548,6 +560,117 @@ description: Vue skill
 
       expect(result?.readmeUrl).toBe('ungh://nuxt/nuxt/packages/kit')
       expect(fetchReadme).toHaveBeenCalledWith('nuxt', 'nuxt', 'packages/kit', undefined)
+    })
+  })
+
+  describe('fetchPkgDist', () => {
+    const mockDestroy = vi.fn()
+    let mockFileStream: any
+
+    beforeEach(() => {
+      vi.resetAllMocks()
+      mockFileStream = {
+        write: vi.fn((_chunk: any, cb: () => void) => cb()),
+        end: vi.fn(),
+        destroy: mockDestroy,
+        on: vi.fn().mockReturnThis(),
+      }
+    })
+
+    afterEach(() => {
+      vi.restoreAllMocks()
+      vi.unstubAllGlobals()
+    })
+
+    it('cleans up stream and temp file on download failure', async () => {
+      const { existsSync, mkdirSync, rmSync, createWriteStream } = await import('node:fs')
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(mkdirSync).mockReturnValue(undefined as any)
+      vi.mocked(rmSync).mockReturnValue(undefined)
+      vi.mocked(createWriteStream).mockReturnValue(mockFileStream)
+
+      // Registry metadata
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          dist: { tarball: 'https://registry.npmjs.org/pkg/-/pkg-1.0.0.tgz' },
+        }),
+      })
+
+      // Tarball download succeeds but body reader fails mid-transfer
+      const mockCancel = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: vi.fn().mockRejectedValue(new Error('network timeout')),
+            cancel: mockCancel,
+          }),
+        },
+      }))
+
+      const result = await fetchPkgDist('pkg', '1.0.0')
+
+      expect(result).toBeNull()
+      expect(mockCancel).toHaveBeenCalled()
+      expect(mockDestroy).toHaveBeenCalled()
+      expect(vi.mocked(rmSync)).toHaveBeenCalledWith(
+        expect.stringContaining('_pkg.tgz'),
+        { force: true },
+      )
+    })
+
+    it('cleans up on tar extraction failure', async () => {
+      const { existsSync, mkdirSync, rmSync, createWriteStream } = await import('node:fs')
+      const { spawnSync } = await import('node:child_process')
+
+      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(mkdirSync).mockReturnValue(undefined as any)
+      vi.mocked(rmSync).mockReturnValue(undefined)
+      vi.mocked(createWriteStream).mockReturnValue(mockFileStream)
+      vi.mocked(spawnSync).mockReturnValue({ status: 1 } as any)
+
+      // Registry metadata
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          dist: { tarball: 'https://registry.npmjs.org/pkg/-/pkg-1.0.0.tgz' },
+        }),
+      })
+
+      // Simulate successful download - reader returns one chunk then done
+      const mockCancel = vi.fn().mockResolvedValue(undefined)
+      const mockReader = {
+        read: vi.fn()
+          .mockResolvedValueOnce({ done: false, value: Buffer.from('fake-tarball') })
+          .mockResolvedValueOnce({ done: true, value: undefined }),
+        cancel: mockCancel,
+      }
+
+      // Need fileStream.on('close') to fire after end() for promise to resolve
+      mockFileStream.on = vi.fn((event: string, cb: () => void) => {
+        if (event === 'close')
+          setTimeout(cb, 0)
+        return mockFileStream
+      })
+
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        body: { getReader: () => mockReader },
+      }))
+
+      const result = await fetchPkgDist('pkg', '1.0.0')
+
+      expect(result).toBeNull()
+      expect(mockDestroy).toHaveBeenCalled()
+      expect(vi.mocked(rmSync)).toHaveBeenCalledWith(
+        expect.stringContaining('_pkg.tgz'),
+        { force: true },
+      )
+      expect(vi.mocked(rmSync)).toHaveBeenCalledWith(
+        expect.stringContaining('pkg'),
+        expect.objectContaining({ recursive: true }),
+      )
     })
   })
 })
