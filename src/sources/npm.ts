@@ -456,7 +456,10 @@ export function resolveInstalledVersion(name: string, cwd: string): string | nul
           const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
           return pkg.version || null
         }
-        dir = dirname(dir)
+        const parent = dirname(dir)
+        if (parent === dir)
+          break
+        dir = parent
       }
     }
     catch {}
