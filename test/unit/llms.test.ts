@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { extractSections, normalizeLlmsLinks, parseMarkdownLinks } from '../../src/sources/llms'
+import { extractSections, isSafeUrl, normalizeLlmsLinks, parseMarkdownLinks } from '../../src/sources/llms'
 
 describe('sources/llms', () => {
   describe('parseMarkdownLinks', () => {
@@ -45,6 +45,57 @@ describe('sources/llms', () => {
     it('preserves non-absolute paths', () => {
       const content = 'See [Guide](./getting-started.md)'
       expect(normalizeLlmsLinks(content)).toBe('See [Guide](./getting-started.md)')
+    })
+  })
+
+  describe('isSafeUrl', () => {
+    it('allows public HTTPS URLs', () => {
+      expect(isSafeUrl('https://vuejs.org/docs/guide.md')).toBe(true)
+      expect(isSafeUrl('https://example.com/api.md')).toBe(true)
+    })
+
+    it('blocks HTTP URLs', () => {
+      expect(isSafeUrl('http://example.com/docs.md')).toBe(false)
+    })
+
+    it('blocks localhost and loopback', () => {
+      expect(isSafeUrl('https://localhost/secret')).toBe(false)
+      expect(isSafeUrl('https://127.0.0.1/secret')).toBe(false)
+      expect(isSafeUrl('https://[::1]/secret')).toBe(false)
+    })
+
+    it('blocks 0.0.0.0', () => {
+      expect(isSafeUrl('https://0.0.0.0/secret')).toBe(false)
+    })
+
+    it('blocks cloud metadata endpoint', () => {
+      expect(isSafeUrl('https://169.254.169.254/latest/meta-data/')).toBe(false)
+    })
+
+    it('blocks RFC 1918 private IPs', () => {
+      expect(isSafeUrl('https://10.0.0.1/internal')).toBe(false)
+      expect(isSafeUrl('https://172.16.0.1/internal')).toBe(false)
+      expect(isSafeUrl('https://172.31.255.1/internal')).toBe(false)
+      expect(isSafeUrl('https://192.168.1.1/internal')).toBe(false)
+    })
+
+    it('blocks IPv6 unique-local (fc00::/7)', () => {
+      expect(isSafeUrl('https://[fc00::1]/internal')).toBe(false)
+      expect(isSafeUrl('https://[fd12:3456::1]/internal')).toBe(false)
+    })
+
+    it('blocks IPv6 link-local (fe80::/10)', () => {
+      expect(isSafeUrl('https://[fe80::1]/internal')).toBe(false)
+      expect(isSafeUrl('https://[feb0::1]/internal')).toBe(false)
+    })
+
+    it('blocks IPv4-mapped IPv6 addresses', () => {
+      expect(isSafeUrl('https://[::ffff:127.0.0.1]/secret')).toBe(false)
+      expect(isSafeUrl('https://[::ffff:10.0.0.1]/internal')).toBe(false)
+    })
+
+    it('rejects invalid URLs', () => {
+      expect(isSafeUrl('not-a-url')).toBe(false)
     })
   })
 
