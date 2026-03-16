@@ -19,7 +19,9 @@ function safeRemove(path: string): number {
     return size
   }
   catch {
-    try { rmSync(path) }
+    try {
+      rmSync(path)
+    }
     catch {}
     return 0
   }
