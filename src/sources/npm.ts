@@ -66,7 +66,9 @@ export async function fetchNpmRegistryMeta(packageName: string, version: string)
   const data = await $fetch<{
     'time'?: Record<string, string>
     'dist-tags'?: Record<string, string>
-  }>(`https://registry.npmjs.org/${barePackageName}`).catch(() => null)
+  }>(`https://registry.npmjs.org/${barePackageName}`, {
+    headers: { Accept: 'application/vnd.npm.install-v1+json' },
+  }).catch(() => null)
 
   if (!data)
     return {}
@@ -663,7 +665,15 @@ export async function fetchLatestVersion(packageName: string): Promise<string | 
   const data = await $fetch<{ version?: string }>(
     `https://unpkg.com/${packageName}/package.json`,
   ).catch(() => null)
-  return data?.version || null
+  if (data?.version)
+    return data.version
+
+  // Fallback to npm registry dist-tags
+  const registry = await $fetch<{ 'dist-tags'?: Record<string, string> }>(
+    `https://registry.npmjs.org/${packageName}`,
+    { headers: { Accept: 'application/vnd.npm.install-v1+json' } },
+  ).catch(() => null)
+  return registry?.['dist-tags']?.latest || null
 }
 
 /**

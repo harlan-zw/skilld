@@ -116,7 +116,7 @@ export function isOutdated(skill: SkillEntry, depVersion: string): boolean {
   if (!skill.info?.version)
     return true
 
-  const depClean = depVersion.replace(/^[\^~]/, '')
+  const depClean = depVersion.replace(/^[\^~>=<]+/, '')
 
   // Non-semver versions (e.g. '*' from catalog:/workspace: specifiers) can't be compared
   if (!semverValid(depClean))
