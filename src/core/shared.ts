@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'pathe'
-import { gt as _semverGt } from 'semver'
+import { gt as _semverGt, valid as _semverValid } from 'semver'
 import { isWindows } from 'std-env'
 
 /** Get-or-create for Maps. Polyfill for Map.getOrInsertComputed (not yet in Node.js). */
@@ -12,6 +12,11 @@ export function mapInsert<K, V>(map: Map<K, V>, key: K, create: () => V): V {
     map.set(key, val)
   }
   return val
+}
+
+/** Returns the cleaned version if valid semver, null otherwise. */
+export function semverValid(v: string): string | null {
+  return _semverValid(v, true)
 }
 
 /** Compare two semver strings: returns true if a > b. Handles prereleases. */
