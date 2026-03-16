@@ -12,6 +12,21 @@ import { clearEmbeddingCache } from '../retriv/embedding-cache.ts'
 const LLM_CACHE_DIR = join(CACHE_DIR, 'llm-cache')
 const LLM_CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000
 
+function safeRemove(path: string): number {
+  try {
+    const size = statSync(path).size
+    rmSync(path)
+    return size
+  }
+  catch {
+    try {
+      rmSync(path)
+    }
+    catch {}
+    return 0
+  }
+}
+
 export async function cacheCleanCommand(): Promise<void> {
   let expiredLlm = 0
   let freedBytes = 0
@@ -24,18 +39,14 @@ export async function cacheCleanCommand(): Promise<void> {
       try {
         const { timestamp } = JSON.parse(readFileSync(path, 'utf-8'))
         if (now - timestamp > LLM_CACHE_MAX_AGE) {
-          const size = statSync(path).size
-          rmSync(path)
+          freedBytes += safeRemove(path)
           expiredLlm++
-          freedBytes += size
         }
       }
       catch {
         // Corrupt cache entry — remove it
-        const size = statSync(path).size
-        rmSync(path)
+        freedBytes += safeRemove(path)
         expiredLlm++
-        freedBytes += size
       }
     }
   }
