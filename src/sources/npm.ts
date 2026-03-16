@@ -666,7 +666,9 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
     reader.cancel().catch(() => {})
     fileStream.destroy()
     await fileClosed
-    try { rmSync(tmpTarball, { force: true }) }
+    try {
+      rmSync(tmpTarball, { force: true })
+    }
     catch {}
   }
 }
