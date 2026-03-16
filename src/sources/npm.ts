@@ -618,6 +618,7 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
 
   const tmpTarball = join(cacheDir, '_pkg.tgz')
   const fileStream = createWriteStream(tmpTarball)
+  const fileClosed = new Promise<void>(resolve => fileStream.once('close', resolve))
 
   const reader = tarballRes.body.getReader()
 
@@ -664,7 +665,9 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
   finally {
     reader.cancel().catch(() => {})
     fileStream.destroy()
-    rmSync(tmpTarball, { force: true })
+    await fileClosed
+    try { rmSync(tmpTarball, { force: true }) }
+    catch {}
   }
 }
 

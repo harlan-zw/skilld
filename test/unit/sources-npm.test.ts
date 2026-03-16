@@ -564,16 +564,23 @@ description: Vue skill
   })
 
   describe('fetchPkgDist', () => {
-    const mockDestroy = vi.fn()
     let mockFileStream: any
 
     beforeEach(() => {
       vi.resetAllMocks()
+      const closeListeners: Array<() => void> = []
       mockFileStream = {
         write: vi.fn((_chunk: any, cb: () => void) => cb()),
         end: vi.fn(),
-        destroy: mockDestroy,
+        destroy: vi.fn(() => {
+          for (const cb of closeListeners) cb()
+        }),
         on: vi.fn().mockReturnThis(),
+        once: vi.fn((event: string, cb: () => void) => {
+          if (event === 'close')
+            closeListeners.push(cb)
+          return mockFileStream
+        }),
       }
     })
 
@@ -613,7 +620,7 @@ description: Vue skill
 
       expect(result).toBeNull()
       expect(mockCancel).toHaveBeenCalled()
-      expect(mockDestroy).toHaveBeenCalled()
+      expect(mockFileStream.destroy).toHaveBeenCalled()
       expect(vi.mocked(rmSync)).toHaveBeenCalledWith(
         expect.stringContaining('_pkg.tgz'),
         { force: true },
@@ -662,7 +669,7 @@ description: Vue skill
       const result = await fetchPkgDist('pkg', '1.0.0')
 
       expect(result).toBeNull()
-      expect(mockDestroy).toHaveBeenCalled()
+      expect(mockFileStream.destroy).toHaveBeenCalled()
       expect(vi.mocked(rmSync)).toHaveBeenCalledWith(
         expect.stringContaining('_pkg.tgz'),
         { force: true },
