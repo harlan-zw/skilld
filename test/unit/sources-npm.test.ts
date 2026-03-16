@@ -212,6 +212,19 @@ describe('sources/npm', () => {
 
       expect(resolveInstalledVersion('nonexistent', '/project')).toBeNull()
     })
+
+    it('terminates at filesystem root instead of looping forever', async () => {
+      const { resolvePathSync } = await import('mlly')
+      const { existsSync } = await import('node:fs')
+      // First call (package.json path) throws, triggering fallback walk-up
+      vi.mocked(resolvePathSync)
+        .mockImplementationOnce(() => { throw new Error('no exports') })
+        .mockReturnValueOnce('/some/deep/path/entry.js')
+      // No package.json exists anywhere in the tree
+      vi.mocked(existsSync).mockReturnValue(false)
+
+      expect(resolveInstalledVersion('pkg', '/some/deep/path')).toBeNull()
+    })
   })
 
   describe('fetchNpmPackage', () => {
