@@ -68,8 +68,15 @@ describe('sources/llms', () => {
       expect(isSafeUrl('https://0.0.0.0/secret')).toBe(false)
     })
 
-    it('blocks cloud metadata endpoint', () => {
+    it('blocks full 127.0.0.0/8 loopback range', () => {
+      expect(isSafeUrl('https://127.0.0.1/secret')).toBe(false)
+      expect(isSafeUrl('https://127.0.1.1/secret')).toBe(false)
+      expect(isSafeUrl('https://127.255.255.255/secret')).toBe(false)
+    })
+
+    it('blocks 169.254.0.0/16 link-local range', () => {
       expect(isSafeUrl('https://169.254.169.254/latest/meta-data/')).toBe(false)
+      expect(isSafeUrl('https://169.254.1.1/internal')).toBe(false)
     })
 
     it('blocks RFC 1918 private IPs', () => {

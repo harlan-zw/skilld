@@ -50,11 +50,9 @@ export function isSafeUrl(url: string): boolean {
       return false
     const host = parsed.hostname
     // Reject private/link-local/loopback
-    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]')
+    if (host === 'localhost' || host === '0.0.0.0' || host === '[::1]')
       return false
-    if (host === '0.0.0.0' || host === '169.254.169.254')
-      return false
-    if (/^(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host))
+    if (/^(?:127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(host))
       return false
     // IPv6 private/link-local — hostname keeps brackets in Node.js
     if (/^\[(?:f[cd]|fe[89ab]|::ffff:)/i.test(host))
