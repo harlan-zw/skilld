@@ -31,8 +31,9 @@ function removeAgentInstructions(agent: AgentType, projectPath: string): boolean
       rmSync(filePath)
       removed = true
     }
-    // Also clean up legacy .cursorrules markers
-    removed = removeMarkerBlock(join(projectPath, '.cursorrules')) || removed
+    // Also clean up legacy .cursorrules markers (cursor-specific)
+    if (agent === 'cursor')
+      removed = removeMarkerBlock(join(projectPath, '.cursorrules')) || removed
   }
   else if (existsSync(filePath)) {
     removed = removeMarkerBlock(filePath)

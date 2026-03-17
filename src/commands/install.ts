@@ -615,7 +615,7 @@ async function enhanceRegenerated(
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
-    llmLog.error('Enhancement skipped')
+    llmLog.message('Enhancement skipped')
   }
 }
 

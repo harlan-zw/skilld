@@ -162,6 +162,7 @@ async function configureOAuth(): Promise<void> {
         return false
       })
 
+      spinner.stop()
       if (success)
         p.log.success(`Connected to ${pr.name}`)
     },

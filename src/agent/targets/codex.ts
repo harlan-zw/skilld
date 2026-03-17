@@ -26,7 +26,11 @@ export const codex = defineTarget({
   // Codex doesn't currently set a reliable "running inside codex" env var,
   // so env detection is disabled - we rely on project dir detection instead.
   detectEnv: () => false,
-  detectProject: cwd => existsSync(join(cwd, '.codex')),
+  detectProject: cwd =>
+    existsSync(join(cwd, '.codex'))
+    || existsSync(join(cwd, 'AGENTS.md'))
+    || existsSync(join(cwd, 'AGENTS.override.md'))
+    || existsSync(join(cwd, '.agents', 'skills')),
   cli: 'codex',
   instructionFile: 'AGENTS.md',
 

@@ -10,14 +10,26 @@ interface EmbeddingConfig {
 
 const EMBEDDINGS_DB_PATH = join(CACHE_DIR, 'embeddings.db')
 
+let _db: DatabaseSync | null = null
+
 async function openDb(): Promise<DatabaseSync> {
+  if (_db)
+    return _db
   const { DatabaseSync: DB } = await import('node:sqlite')
   const db = new DB(EMBEDDINGS_DB_PATH)
   db.exec('PRAGMA journal_mode=WAL')
   db.exec('PRAGMA busy_timeout=5000')
   db.exec(`CREATE TABLE IF NOT EXISTS embeddings (text_hash TEXT PRIMARY KEY, embedding BLOB NOT NULL)`)
   db.exec(`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)`)
+  _db = db
   return db
+}
+
+function closeDb(): void {
+  if (_db) {
+    _db.close()
+    _db = null
+  }
 }
 
 function createSqliteStorage(db: DatabaseSync) {
@@ -64,5 +76,6 @@ export async function cachedEmbeddings(config: EmbeddingConfig): Promise<Embeddi
 }
 
 export function clearEmbeddingCache(): void {
+  closeDb()
   rmSync(EMBEDDINGS_DB_PATH, { force: true })
 }

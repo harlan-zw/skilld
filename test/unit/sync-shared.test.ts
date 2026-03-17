@@ -95,7 +95,7 @@ vi.mock('../../src/retriv', async (importOriginal) => {
 
 vi.mock('../../src/agent', () => ({
   agents: {
-    'claude-code': { name: 'claude-code', displayName: 'Claude Code', skillsDir: '.claude/skills' },
+    'claude-code': { name: 'claude-code', displayName: 'Claude Code', skillsDir: '.claude/skills', globalSkillsDir: '/home/test/.claude/skills' },
   },
 }))
 

@@ -307,9 +307,10 @@ async function optimizeSectionViaPiAi(opts: {
   skillDir: string
   model: OptimizeModel
   onProgress?: (progress: StreamProgress) => void
+  timeout: number
   debug?: boolean
 }): Promise<SectionResult> {
-  const { section, prompt, outputFile, skillDir, model, onProgress, debug } = opts
+  const { section, prompt, outputFile, skillDir, model, onProgress, timeout, debug } = opts
   const skilldDir = join(skillDir, '.skilld')
   const outputPath = join(skilldDir, outputFile)
 
@@ -317,7 +318,10 @@ async function optimizeSectionViaPiAi(opts: {
   writeFileSync(join(skilldDir, `PROMPT_${section}.md`), prompt)
 
   try {
-    const result = await optimizeSectionPiAi({ section, prompt, skillDir, model, onProgress })
+    const ac = new AbortController()
+    const timer = setTimeout(() => ac.abort(), timeout)
+    const result = await optimizeSectionPiAi({ section, prompt, skillDir, model, onProgress, signal: ac.signal })
+      .finally(() => clearTimeout(timer))
 
     const raw = result.text.trim()
 
@@ -378,7 +382,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
 
   // pi-ai direct API path — no CLI spawning
   if (isPiAiModel(model)) {
-    return optimizeSectionViaPiAi({ section, prompt, outputFile, skillDir, model, onProgress, debug })
+    return optimizeSectionViaPiAi({ section, prompt, outputFile, skillDir, model, onProgress, timeout, debug })
   }
 
   const cliConfig = CLI_MODELS[model]

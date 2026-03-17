@@ -208,8 +208,10 @@ const main = defineCommand({
 
     // No-agent mode: run wizard, then guide them
     if (currentAgent === 'none') {
-      if (!hasCompletedWizard())
-        await runWizard()
+      if (!hasCompletedWizard()) {
+        if (!await runWizard())
+          return
+      }
       p.log.info(
         'No agent selected - skills export as portable PROMPT_*.md files.\n'
         + '  Run \x1B[36mskilld add <pkg>\x1B[0m to generate prompts for any package.\n'
@@ -222,7 +224,7 @@ const main = defineCommand({
     const agent: AgentType = currentAgent
 
     // Animate brand while bootstrapping + check for updates
-    const { state, selfUpdate } = await brandLoader(async () => {
+    let { state, selfUpdate } = await brandLoader(async () => {
       const config = readConfig()
       const state = await getProjectState(cwd)
 
@@ -279,7 +281,8 @@ const main = defineCommand({
     // First time setup or returning with no skills (e.g. cancelled last time)
     if (state.skills.length === 0) {
       if (!hasCompletedWizard()) {
-        await runWizard({ agent, showOutro: false })
+        if (!await runWizard({ agent, showOutro: false }))
+          return
       }
       else {
         p.log.step('No skills installed yet - pick some packages to get started.')
@@ -506,6 +509,10 @@ const main = defineCommand({
     const status = formatStatus(state.synced.length, state.outdated.length)
     p.log.info(status)
 
+    const refreshState = async () => {
+      state = await getProjectState(cwd)
+    }
+
     // Main menu — Escape in sub-actions returns to menu via guard()
     await menuLoop({
       message: 'What would you like to do?',
@@ -617,6 +624,7 @@ const main = defineCommand({
               agent,
               yes: false,
             })
+            await refreshState()
             return true
           }
           case 'update': {
@@ -642,6 +650,7 @@ const main = defineCommand({
               agent,
               yes: false,
             })
+            await refreshState()
             return true
           }
           case 'remove': {
@@ -663,6 +672,7 @@ const main = defineCommand({
               agent,
               yes: false,
             })
+            await refreshState()
             break
           }
           case 'search': {

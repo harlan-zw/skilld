@@ -16,6 +16,7 @@ import { homedir } from 'node:os'
 import { getEnvApiKey, getModel, getModels, getProviders, streamSimple } from '@mariozechner/pi-ai'
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from '@mariozechner/pi-ai/oauth'
 import { join } from 'pathe'
+import { sanitizeMarkdown } from '../../core/sanitize.ts'
 import { portabilizePrompt } from '../prompts/index.ts'
 
 export function isPiAiModel(model: string): boolean {
@@ -117,8 +118,10 @@ async function resolveApiKey(provider: string): Promise<string | null> {
   if (!result)
     return null
 
-  // Save refreshed credentials
-  saveAuth({ ...auth, [oauthProviderId]: { type: 'oauth', ...result.newCredentials } })
+  // Save refreshed credentials to skilld's own file only (never leak pi-agent tokens)
+  const skilldAuth = readAuthFile(SKILLD_AUTH_PATH)
+  skilldAuth[oauthProviderId] = { type: 'oauth', ...result.newCredentials }
+  saveAuth(skilldAuth)
   return result.apiKey
 }
 
@@ -292,24 +295,18 @@ function collectReferenceContent(skillDir: string): string {
   const files: Array<{ path: string, content: string }> = []
   let totalChars = 0
 
-  // Read pkg/README.md if available
-  const readmePath = join(skilldDir, 'pkg', 'README.md')
-  if (existsSync(readmePath)) {
-    const content = readFileSync(readmePath, 'utf-8')
-    files.push({ path: 'references/pkg/README.md', content })
-    totalChars += content.length
-  }
-
   for (const subdir of REFERENCE_SUBDIRS) {
     const dirPath = join(skilldDir, subdir)
     if (!existsSync(dirPath))
       continue
 
     const indexPath = join(dirPath, '_INDEX.md')
-    if (existsSync(indexPath)) {
-      const content = readFileSync(indexPath, 'utf-8')
-      files.push({ path: `references/${subdir}/_INDEX.md`, content })
-      totalChars += content.length
+    if (existsSync(indexPath) && totalChars < MAX_REFERENCE_CHARS) {
+      const content = sanitizeMarkdown(readFileSync(indexPath, 'utf-8'))
+      if (totalChars + content.length <= MAX_REFERENCE_CHARS) {
+        files.push({ path: `references/${subdir}/_INDEX.md`, content })
+        totalChars += content.length
+      }
     }
 
     const entries = readdirSync(dirPath, { recursive: true })
@@ -323,13 +320,23 @@ function collectReferenceContent(skillDir: string): string {
       if (!existsSync(fullPath))
         continue
       try {
-        const content = readFileSync(fullPath, 'utf-8')
+        const content = sanitizeMarkdown(readFileSync(fullPath, 'utf-8'))
         if (totalChars + content.length > MAX_REFERENCE_CHARS)
           continue
         files.push({ path: `references/${subdir}/${entryStr}`, content })
         totalChars += content.length
       }
       catch {}
+    }
+  }
+
+  // Read pkg/README.md if available and within budget
+  const readmePath = join(skilldDir, 'pkg', 'README.md')
+  if (existsSync(readmePath) && totalChars < MAX_REFERENCE_CHARS) {
+    const content = sanitizeMarkdown(readFileSync(readmePath, 'utf-8'))
+    if (totalChars + content.length <= MAX_REFERENCE_CHARS) {
+      files.push({ path: 'references/pkg/README.md', content })
+      totalChars += content.length
     }
   }
 
@@ -345,7 +352,7 @@ function collectReferenceContent(skillDir: string): string {
         const fullPath = join(pkgDir, entryStr)
         if (!existsSync(fullPath))
           continue
-        const content = readFileSync(fullPath, 'utf-8')
+        const content = sanitizeMarkdown(readFileSync(fullPath, 'utf-8'))
         if (totalChars + content.length <= MAX_REFERENCE_CHARS) {
           files.push({ path: `references/pkg/${entryStr}`, content })
           totalChars += content.length
@@ -371,6 +378,7 @@ export interface PiAiSectionOptions {
   skillDir: string
   model: string
   onProgress?: (progress: StreamProgress) => void
+  signal?: AbortSignal
 }
 
 export interface PiAiSectionResult {
@@ -414,6 +422,8 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
   let cost: number | undefined
 
   for await (const event of stream) {
+    if (opts.signal?.aborted)
+      throw new Error('pi-ai request timed out')
     switch (event.type) {
       case 'text_delta':
         text += event.delta

@@ -81,7 +81,7 @@ export function installSkillForAgents(
 
     // Skip if this agent already reads a directory we've written to
     // (prevents duplicate skills in agents that scan multiple dirs)
-    if (isGlobal && agent.additionalSkillsDirs.some(d => writtenDirs.has(d))) {
+    if (isGlobal && (writtenDirs.has(baseDir) || agent.additionalSkillsDirs.some(d => writtenDirs.has(d)))) {
       skipped.push({ agent: agentType, reason: 'already covered by another agent dir' })
       continue
     }
@@ -129,8 +129,16 @@ export function linkSkillToAgents(skillName: string, sharedDir: string, cwd: str
         continue
       // Skip if this agent already reads a directory we've linked to
       const resolvedAdditional = agent.additionalSkillsDirs.map(d => join(cwd, d))
-      if (resolvedAdditional.some(d => linkedDirs.has(d)))
+      if (resolvedAdditional.some(d => linkedDirs.has(d))) {
+        // Clean stale symlinks before skipping
+        const staleTarget = join(agentSkillsDir, skillName)
+        try {
+          if (lstatSync(staleTarget).isSymbolicLink() && !existsSync(staleTarget))
+            unlinkSync(staleTarget)
+        }
+        catch {}
         continue
+      }
     }
 
     const target = join(agentSkillsDir, skillName)

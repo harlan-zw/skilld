@@ -26,9 +26,9 @@ export interface WizardOptions {
   showOutro?: boolean
 }
 
-export async function runWizard(opts: WizardOptions = {}): Promise<void> {
+export async function runWizard(opts: WizardOptions = {}): Promise<boolean> {
   if (!isInteractive())
-    return
+    return false
 
   const agentLabel = opts.agent ? agents[opts.agent].displayName : null
   const skillsDir = opts.agent ? agents[opts.agent].skillsDir : '.claude/skills'
@@ -90,7 +90,7 @@ export async function runWizard(opts: WizardOptions = {}): Promise<void> {
 
   if (p.isCancel(selected)) {
     p.cancel('Setup cancelled')
-    return
+    return false
   }
 
   const features: FeaturesConfig = {
@@ -158,7 +158,7 @@ export async function runWizard(opts: WizardOptions = {}): Promise<void> {
 
     if (choice === null) {
       p.cancel('Setup cancelled')
-      return
+      return false
     }
 
     if (choice === '_connect') {
@@ -182,7 +182,7 @@ export async function runWizard(opts: WizardOptions = {}): Promise<void> {
     features,
     ...(modelId
       ? { model: modelId, skipLlm: false }
-      : { skipLlm: skippedEnhancement }),
+      : { model: undefined, skipLlm: skippedEnhancement }),
   })
 
   // Summary of what was saved
@@ -202,6 +202,7 @@ export async function runWizard(opts: WizardOptions = {}): Promise<void> {
       'Setup complete',
     )
   }
+  return true
 }
 
 async function wizardConnectProvider(): Promise<void> {

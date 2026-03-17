@@ -17,7 +17,6 @@ import {
 } from '../agent/index.ts'
 import { maxItems, maxLines } from '../agent/prompts/optional/budget.ts'
 import {
-  CACHE_DIR,
   clearCache,
   getCacheDir,
   getPackageDbPath,
@@ -233,7 +232,7 @@ export function handleShippedSkills(
   const shared = getSharedSkillsDir(cwd)
   const agentConfig = agents[agent]
   const baseDir = global
-    ? join(CACHE_DIR, 'skills')
+    ? agentConfig.globalSkillsDir
     : shared || join(cwd, agentConfig.skillsDir)
   mkdirSync(baseDir, { recursive: true })
 
@@ -258,7 +257,7 @@ export function handleShippedSkills(
 export function resolveBaseDir(cwd: string, agent: AgentType, global: boolean): string {
   if (global) {
     const agentConfig = agents[agent]
-    return agentConfig.globalSkillsDir || join(CACHE_DIR, 'skills')
+    return agentConfig.globalSkillsDir
   }
   const shared = getSharedSkillsDir(cwd)
   if (shared)
@@ -1159,7 +1158,13 @@ export interface UpdateContext {
  */
 export async function selectLlmConfig(presetModel?: OptimizeModel, message?: string, updateCtx?: UpdateContext): Promise<LlmConfig | null> {
   if (presetModel) {
-    return { model: presetModel, sections: DEFAULT_SECTIONS }
+    // Validate preset model is still available (env/OAuth may have changed)
+    const available = await getAvailableModels()
+    if (available.some(m => m.id === presetModel))
+      return { model: presetModel, sections: DEFAULT_SECTIONS }
+    // Fall through to interactive selection if preset unavailable
+    if (!isInteractive())
+      return null
   }
 
   // Non-interactive (CI, agent, no TTY): skip generation unless model explicitly provided
