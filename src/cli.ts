@@ -685,6 +685,7 @@ const main = defineCommand({
             break
           case 'config':
             await configCommand()
+            await refreshState()
             break
         }
       },

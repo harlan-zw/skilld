@@ -366,7 +366,7 @@ function collectReferenceContent(skillDir: string): string {
   if (files.length === 0)
     return ''
 
-  const blocks = files.map(f => `<file path="${f.path}">\n${f.content}\n</file>`)
+  const blocks = files.map(f => `<file path="${f.path}">\n${f.content.replaceAll('</file>', '&lt;/file&gt;').replaceAll('</reference-files>', '&lt;/reference-files&gt;')}\n</file>`)
   return `<reference-files>\n${blocks.join('\n')}\n</reference-files>`
 }
 

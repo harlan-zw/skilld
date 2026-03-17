@@ -229,11 +229,7 @@ export function handleShippedSkills(
   if (shippedSkills.length === 0)
     return null
 
-  const shared = getSharedSkillsDir(cwd)
-  const agentConfig = agents[agent]
-  const baseDir = global
-    ? agentConfig.globalSkillsDir
-    : shared || join(cwd, agentConfig.skillsDir)
+  const baseDir = resolveBaseDir(cwd, agent, global)
   mkdirSync(baseDir, { recursive: true })
 
   for (const shipped of shippedSkills) {
