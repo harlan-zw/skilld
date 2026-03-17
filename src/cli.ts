@@ -444,7 +444,7 @@ const main = defineCommand({
         const previewPath = join(cwd, agents[agent].skillsDir, previewSkill.name, 'SKILL.md')
         if (existsSync(previewPath)) {
           const previewContent = readFileSync(previewPath, 'utf-8')
-          const previewLines = previewContent.split('\n').slice(0, 20).join('\n')
+          const previewLines = previewContent.split('\n').slice(0, 20).join('\n').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').replace(/\x1B\].*?(?:\x07|\x1B\\)/g, '')
           const fileSize = (Buffer.byteLength(previewContent) / 1024).toFixed(1)
           p.note(
             `\x1B[90m${previewLines}\n...\x1B[0m`,

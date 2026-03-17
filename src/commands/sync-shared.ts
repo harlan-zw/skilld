@@ -1206,8 +1206,11 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
     if (diff)
       ageParts.push(diff)
     if (updateCtx.syncedAt) {
-      const days = Math.floor((Date.now() - new Date(updateCtx.syncedAt).getTime()) / 86_400_000)
-      ageParts.push(days === 0 ? 'today' : days === 1 ? '1d ago' : `${days}d ago`)
+      const syncedAtMs = new Date(updateCtx.syncedAt).getTime()
+      if (Number.isFinite(syncedAtMs)) {
+        const days = Math.floor((Date.now() - syncedAtMs) / 86_400_000)
+        ageParts.push(days === 0 ? 'today' : days === 1 ? '1d ago' : `${days}d ago`)
+      }
     }
     if (updateCtx.wasEnhanced)
       ageParts.push('LLM-enhanced')
