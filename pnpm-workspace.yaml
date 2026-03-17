@@ -1,5 +1,12 @@
+catalogMode: prefer
+
+shellEmulator: true
+
+trustPolicy: no-downgrade
 packages:
   - playground
+overrides:
+  global-agent: ^4.1.3
 catalog:
   '@mariozechner/pi-ai': ^0.58.4
   '@mdream/crawl': ^0.17.0
@@ -13,8 +20,6 @@ catalog:
   std-env: ^4.0.0
   tsx: ^4.21.0
   unagent: ^0.0.8
-catalogMode: prefer
-
 catalogs:
   deps:
     '@clack/prompts': ^1.1.0
@@ -46,10 +51,3 @@ catalogs:
 
 onlyBuiltDependencies:
   - esbuild
-
-overrides:
-  global-agent: ^4.1.3
-
-shellEmulator: true
-
-trustPolicy: no-downgrade
