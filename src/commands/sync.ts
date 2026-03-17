@@ -2,7 +2,7 @@ import type { AgentType, OptimizeModel, SkillSection } from '../agent/index.ts'
 import type { ProjectState } from '../core/skills.ts'
 import type { GitSkillSource } from '../sources/git-skills.ts'
 import type { ResolveAttempt } from '../sources/index.ts'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
@@ -12,6 +12,7 @@ import {
   computeSkillDirName,
   detectImportedPackages,
   generateSkillMd,
+  getAvailableModels,
   getModelLabel,
   linkSkillToAgents,
   portabilizePrompt,
@@ -33,6 +34,7 @@ import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resol
 import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
+import { parseFrontmatter } from '../core/markdown.ts'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { getProjectState } from '../core/skills.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
@@ -70,17 +72,29 @@ import { runWizard } from './wizard.ts'
 
 // Re-export for external consumers
 export { DEFAULT_SECTIONS, enhanceSkillWithLLM, ensureAgentInstructions, ensureGitignore, selectLlmConfig, selectModel, selectSkillSections, SKILLD_MARKER_END, SKILLD_MARKER_START, writePromptFiles } from './sync-shared.ts'
-export type { EnhanceOptions, LlmConfig } from './sync-shared.ts'
+export type { EnhanceOptions, LlmConfig, UpdateContext } from './sync-shared.ts'
+
+const RESOLVE_SOURCE_LABELS: Record<string, string> = {
+  'npm': 'npm registry',
+  'github-docs': 'GitHub versioned docs',
+  'github-meta': 'GitHub metadata',
+  'github-search': 'GitHub search',
+  'readme': 'README fallback',
+  'llms.txt': 'llms.txt convention',
+  'crawl': 'website crawl',
+  'local': 'local node_modules',
+}
 
 function showResolveAttempts(attempts: ResolveAttempt[]): void {
   if (attempts.length === 0)
     return
 
-  p.log.message('\x1B[90mResolution attempts:\x1B[0m')
+  p.log.message('\x1B[90mDoc resolution:\x1B[0m')
   for (const attempt of attempts) {
     const icon = attempt.status === 'success' ? '\x1B[32m✓\x1B[0m' : '\x1B[90m✗\x1B[0m'
-    const source = `\x1B[90m${attempt.source}\x1B[0m`
-    const msg = attempt.message ? ` - ${attempt.message}` : ''
+    const label = RESOLVE_SOURCE_LABELS[attempt.source] ?? attempt.source
+    const source = `\x1B[90m${label}\x1B[0m`
+    const msg = attempt.message ? ` \x1B[90m— ${attempt.message}\x1B[0m` : ''
     p.log.message(`  ${icon} ${source}${msg}`)
   }
 }
@@ -359,6 +373,22 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const existingLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
   const isMerge = existingLock && existingLock.packageName && existingLock.packageName !== packageName
 
+  // Capture update context before lockfile gets overwritten
+  const updateCtx = config.mode === 'update' && existingLock
+    ? {
+        oldVersion: existingLock.version,
+        newVersion: version,
+        syncedAt: existingLock.syncedAt,
+        wasEnhanced: (() => {
+          const skillMdPath = join(skillDir, 'SKILL.md')
+          if (!existsSync(skillMdPath))
+            return false
+          const fm = parseFrontmatter(readFileSync(skillMdPath, 'utf-8'))
+          return !!fm.generated_by
+        })(),
+      }
+    : undefined
+
   if (isMerge) {
     spin.stop(`Merging ${packageName} into ${skillDirName}`)
 
@@ -519,10 +549,19 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
   p.log.success(config.mode === 'update' ? `Updated skill: ${relative(cwd, skillDir)}` : `Created base skill: ${relative(cwd, skillDir)}`)
 
-  // Ask about LLM optimization (skip if -y flag, skipLlm config, or model already specified)
+  // Ask about LLM optimization (skip if skipLlm config)
+  // When -y without -m: auto-resolve model from config or available models
   const globalConfig = readConfig()
-  if (!globalConfig.skipLlm && (!config.yes || config.model)) {
-    const llmConfig = await selectLlmConfig(config.model)
+  let resolvedModel = config.model || (config.yes && !globalConfig.skipLlm ? globalConfig.model as OptimizeModel | undefined : undefined)
+  // Auto-resolve when -y, not skipping LLM, but no explicit model (e.g. user picked "Auto" in wizard)
+  if (!resolvedModel && config.yes && !globalConfig.skipLlm) {
+    const available = await getAvailableModels()
+    const auto = available.find(m => m.recommended)?.id ?? available[0]?.id
+    if (auto)
+      resolvedModel = auto as OptimizeModel
+  }
+  if (!globalConfig.skipLlm && (!config.yes || resolvedModel)) {
+    const llmConfig = await selectLlmConfig(resolvedModel, undefined, updateCtx)
     if (llmConfig?.promptOnly) {
       writePromptFiles({
         packageName,
@@ -595,7 +634,8 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   await shutdownWorker()
 
   const ejectMsg = isEject ? ' (ejected)' : ''
-  p.outro(config.mode === 'update' ? `Updated ${packageName}${ejectMsg}` : `Synced ${packageName} to ${relative(cwd, skillDir)}${ejectMsg}`)
+  const relDir = relative(cwd, skillDir)
+  p.outro(config.mode === 'update' ? `Updated ${packageName}${ejectMsg}` : `Synced ${packageName} → ${relDir}${ejectMsg}`)
 }
 
 // ── Citty command definitions (lazy-loaded by cli.ts) ──
@@ -642,7 +682,7 @@ export const addCommandDef = defineCommand({
 
     // First-time setup — configure features + LLM model
     if (!hasCompletedWizard())
-      await runWizard()
+      await runWizard({ agent })
 
     // Partition: git sources vs npm packages
     const gitSources: GitSkillSource[] = []
@@ -668,7 +708,7 @@ export const addCommandDef = defineCommand({
     if (npmTokens.length > 0) {
       const packages = [...new Set(npmTokens.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
       const state = await getProjectState(cwd)
-      p.intro(introLine({ state }))
+      p.intro(introLine({ state, agentId: agent || undefined }))
       return syncCommand(state, {
         packages,
         global: args.global,
@@ -718,10 +758,10 @@ export const ejectCommandDef = defineCommand({
     const agent: AgentType = resolved && resolved !== 'none' ? resolved : 'claude-code'
 
     if (!hasCompletedWizard())
-      await runWizard()
+      await runWizard({ agent })
 
     const state = await getProjectState(cwd)
-    p.intro(introLine({ state }))
+    p.intro(introLine({ state, agentId: agent || undefined }))
     return syncCommand(state, {
       packages: [args.package],
       global: args.global,
@@ -800,7 +840,7 @@ export const updateCommandDef = defineCommand({
 
     if (!silent) {
       const generators = getInstalledGenerators()
-      p.intro(introLine({ state, generators, modelId: config.model }))
+      p.intro(introLine({ state, generators, modelId: config.model, agentId: config.agent || agent || undefined }))
     }
 
     // Specific packages

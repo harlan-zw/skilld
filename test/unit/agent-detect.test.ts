@@ -65,9 +65,10 @@ describe('agent/detect', () => {
       expect(detectTargetAgent()).toBe('cline')
     })
 
-    it('detects codex from CODEX_HOME env', () => {
+    it('does not detect codex from CODEX_HOME env (config dir, not session)', () => {
       process.env.CODEX_HOME = '/home/user/.codex'
-      expect(detectTargetAgent()).toBe('codex')
+      // CODEX_HOME is a config dir override, not a "running inside codex" signal
+      expect(detectTargetAgent()).not.toBe('codex')
     })
 
     it('detects github-copilot from COPILOT_RUN_APP', () => {

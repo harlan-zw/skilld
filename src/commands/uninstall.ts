@@ -13,13 +13,35 @@ import { SKILLD_MARKER_END, SKILLD_MARKER_START } from './sync.ts'
 
 /**
  * Remove the skilld marker block from an agent's instruction file.
+ * For .mdc files (dedicated skilld files), delete the entire file.
+ * Also cleans up legacy .cursorrules markers for backwards compat.
  */
 function removeAgentInstructions(agent: AgentType, projectPath: string): boolean {
   const agentConfig = agents[agent]
   if (!agentConfig.instructionFile)
     return false
 
+  let removed = false
+
+  // Handle current instruction file
   const filePath = join(projectPath, agentConfig.instructionFile)
+  if (agentConfig.instructionFile.endsWith('.mdc')) {
+    // MDC files are dedicated skilld files - just delete
+    if (existsSync(filePath)) {
+      rmSync(filePath)
+      removed = true
+    }
+    // Also clean up legacy .cursorrules markers
+    removed = removeMarkerBlock(join(projectPath, '.cursorrules')) || removed
+  }
+  else if (existsSync(filePath)) {
+    removed = removeMarkerBlock(filePath)
+  }
+
+  return removed
+}
+
+function removeMarkerBlock(filePath: string): boolean {
   if (!existsSync(filePath))
     return false
 

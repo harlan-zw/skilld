@@ -1,7 +1,7 @@
 import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import type { ResolvedPackage } from '../sources/index.ts'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import logUpdate from 'log-update'
 import pLimit from 'p-limit'
@@ -30,7 +30,8 @@ import {
 import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
 import { formatDuration } from '../core/formatting.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
-import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { parseFrontmatter } from '../core/markdown.ts'
+import { getSharedSkillsDir, semverDiff, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
@@ -118,6 +119,12 @@ interface BaseSkillData {
   packages?: Array<{ name: string }>
   warnings: string[]
   features?: FeaturesConfig
+  /** Pre-update version (only set in update mode) */
+  oldVersion?: string
+  /** Pre-update syncedAt date (only set in update mode) */
+  oldSyncedAt?: string
+  /** Whether the existing SKILL.md had LLM-generated content */
+  wasEnhanced?: boolean
   usedCache: boolean
 }
 
@@ -221,10 +228,49 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     }
   }
 
-  // Phase 2: Ask about LLM enhancement (skip if -y without model, or skipLlm config)
+  // Phase 2: Ask about LLM enhancement (skip if skipLlm config)
+  // When -y without -m: auto-resolve model from config or available models
   const globalConfig = readConfig()
-  if (successfulPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !config.model)) {
-    const llmConfig = await selectLlmConfig(config.model)
+  let resolvedModel = config.model || (config.yes && !globalConfig.skipLlm ? globalConfig.model as import('../agent/index.ts').OptimizeModel | undefined : undefined)
+  // Auto-resolve when -y, not skipping LLM, but no explicit model (e.g. user picked "Auto" in wizard)
+  if (!resolvedModel && config.yes && !globalConfig.skipLlm) {
+    const { getAvailableModels } = await import('../agent/index.ts')
+    const available = await getAvailableModels()
+    const auto = available.find(m => m.recommended)?.id ?? available[0]?.id
+    if (auto)
+      resolvedModel = auto as import('../agent/index.ts').OptimizeModel
+  }
+  if (successfulPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !resolvedModel)) {
+    // Build combined update context from all successful packages
+    const DIFF_RANK: Record<string, number> = { major: 5, premajor: 4, minor: 3, preminor: 2, patch: 1, prepatch: 1, prerelease: 0 }
+    let parallelUpdateCtx: import('./sync-shared.ts').UpdateContext | undefined
+    if (config.mode === 'update') {
+      let maxDiff = ''
+      let allEnhanced = true
+      let anySyncedAt: string | undefined
+      for (const pkg of successfulPkgs) {
+        const data = skillData.get(pkg)!
+        if (!data.wasEnhanced)
+          allEnhanced = false
+        if (data.oldSyncedAt && (!anySyncedAt || data.oldSyncedAt < anySyncedAt))
+          anySyncedAt = data.oldSyncedAt
+        if (data.oldVersion) {
+          const diff = semverDiff(data.oldVersion, data.version)
+          if (diff && (DIFF_RANK[diff] ?? 0) > (DIFF_RANK[maxDiff] ?? -1))
+            maxDiff = diff
+        }
+      }
+      // Use first package's versions for display when single, otherwise omit specific versions
+      const first = skillData.get(successfulPkgs[0]!)!
+      parallelUpdateCtx = {
+        oldVersion: successfulPkgs.length === 1 ? first.oldVersion : undefined,
+        newVersion: successfulPkgs.length === 1 ? first.version : undefined,
+        syncedAt: anySyncedAt,
+        wasEnhanced: allEnhanced,
+        bumpType: maxDiff || undefined,
+      }
+    }
+    const llmConfig = await selectLlmConfig(resolvedModel, undefined, parallelUpdateCtx)
 
     if (llmConfig?.promptOnly) {
       for (const pkg of successfulPkgs) {
@@ -265,7 +311,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
       logUpdate.done()
 
       const llmSucceeded = llmResults.filter(r => r.status === 'fulfilled').length
-      p.log.success(`Enhanced ${llmSucceeded}/${successfulPkgs.length} skills with LLM`)
+      p.log.success(`Enhanced ${llmSucceeded}/${successfulPkgs.length} skills`)
     }
   }
 
@@ -362,6 +408,18 @@ async function syncBaseSkill(
   const skillDirName = computeSkillDirName(packageName)
   const skillDir = join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
+
+  // Capture pre-update info before lockfile gets overwritten
+  const preLock = config.mode === 'update' ? readLock(baseDir)?.skills[skillDirName] : undefined
+  const preEnhanced = (() => {
+    if (!preLock)
+      return false
+    const skillMdPath = join(skillDir, 'SKILL.md')
+    if (!existsSync(skillMdPath))
+      return false
+    const fm = parseFrontmatter(readFileSync(skillMdPath, 'utf-8'))
+    return !!fm.generated_by
+  })()
 
   const features = readConfig().features ?? defaultFeatures
 
@@ -466,6 +524,9 @@ async function syncBaseSkill(
     warnings: resources.warnings,
     features,
     usedCache: resources.usedCache,
+    oldVersion: preLock?.version,
+    oldSyncedAt: preLock?.syncedAt,
+    wasEnhanced: preEnhanced,
   }
 }
 

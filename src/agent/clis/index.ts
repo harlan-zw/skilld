@@ -22,6 +22,7 @@ import { agents } from '../registry.ts'
 import * as claude from './claude.ts'
 import * as codex from './codex.ts'
 import * as gemini from './gemini.ts'
+import { getAvailablePiAiModels, isPiAiModel, optimizeSectionPiAi, parsePiAiModelId } from './pi-ai.ts'
 
 export { buildAllSectionPrompts, buildSectionPrompt, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from '../prompts/index.ts'
 export type { CustomPrompt, SkillSection } from '../prompts/index.ts'
@@ -125,6 +126,29 @@ const CLI_PARSE_LINE: Record<CliName, (line: string) => ParsedEvent> = {
   codex: codex.parseLine,
 }
 
+// ── Provider display names ────────────────────────────────────────────
+
+/** Map CLI agent IDs to their LLM provider name (not the agent/tool name) */
+const CLI_PROVIDER_NAMES: Record<string, string> = {
+  'claude-code': 'Anthropic',
+  'gemini-cli': 'Google',
+  'codex': 'OpenAI',
+}
+
+const PI_PROVIDER_NAMES: Record<string, string> = {
+  'anthropic': 'Anthropic',
+  'google': 'Google',
+  'google-antigravity': 'Antigravity',
+  'google-gemini-cli': 'Google Gemini',
+  'google-vertex': 'Google Vertex',
+  'openai': 'OpenAI',
+  'openai-codex': 'OpenAI Codex',
+  'github-copilot': 'GitHub Copilot',
+  'groq': 'Groq',
+  'mistral': 'Mistral',
+  'xai': 'xAI',
+}
+
 // ── Assemble CLI_MODELS from per-CLI model definitions ───────────────
 
 export const CLI_MODELS: Partial<Record<OptimizeModel, CliModelConfig>> = Object.fromEntries(
@@ -139,15 +163,23 @@ export const CLI_MODELS: Partial<Record<OptimizeModel, CliModelConfig>> = Object
 // ── Model helpers ────────────────────────────────────────────────────
 
 export function getModelName(id: OptimizeModel): string {
+  if (isPiAiModel(id)) {
+    const parsed = parsePiAiModelId(id)
+    return parsed?.modelId ?? id
+  }
   return CLI_MODELS[id]?.name ?? id
 }
 
 export function getModelLabel(id: OptimizeModel): string {
+  if (isPiAiModel(id)) {
+    const parsed = parsePiAiModelId(id)
+    return parsed ? `${PI_PROVIDER_NAMES[parsed.provider] ?? parsed.provider} · ${parsed.modelId}` : id
+  }
   const config = CLI_MODELS[id]
   if (!config)
     return id
-  const agentName = agents[config.agentId]?.displayName ?? config.cli
-  return `${agentName} · ${config.name}`
+  const providerName = CLI_PROVIDER_NAMES[config.agentId] ?? config.cli
+  return `${providerName} · ${config.name}`
 }
 
 export async function getAvailableModels(): Promise<import('./types.ts').ModelInfo[]> {
@@ -169,16 +201,44 @@ export async function getAvailableModels(): Promise<import('./types.ts').ModelIn
   )
   const availableAgentIds = new Set(cliChecks.filter((id): id is AgentType => id != null))
 
-  return (Object.entries(CLI_MODELS) as [OptimizeModel, CliModelConfig][])
+  const cliModels = (Object.entries(CLI_MODELS) as [OptimizeModel, CliModelConfig][])
     .filter(([_, config]) => availableAgentIds.has(config.agentId))
-    .map(([id, config]) => ({
-      id,
-      name: config.name,
-      hint: config.hint,
-      recommended: config.recommended,
-      agentId: config.agentId,
-      agentName: agents[config.agentId]?.displayName ?? config.agentId,
-    }))
+    .map(([id, config]) => {
+      const providerName = CLI_PROVIDER_NAMES[config.agentId] ?? agents[config.agentId]?.displayName ?? config.agentId
+      return {
+        id,
+        name: config.name,
+        hint: config.hint,
+        recommended: config.recommended,
+        agentId: config.agentId,
+        agentName: providerName,
+        provider: config.agentId,
+        providerName: `${providerName} (via ${config.cli} CLI)`,
+        vendorGroup: providerName,
+      }
+    })
+
+  // Append pi-ai direct API models (providers with auth configured)
+  const piAiModels = getAvailablePiAiModels()
+  const piAiEntries = piAiModels.map((m) => {
+    const parsed = parsePiAiModelId(m.id)
+    const piProvider = parsed?.provider ?? 'pi-ai'
+    const displayName = PI_PROVIDER_NAMES[piProvider] ?? piProvider
+    const authLabel = m.authSource === 'env' ? 'API' : 'OAuth'
+    return {
+      id: m.id as OptimizeModel,
+      name: m.name,
+      hint: m.hint,
+      recommended: m.recommended,
+      agentId: 'pi-ai',
+      agentName: `pi-ai (${m.authSource})`,
+      provider: `pi:${piProvider}:${m.authSource}`,
+      providerName: `${displayName} (${authLabel})`,
+      vendorGroup: displayName,
+    }
+  })
+
+  return [...cliModels, ...piAiEntries]
 }
 
 // ── Reference dirs ───────────────────────────────────────────────────
@@ -238,6 +298,65 @@ function setCache(prompt: string, model: OptimizeModel, section: SkillSection, t
   )
 }
 
+// ── pi-ai direct API path ────────────────────────────────────────────
+
+async function optimizeSectionViaPiAi(opts: {
+  section: SkillSection
+  prompt: string
+  outputFile: string
+  skillDir: string
+  model: OptimizeModel
+  onProgress?: (progress: StreamProgress) => void
+  debug?: boolean
+}): Promise<SectionResult> {
+  const { section, prompt, outputFile, skillDir, model, onProgress, debug } = opts
+  const skilldDir = join(skillDir, '.skilld')
+  const outputPath = join(skilldDir, outputFile)
+
+  // Write prompt for debugging (same as CLI path)
+  writeFileSync(join(skilldDir, `PROMPT_${section}.md`), prompt)
+
+  try {
+    const result = await optimizeSectionPiAi({ section, prompt, skillDir, model, onProgress })
+
+    const raw = result.text.trim()
+
+    // Debug logging
+    if (debug) {
+      const logsDir = join(skilldDir, 'logs')
+      const logName = section.toUpperCase().replace(/-/g, '_')
+      mkdirSync(logsDir, { recursive: true })
+      if (raw)
+        writeFileSync(join(logsDir, `${logName}.md`), raw)
+    }
+
+    if (!raw) {
+      return { section, content: '', wasOptimized: false, error: 'pi-ai returned empty response' }
+    }
+
+    const content = cleanSectionOutput(raw)
+
+    if (content)
+      writeFileSync(outputPath, content)
+
+    const validator = getSectionValidator(section)
+    const rawWarnings = content && validator ? validator(content) : []
+    const warnings: ValidationWarning[] = rawWarnings.map(w => ({ section, warning: w.warning }))
+
+    return {
+      section,
+      content,
+      wasOptimized: !!content,
+      warnings: warnings?.length ? warnings : undefined,
+      usage: result.usage,
+      cost: result.cost,
+    }
+  }
+  catch (err) {
+    return { section, content: '', wasOptimized: false, error: (err as Error).message }
+  }
+}
+
 // ── Per-section spawn ────────────────────────────────────────────────
 
 interface OptimizeSectionOptions {
@@ -253,9 +372,14 @@ interface OptimizeSectionOptions {
   preExistingFiles: Set<string>
 }
 
-/** Spawn a single CLI process for one section */
+/** Spawn a single CLI process for one section, or call pi-ai directly */
 function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
   const { section, prompt, outputFile, skillDir, model, onProgress, timeout, debug, preExistingFiles } = opts
+
+  // pi-ai direct API path — no CLI spawning
+  if (isPiAiModel(model)) {
+    return optimizeSectionViaPiAi({ section, prompt, outputFile, skillDir, model, onProgress, debug })
+  }
 
   const cliConfig = CLI_MODELS[model]
   if (!cliConfig) {
@@ -450,8 +574,7 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     return { optimized: '', wasOptimized: false, error: 'No valid sections to generate' }
   }
 
-  const cliConfig = CLI_MODELS[model]
-  if (!cliConfig) {
+  if (!isPiAiModel(model) && !CLI_MODELS[model]) {
     return { optimized: '', wasOptimized: false, error: `No CLI mapping for model: ${model}` }
   }
 

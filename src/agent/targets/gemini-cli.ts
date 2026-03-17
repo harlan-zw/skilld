@@ -22,12 +22,16 @@ export const geminiCli = defineTarget({
   displayName: 'Gemini CLI',
   detectInstalled: () => existsSync(join(home, '.gemini')),
   detectEnv: () => !!process.env.GEMINI_CLI,
-  detectProject: cwd => existsSync(join(cwd, '.gemini')) || existsSync(join(cwd, 'AGENTS.md')),
+  detectProject: cwd => existsSync(join(cwd, '.gemini')),
   cli: 'gemini',
   instructionFile: 'GEMINI.md',
 
   skillsDir: '.gemini/skills',
   globalSkillsDir: join(home, '.gemini/skills'),
+  additionalSkillsDirs: [
+    '.agents/skills',
+    join(home, '.agents/skills'),
+  ],
 
   frontmatter: [
     SPEC_FRONTMATTER.name!,
@@ -43,11 +47,14 @@ export const geminiCli = defineTarget({
 
   agentSkillsSpec: true,
 
+  skillActivationHint: 'Before modifying code, check installed skills for relevant guidance.\nUse `activate_skill` to load any matching skill before proceeding.',
+
   docs: 'https://geminicli.com/docs/cli/skills/',
   notes: [
     'Management commands: /skills list, /skills enable <name>, /skills disable <name>, /skills reload.',
     'GEMINI.md context files are separate from skills — support @file.md import syntax.',
     'settings.json can configure additional context filenames: ["AGENTS.md", "CONTEXT.md", "GEMINI.md"].',
     'scripts/, references/, assets/ directories are defined by spec but implementation is still incomplete (issue #15895).',
+    'Also scans .agents/skills/ (Agent Skills spec standard) - skilld deduplicates to avoid conflicts.',
   ],
 })

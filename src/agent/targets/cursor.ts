@@ -24,7 +24,7 @@ export const cursor = defineTarget({
   detectInstalled: () => existsSync(join(home, '.cursor')),
   detectEnv: () => !!(process.env.CURSOR_SESSION || process.env.CURSOR_TRACE_ID),
   detectProject: cwd => existsSync(join(cwd, '.cursor')) || existsSync(join(cwd, '.cursorrules')),
-  instructionFile: '.cursorrules',
+  instructionFile: '.cursor/rules/skilld-activation.mdc',
 
   skillsDir: '.cursor/skills',
   globalSkillsDir: join(home, '.cursor/skills'),
@@ -51,6 +51,8 @@ export const cursor = defineTarget({
   extensions: [
     'disable-model-invocation',
   ],
+
+  skillActivationHint: 'Before modifying code, evaluate each installed skill against the current task.\nFor each skill, determine YES/NO relevance and invoke all YES skills before proceeding.',
 
   docs: 'https://cursor.com/docs/context/skills',
   notes: [

@@ -22,7 +22,18 @@ export const claudeCode = defineTarget({
   displayName: 'Claude Code',
   detectInstalled: () => existsSync(claudeHome),
   detectEnv: () => !!(process.env.CLAUDE_CODE || process.env.CLAUDECODE || process.env.CLAUDE_CODE_ENTRYPOINT || process.env.CLAUDE_CONFIG_DIR),
-  detectProject: cwd => existsSync(join(cwd, '.claude')) || existsSync(join(cwd, 'CLAUDE.md')),
+  detectProject: (cwd) => {
+    // Strong signals: actual Claude Code user config or skills usage
+    if (existsSync(join(cwd, '.claude', 'settings.json')))
+      return true
+    if (existsSync(join(cwd, '.claude', 'settings.local.json')))
+      return true
+    if (existsSync(join(cwd, '.claude', 'skills')))
+      return true
+    // Medium signal: bare .claude/ dir (real users who haven't configured skills yet)
+    // Note: CLAUDE.md alone is NOT checked - too many false positives from repo conventions
+    return existsSync(join(cwd, '.claude'))
+  },
   cli: 'claude',
   instructionFile: 'CLAUDE.md',
 
@@ -68,5 +79,6 @@ export const claudeCode = defineTarget({
     'Keep SKILL.md under 500 lines. Move detailed reference to separate files.',
     'Supports monorepo auto-discovery: nested .claude/skills/ dirs in subdirectories.',
     'Supporting dirs: scripts/, references/, assets/ alongside SKILL.md.',
+    'Project detection uses weighted signals: .claude/settings.json, .claude/settings.local.json, .claude/skills/ are strong; bare .claude/ is medium; CLAUDE.md alone is not checked (too many false positives from repo conventions).',
   ],
 })

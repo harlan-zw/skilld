@@ -10,9 +10,8 @@ interface EmbeddingConfig {
 
 const EMBEDDINGS_DB_PATH = join(CACHE_DIR, 'embeddings.db')
 
-function openDb(): DatabaseSync {
-  // eslint-disable-next-line ts/no-require-imports
-  const { DatabaseSync: DB } = require('node:sqlite') as typeof import('node:sqlite')
+async function openDb(): Promise<DatabaseSync> {
+  const { DatabaseSync: DB } = await import('node:sqlite')
   const db = new DB(EMBEDDINGS_DB_PATH)
   db.exec('PRAGMA journal_mode=WAL')
   db.exec('PRAGMA busy_timeout=5000')
@@ -41,7 +40,7 @@ function createSqliteStorage(db: DatabaseSync) {
 
 export async function cachedEmbeddings(config: EmbeddingConfig): Promise<EmbeddingConfig> {
   const { cachedEmbeddings: retrivCached } = await import('retriv/embeddings/cached')
-  const db = openDb()
+  const db = await openDb()
   const storage = createSqliteStorage(db)
 
   const originalResolve = config.resolve

@@ -32,6 +32,8 @@ export type OptimizeModel
     | 'gpt-5.3-codex'
     | 'gpt-5.3-codex-spark'
     | 'gpt-5.2-codex'
+    // pi-ai direct API models — dynamic from pi-ai's model registry
+    | `pi:${string}`
 
 export interface ModelInfo {
   id: OptimizeModel
@@ -40,6 +42,12 @@ export interface ModelInfo {
   recommended?: boolean
   agentId: string
   agentName: string
+  /** Grouping key for provider selection (e.g. 'claude-code', 'pi:anthropic') */
+  provider: string
+  /** Human-readable provider name */
+  providerName: string
+  /** Normalized vendor name for UI grouping (e.g. 'Anthropic') — merges CLI and API entries */
+  vendorGroup: string
 }
 
 export interface StreamProgress {

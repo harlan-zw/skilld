@@ -58,6 +58,7 @@
   "dependencies": {
     "@clack/prompts": "catalog:deps",
     "@huggingface/transformers": "catalog:deps",
+    "@mariozechner/pi-ai": "catalog:",
     "@mdream/crawl": "catalog:",
     "citty": "catalog:deps",
     "consola": "catalog:deps",

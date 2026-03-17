@@ -20,8 +20,9 @@ export function detectInstalledAgents(): AgentType[] {
  * Detect the target agent (where skills are installed) from env vars and cwd.
  * This is NOT the generator LLM — it determines the skills directory.
  *
- * Priority: env vars first (running inside agent), then project dirs.
- * Iteration order of the agents record determines priority.
+ * Priority: env vars first (running inside agent = unambiguous), then project dirs.
+ * When multiple agents match project dirs, returns null to trigger user prompt
+ * rather than silently picking the first match.
  */
 export function detectTargetAgent(): AgentType | null {
   for (const [type, target] of Object.entries(agents)) {
@@ -30,12 +31,25 @@ export function detectTargetAgent(): AgentType | null {
   }
 
   const cwd = process.cwd()
+  const projectMatches: AgentType[] = []
   for (const [type, target] of Object.entries(agents)) {
     if (target.detectProject(cwd))
-      return type as AgentType
+      projectMatches.push(type as AgentType)
   }
 
-  return null
+  // Single match is unambiguous; multiple matches need user disambiguation
+  return projectMatches.length === 1 ? projectMatches[0]! : null
+}
+
+/**
+ * Get all agents matching the current project directory.
+ * Used by promptForAgent to show relevant agents first when disambiguation is needed.
+ */
+export function detectProjectAgents(): AgentType[] {
+  const cwd = process.cwd()
+  return Object.entries(agents)
+    .filter(([, target]) => target.detectProject(cwd))
+    .map(([type]) => type as AgentType)
 }
 
 /**

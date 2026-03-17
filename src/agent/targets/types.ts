@@ -74,4 +74,6 @@ export interface AgentTarget {
   docs: string
   /** Additional notes, quirks, known issues */
   notes: string[]
+  /** Agent-specific instruction text for skill activation (written to instructionFile) */
+  skillActivationHint?: string
 }

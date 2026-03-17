@@ -65,7 +65,7 @@ export async function cacheCleanCommand(): Promise<void> {
   if (expiredLlm > 0 || embeddingCleared) {
     const parts: string[] = []
     if (expiredLlm > 0)
-      parts.push(`${expiredLlm} expired LLM cache entries`)
+      parts.push(`${expiredLlm} expired enhancement cache entries`)
     if (embeddingCleared)
       parts.push('embedding cache')
     p.log.success(`Removed ${parts.join(' + ')} (${freedKB}KB freed)`)
@@ -80,7 +80,7 @@ export const cacheCommandDef = defineCommand({
   args: {
     clean: {
       type: 'boolean',
-      description: 'Remove expired LLM cache entries',
+      description: 'Remove expired enhancement cache entries',
       default: true,
     },
   },
