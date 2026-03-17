@@ -150,3 +150,45 @@ describe('ghApiPaginated', () => {
     expect(result).toEqual([])
   })
 })
+
+describe('buildFrontmatter', () => {
+  it('leaves simple values unquoted', () => {
+    const result = mod.buildFrontmatter({ title: 'hello', number: 42, closed: true })
+    expect(result).toBe('---\ntitle: hello\nnumber: 42\nclosed: true\n---')
+  })
+
+  it('quotes strings containing colons', () => {
+    const result = mod.buildFrontmatter({ title: 'fix: something' })
+    expect(result).toContain('title: "fix: something"')
+  })
+
+  it('quotes strings containing hash signs', () => {
+    const result = mod.buildFrontmatter({ title: 'issue #42 broke things' })
+    expect(result).toContain('title: "issue #42 broke things"')
+  })
+
+  it('escapes backslashes before quotes', () => {
+    const result = mod.buildFrontmatter({ title: 'path\\to\\file' })
+    expect(result).toContain('title: "path\\\\to\\\\file"')
+  })
+
+  it('escapes newlines in values', () => {
+    const result = mod.buildFrontmatter({ title: 'line1\nline2' })
+    expect(result).toContain('title: "line1\\nline2"')
+  })
+
+  it('quotes strings containing single quotes', () => {
+    const result = mod.buildFrontmatter({ title: 'it\'s broken' })
+    expect(result).toContain('title: "it\'s broken"')
+  })
+
+  it('escapes embedded double quotes', () => {
+    const result = mod.buildFrontmatter({ title: 'he said "hello"' })
+    expect(result).toContain('title: "he said \\"hello\\""')
+  })
+
+  it('skips undefined values', () => {
+    const result = mod.buildFrontmatter({ title: 'test', version: undefined })
+    expect(result).toBe('---\ntitle: test\n---')
+  })
+})
