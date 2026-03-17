@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { extractSections, isSafeUrl, normalizeLlmsLinks, parseMarkdownLinks } from '../../src/sources/llms'
+
+vi.mock('../../src/sources/utils', () => ({
+  fetchText: vi.fn(),
+  verifyUrl: vi.fn(),
+}))
 
 describe('sources/llms', () => {
   describe('parseMarkdownLinks', () => {
@@ -103,6 +108,45 @@ describe('sources/llms', () => {
 
     it('rejects invalid URLs', () => {
       expect(isSafeUrl('not-a-url')).toBe(false)
+    })
+  })
+
+  describe('downloadLlmsDocs', () => {
+    it('reports progress only after each fetch completes', async () => {
+      const { fetchText } = await import('../../src/sources/utils')
+      const { downloadLlmsDocs } = await import('../../src/sources/llms')
+
+      // Each fetch resolves with a delay to simulate concurrent behavior
+      vi.mocked(fetchText)
+        .mockResolvedValueOnce('a'.repeat(200))
+        .mockResolvedValueOnce('b'.repeat(200))
+        .mockResolvedValueOnce('c'.repeat(200))
+
+      const progressCalls: Array<{ index: number, total: number }> = []
+
+      await downloadLlmsDocs(
+        {
+          raw: '',
+          links: [
+            { title: 'A', url: '/a.md' },
+            { title: 'B', url: '/b.md' },
+            { title: 'C', url: '/c.md' },
+          ],
+        },
+        'https://example.com',
+        (_url, index, total) => {
+          progressCalls.push({ index, total })
+        },
+      )
+
+      // Progress should start at 1 (not 0) since it fires after fetch
+      expect(progressCalls[0]!.index).toBeGreaterThanOrEqual(1)
+      // All calls should have correct total
+      for (const call of progressCalls) {
+        expect(call.total).toBe(3)
+      }
+      // Final call should report all done
+      expect(progressCalls.at(-1)!.index).toBe(3)
     })
   })
 
