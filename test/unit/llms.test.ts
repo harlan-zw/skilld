@@ -116,15 +116,27 @@ describe('sources/llms', () => {
       const { fetchText } = await import('../../src/sources/utils')
       const { downloadLlmsDocs } = await import('../../src/sources/llms')
 
-      // Each fetch resolves with a delay to simulate concurrent behavior
+      let resolveA!: (v: string) => void
+      let resolveB!: (v: string) => void
+      let resolveC!: (v: string) => void
+      const pA = new Promise<string>((r) => {
+        resolveA = r
+      })
+      const pB = new Promise<string>((r) => {
+        resolveB = r
+      })
+      const pC = new Promise<string>((r) => {
+        resolveC = r
+      })
+
       vi.mocked(fetchText)
-        .mockResolvedValueOnce('a'.repeat(200))
-        .mockResolvedValueOnce('b'.repeat(200))
-        .mockResolvedValueOnce('c'.repeat(200))
+        .mockReturnValueOnce(pA)
+        .mockReturnValueOnce(pB)
+        .mockReturnValueOnce(pC)
 
       const progressCalls: Array<{ index: number, total: number }> = []
 
-      await downloadLlmsDocs(
+      const run = downloadLlmsDocs(
         {
           raw: '',
           links: [
@@ -139,13 +151,22 @@ describe('sources/llms', () => {
         },
       )
 
-      // Progress should start at 1 (not 0) since it fires after fetch
-      expect(progressCalls[0]!.index).toBeGreaterThanOrEqual(1)
-      // All calls should have correct total
+      // No progress before any fetch resolves
+      await Promise.resolve()
+      expect(progressCalls).toHaveLength(0)
+
+      resolveA('a'.repeat(200))
+      await Promise.resolve()
+      expect(progressCalls.at(-1)!.index).toBe(1)
+
+      resolveB('b'.repeat(200))
+      resolveC('c'.repeat(200))
+      await run
+
+      expect(progressCalls).toHaveLength(3)
       for (const call of progressCalls) {
         expect(call.total).toBe(3)
       }
-      // Final call should report all done
       expect(progressCalls.at(-1)!.index).toBe(3)
     })
   })
