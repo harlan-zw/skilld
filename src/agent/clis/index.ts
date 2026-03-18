@@ -705,6 +705,19 @@ export function cleanSectionOutput(content: string): string {
     }
   }
 
+  // Normalize citation link text to [source] — LLMs sometimes use the path as link text
+  // e.g. [./references/docs/api.md](./references/docs/api.md) or [`./references/...`](...)
+  // Also handles paren-wrapped variants: ([`path`](url))
+  cleaned = cleaned.replace(
+    /\(?\[`?\.\/(?:\.skilld\/|references\/)[^)\]]*\]\(([^)]+)\)\)?/g,
+    (match, url: string) => {
+      // Only normalize if the URL points to a reference path
+      if (/^\.\/(?:\.skilld\/|references\/)/.test(url))
+        return `[source](${url})`
+      return match
+    },
+  )
+
   // Normalize source link paths: ensure .skilld/ prefix is present
   // LLMs sometimes emit [source](./docs/...) instead of [source](./.skilld/docs/...)
   cleaned = cleaned.replace(
