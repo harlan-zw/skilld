@@ -417,7 +417,7 @@ describe('sync-shared', () => {
 
       const result = await fetchAndCacheResources({ ...baseOpts, resolved })
 
-      expect(result.docsType).toBe('llms.txt')
+      expect(result.docsType).toBe('docs')
       expect(result.docSource).toBe('https://example.com/llms.txt')
       expect(result.docsToIndex).toHaveLength(2)
       expect(writeToCache).toHaveBeenCalled()
@@ -505,7 +505,7 @@ describe('sync-shared', () => {
 
       const result = await fetchAndCacheResources({ ...baseOpts, resolved })
 
-      expect(result.docsType).toBe('llms.txt')
+      expect(result.docsType).toBe('docs')
       expect(fetchCrawledDocs).not.toHaveBeenCalled()
     })
 

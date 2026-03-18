@@ -111,9 +111,13 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
   const cacheDir = getCacheDir(name, version)
   const cachedDocFiles = isCached(name, version) ? listDocFiles(cacheDir) : []
   // Consider cached if we have docs (not just changelogs)
-  const hasCachedDocs = cachedDocFiles.some(f =>
-    f.startsWith('docs/') || f.startsWith('src/') || f === 'llms.txt'
-    || (f.includes('/docs/') && !f.includes('README')),
+  // Cache valid when docs use normalized docs/ prefix or llms.txt-only.
+  // Stale caches (src/, packages/, www/ prefixes) need refetch.
+  const hasStaleFiles = cachedDocFiles.some(f =>
+    f.includes('/') && !f.startsWith('docs/') && !f.startsWith('llms-docs/'),
+  )
+  const hasCachedDocs = !hasStaleFiles && cachedDocFiles.some(f =>
+    f.startsWith('docs/') || f === 'llms.txt',
   )
 
   if (hasCachedDocs) {
@@ -124,8 +128,7 @@ export async function runPipeline(name: string): Promise<PipelineResult> {
       docsType = 'llms.txt'
     }
     if (cachedDocFiles.some(f =>
-      (f.startsWith('docs/') || f.startsWith('src/') || f.includes('/docs/'))
-      && !f.includes('README'),
+      f.startsWith('docs/') && !f.includes('README'),
     )) { docsType = 'docs' }
 
     // Search index for cached docs was built during the original sync run.

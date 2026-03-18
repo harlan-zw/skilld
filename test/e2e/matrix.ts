@@ -169,9 +169,9 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'src/guide/essentials/reactivity-fundamentals.md',
-      'src/api/reactivity-core.md',
-      'src/style-guide/rules-essential.md',
+      'docs/guide/essentials/reactivity-fundamentals.md',
+      'docs/api/reactivity-core.md',
+      'docs/style-guide/rules-essential.md',
     ],
     minCacheDocs: 50,
     expectDescriptionContains: '"vue"',
@@ -261,7 +261,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: false, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'docs/guides/updating-state.md',
+      'docs/learn/guides/updating-state.md',
     ],
     minCacheDocs: 3,
     expectDescriptionContains: '"zustand"',
@@ -297,7 +297,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'documentation/docs/01-introduction/01-overview.md',
+      'docs/01-introduction/01-overview.md',
     ],
     minCacheDocs: 10,
     expectDescriptionContains: '"svelte"',
@@ -307,13 +307,14 @@ export const PACKAGES: PackageSpec[] = [
   // ── @sveltejs/kit ─────────────────────────────────────────────────
   // SvelteKit framework — docs moved to sveltejs/svelte repo. Git docs in kit
   // are shallow (test fixtures, type stubs), falls through to llms.txt at svelte.dev.
+  // llms.txt links download into docs/, so docsType becomes 'docs'.
   {
     name: '@sveltejs/kit',
     preset: 'svelte',
     expectRepoUrl: 'github.com/sveltejs/kit',
     expectDocsUrl: 'https://svelte.dev',
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
-    expectDocsType: 'llms.txt',
+    expectDocsType: 'docs',
     expectCacheFiles: [
       'llms.txt',
     ],
@@ -359,7 +360,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'src/content/docs/en/basics/astro-components.mdx',
+      'docs/basics/astro-components.mdx',
     ],
     minCacheDocs: 100,
     expectDescriptionContains: '"astro"',
@@ -397,7 +398,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: false, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'src/docs/accent-color.mdx',
+      'docs/accent-color.mdx',
     ],
     minCacheDocs: 100,
     expectDescriptionContains: '"tailwindcss"',
@@ -430,7 +431,7 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'www/docs/server/routers.md',
+      'docs/server/routers.md',
     ],
     minCacheDocs: 50,
     expectDescriptionContains: '"@trpc/server"',
@@ -452,8 +453,8 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'packages/docs/content/basics.mdx',
-      'packages/docs/content/api.mdx',
+      'docs/content/basics.mdx',
+      'docs/content/api.mdx',
     ],
     minCacheDocs: 10,
     expectDescriptionContains: '"zod"',

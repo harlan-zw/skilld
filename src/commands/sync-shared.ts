@@ -486,6 +486,8 @@ export async function fetchAndCacheResources(opts: {
               metadata: { package: packageName, source: cachePath, type: 'doc' },
             })
           }
+          if (docs.length > 0)
+            docsType = 'docs'
         }
 
         writeToCache(packageName, version, cachedDocs)

@@ -293,7 +293,8 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
             )
             for (const r of results) {
               if (r) {
-                const cachePath = gitDocs.docsPrefix ? r.file.replace(gitDocs.docsPrefix, '') : r.file
+                const stripped = gitDocs.docsPrefix ? r.file.replace(gitDocs.docsPrefix, '') : r.file
+                const cachePath = stripped.startsWith('docs/') ? stripped : `docs/${stripped}`
                 cachedDocs.push({ path: cachePath, content: r.content })
                 docsToIndex.push({ id: cachePath, content: r.content, metadata: { package: pkgName, source: cachePath, type: 'doc' } })
               }
