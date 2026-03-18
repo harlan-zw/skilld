@@ -79,9 +79,8 @@ export async function downloadLlmsDocs(
       if (!isSafeUrl(url))
         return null
 
-      onProgress?.(link.url, completed++, llmsContent.links.length)
-
       const content = await fetchText(url)
+      onProgress?.(link.url, ++completed, llmsContent.links.length)
       if (content && content.length > 100) {
         // Normalize full URLs to just the pathname for cache paths
         const docUrl = link.url.startsWith('http') ? new URL(link.url).pathname : link.url

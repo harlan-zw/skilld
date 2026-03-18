@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { extractSections, isSafeUrl, normalizeLlmsLinks, parseMarkdownLinks } from '../../src/sources/llms'
+
+vi.mock('../../src/sources/utils', () => ({
+  fetchText: vi.fn(),
+  verifyUrl: vi.fn(),
+}))
 
 describe('sources/llms', () => {
   describe('parseMarkdownLinks', () => {
@@ -103,6 +108,66 @@ describe('sources/llms', () => {
 
     it('rejects invalid URLs', () => {
       expect(isSafeUrl('not-a-url')).toBe(false)
+    })
+  })
+
+  describe('downloadLlmsDocs', () => {
+    it('reports progress only after each fetch completes', async () => {
+      const { fetchText } = await import('../../src/sources/utils')
+      const { downloadLlmsDocs } = await import('../../src/sources/llms')
+
+      let resolveA!: (v: string) => void
+      let resolveB!: (v: string) => void
+      let resolveC!: (v: string) => void
+      const pA = new Promise<string>((r) => {
+        resolveA = r
+      })
+      const pB = new Promise<string>((r) => {
+        resolveB = r
+      })
+      const pC = new Promise<string>((r) => {
+        resolveC = r
+      })
+
+      vi.mocked(fetchText)
+        .mockReturnValueOnce(pA)
+        .mockReturnValueOnce(pB)
+        .mockReturnValueOnce(pC)
+
+      const progressCalls: Array<{ index: number, total: number }> = []
+
+      const run = downloadLlmsDocs(
+        {
+          raw: '',
+          links: [
+            { title: 'A', url: '/a.md' },
+            { title: 'B', url: '/b.md' },
+            { title: 'C', url: '/c.md' },
+          ],
+        },
+        'https://example.com',
+        (_url, index, total) => {
+          progressCalls.push({ index, total })
+        },
+      )
+
+      // No progress before any fetch resolves
+      await Promise.resolve()
+      expect(progressCalls).toHaveLength(0)
+
+      resolveA('a'.repeat(200))
+      await Promise.resolve()
+      expect(progressCalls.at(-1)!.index).toBe(1)
+
+      resolveB('b'.repeat(200))
+      resolveC('c'.repeat(200))
+      await run
+
+      expect(progressCalls).toHaveLength(3)
+      for (const call of progressCalls) {
+        expect(call.total).toBe(3)
+      }
+      expect(progressCalls.at(-1)!.index).toBe(3)
     })
   })
 
