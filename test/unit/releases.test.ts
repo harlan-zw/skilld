@@ -1,6 +1,6 @@
 import type { GitHubRelease } from '../../src/sources/releases'
 import { describe, expect, it } from 'vitest'
-import { isChangelogRedirectPattern, isPrerelease, isStubRelease, selectReleases } from '../../src/sources/releases'
+import { generateReleaseIndex, isChangelogRedirectPattern, isPrerelease, isStubRelease, selectReleases } from '../../src/sources/releases'
 
 function makeRelease(tag: string, markdown: string, prerelease = false): GitHubRelease {
   return { id: 1, tag, name: tag, prerelease, createdAt: '2024-01-01T00:00:00Z', publishedAt: '2024-01-01T00:00:00Z', markdown }
@@ -195,6 +195,24 @@ describe('isChangelogRedirectPattern', () => {
     ]
     // Empty body doesn't mention changelog
     expect(isChangelogRedirectPattern(releases)).toBe(false)
+  })
+})
+
+describe('generateReleaseIndex', () => {
+  it('escapes special YAML characters in tag names', () => {
+    const releases = [
+      makeRelease('v3.0.0: breaking', 'notes'),
+    ]
+    const index = generateReleaseIndex(releases)
+    expect(index).toContain('latest: "v3.0.0: breaking"')
+  })
+
+  it('handles normal tags without quoting', () => {
+    const releases = [
+      makeRelease('v1.0.0', 'notes'),
+    ]
+    const index = generateReleaseIndex(releases)
+    expect(index).toContain('latest: v1.0.0')
   })
 })
 

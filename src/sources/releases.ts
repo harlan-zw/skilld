@@ -2,6 +2,7 @@
  * GitHub release notes fetching via GitHub API (preferred) with ungh.cc fallback
  */
 
+import { yamlEscape } from '../core/yaml.ts'
 import { ghApiPaginated, isoDate } from './github-common.ts'
 import { $fetch, fetchGitHubRaw } from './utils.ts'
 
@@ -201,12 +202,12 @@ function formatRelease(release: GitHubRelease, packageName?: string): string {
 
   const fm = [
     '---',
-    `tag: ${release.tag}`,
-    `version: ${version}`,
+    `tag: ${yamlEscape(release.tag)}`,
+    `version: ${yamlEscape(version)}`,
     `published: ${date}`,
   ]
   if (release.name && release.name !== release.tag)
-    fm.push(`name: "${release.name.replace(/"/g, '\\"')}"`)
+    fm.push(`name: ${yamlEscape(release.name)}`)
   fm.push('---')
 
   return `${fm.join('\n')}\n\n# ${release.name || release.tag}\n\n${release.markdown}`
@@ -236,7 +237,7 @@ export function generateReleaseIndex(releasesOrOpts: GitHubRelease[] | ReleaseIn
   const fm = [
     '---',
     `total: ${total}`,
-    `latest: ${releases[0]?.tag || 'unknown'}`,
+    `latest: ${yamlEscape(releases[0]?.tag || 'unknown')}`,
     '---',
   ]
 
