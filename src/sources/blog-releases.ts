@@ -5,6 +5,7 @@
 
 import type { BlogRelease } from './package-registry.ts'
 import { htmlToMarkdown } from 'mdream'
+import { yamlEscape } from '../core/yaml.ts'
 import { getBlogPreset } from './package-registry.ts'
 import { compareSemver, parseSemver } from './releases.ts'
 import { $fetch } from './utils.ts'
@@ -28,10 +29,10 @@ interface CachedDoc {
 function formatBlogRelease(release: BlogReleasePost): string {
   const fm = [
     '---',
-    `version: ${release.version}`,
-    `title: "${release.title.replace(/"/g, '\\"')}"`,
+    `version: ${yamlEscape(release.version)}`,
+    `title: ${yamlEscape(release.title)}`,
     `date: ${release.date}`,
-    `url: ${release.url}`,
+    `url: ${yamlEscape(release.url)}`,
     `source: blog-release`,
     '---',
   ]
