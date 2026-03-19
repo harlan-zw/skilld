@@ -493,12 +493,12 @@ export const PACKAGES: PackageSpec[] = [
   },
 
   // ── mdream ────────────────────────────────────────────────────────
-  // Small utility — no docs URL, no llms.txt. README only.
+  // Small utility — README only.
   {
     name: 'mdream',
     preset: 'general',
     expectRepoUrl: 'github.com/harlan-zw/mdream',
-    expectDocsUrl: null,
+    expectDocsUrl: 'https://mdream.dev',
     expectSources: { npm: true, gitDocs: false, llmsTxt: false, readme: true },
     expectDocsType: 'readme',
     expectCacheFiles: [
