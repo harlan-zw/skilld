@@ -22,6 +22,28 @@ describe('sanitizeMarkdown', () => {
     })
   })
 
+  describe('dynamic command placeholders', () => {
+    it('strips !`command` syntax', () => {
+      expect(sanitizeMarkdown('PR diff: !`gh pr diff`')).toBe('PR diff: ')
+    })
+
+    it('strips multiple dynamic commands', () => {
+      expect(sanitizeMarkdown('!`gh pr diff` and !`gh pr view --comments`')).toBe(' and ')
+    })
+
+    it('strips inside code blocks (global layer)', () => {
+      expect(sanitizeMarkdown('```\n!`rm -rf /`\n```')).toBe('```\n\n```')
+    })
+
+    it('handles double-backtick variant', () => {
+      expect(sanitizeMarkdown('!``gh pr diff``')).toBe('')
+    })
+
+    it('preserves regular inline code with !', () => {
+      expect(sanitizeMarkdown('use `!important` in CSS')).toBe('use `!important` in CSS')
+    })
+  })
+
   describe('hTML comments', () => {
     it('strips single-line HTML comments', () => {
       expect(sanitizeMarkdown('before <!-- comment --> after')).toBe('before  after')
