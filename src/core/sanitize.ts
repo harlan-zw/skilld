@@ -98,6 +98,13 @@ const BASE64_BLOB_RE = /^[A-Z0-9+/=]{100,}$/gim
 /** Unicode escape spam: 4+ consecutive \uXXXX sequences */
 const UNICODE_ESCAPE_SPAM_RE = /(\\u[\dA-Fa-f]{4}){4,}/g
 
+/**
+ * Claude Code dynamic context: !`command` executes shell commands inline when a skill loads.
+ * Matches !` followed by content and closing backtick(s) of same length.
+ * Stripped globally — never legitimate in generated skills, always a command injection vector.
+ */
+const DYNAMIC_COMMAND_RE = /!(`+)([^`]+)\1/g
+
 /** Emoji characters — token-inefficient (2-3x cost), distort embeddings, semantically ambiguous for LLMs */
 // Also strips variation selectors (\uFE0E text, \uFE0F emoji) which dangle after emoji removal
 const EMOJI_RE = /[\p{Extended_Pictographic}\uFE0E\uFE0F]/gu
@@ -176,10 +183,13 @@ export function sanitizeMarkdown(content: string): string {
   // Layer 1: Strip zero-width characters (global, including in code blocks)
   let result = content.replace(ZERO_WIDTH_RE, '')
 
-  // Layer 2: Strip agent directive tags globally (never legitimate, even in code blocks)
+  // Layer 2: Strip dynamic command placeholders globally (!`command` → command injection vector)
+  result = result.replace(DYNAMIC_COMMAND_RE, '')
+
+  // Layer 3: Strip agent directive tags globally (never legitimate, even in code blocks)
   result = stripTags(result, AGENT_DIRECTIVE_TAGS)
 
-  // Layers 3-9: Only outside fenced code blocks
+  // Layers 4-10: Only outside fenced code blocks
   result = processOutsideCodeBlocks(result, (text) => {
     // Protect inline code spans from tag stripping (e.g. `<script setup>` in Vue docs)
     const inlineCodeSpans: string[] = []
@@ -189,32 +199,32 @@ export function sanitizeMarkdown(content: string): string {
       return `\x00IC${idx}\x00`
     })
 
-    // Layer 3: Strip HTML comments (outside code blocks where they're hidden from review;
+    // Layer 4: Strip HTML comments (outside code blocks where they're hidden from review;
     // inside code blocks they render as visible text and are legitimate documentation)
     t = t.replace(HTML_COMMENT_RE, '')
 
-    // Layer 4: Decode entities + strip remaining dangerous tags (HTML + entity-encoded agent directives)
+    // Layer 5: Decode entities + strip remaining dangerous tags (HTML + entity-encoded agent directives)
     t = decodeAngleBracketEntities(t)
     t = stripTags(t, [...AGENT_DIRECTIVE_TAGS, ...DANGEROUS_HTML_TAGS])
 
-    // Layer 5: Strip external images (exfil via query params)
+    // Layer 6: Strip external images (exfil via query params)
     t = t.replace(EXTERNAL_IMAGE_RE, '')
 
-    // Layer 6: Convert external links to plain text
+    // Layer 7: Convert external links to plain text
     t = t.replace(EXTERNAL_LINK_RE, '$1')
 
-    // Layer 7: Strip dangerous protocols (raw and URL-encoded)
+    // Layer 8: Strip dangerous protocols (raw and URL-encoded)
     t = t.replace(DANGEROUS_PROTOCOL_RE, '')
     t = t.replace(DANGEROUS_PROTOCOL_ENCODED_RE, '')
 
-    // Layer 8: Strip directive-style lines
+    // Layer 9: Strip directive-style lines
     t = t.replace(DIRECTIVE_LINE_RE, '')
 
-    // Layer 9: Strip encoded payloads
+    // Layer 10: Strip encoded payloads
     t = t.replace(BASE64_BLOB_RE, '')
     t = t.replace(UNICODE_ESCAPE_SPAM_RE, '')
 
-    // Layer 10: Strip emoji (token-inefficient, distort embeddings, semantically ambiguous)
+    // Layer 11: Strip emoji (token-inefficient, distort embeddings, semantically ambiguous)
     t = t.replace(EMOJI_RE, '')
 
     // Restore inline code spans
