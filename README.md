@@ -32,7 +32,7 @@ Skilld generates [agent skills](https://agentskills.io/home) from the references
 - 🌍 **Any Source: Opt-in** - Any NPM dependency or GitHub source, docs auto-resolved
 - 📦 **Bleeding Edge Context** - Latest issues, discussions, and releases. Always use the latest best practices and avoid deprecated patterns.
 - 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best Practices`, `API Changes`, or your own custom prompts
-- 🧩 **No Agent Required** - Export prompts and run them in any LLM (ChatGPT, Claude web, API). No CLI agent dependency.
+- 🧩 **Use Any Agent** - Choose your agent: CLI , [pi](https://github.com/badlogic/pi-mono/tree/main/packages/ai) agents or no agent at all.
 - 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
 - 🧠 **Context-Aware** - Follows [Claude Code skill best practices](https://code.claude.com/docs/en/skills#add-supporting-files): SKILL.md stays under 500 lines, references are separate files the agent discovers on-demand - not inlined into context
 - 🎯 **Safe & Versioned** - Prompt injection sanitization, version-aware caching, auto-updates on new releases
