@@ -230,9 +230,10 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
   if (!config.force) {
     for (const pkg of successfulPkgs) {
       const data = skillData.get(pkg)!
+      const resolvedName = data.resolved.name
       const allCached = DEFAULT_SECTIONS.every((s) => {
         const outputFile = SECTION_OUTPUT_FILES[s]
-        return readCachedSection(pkg, data.version, outputFile) !== null
+        return readCachedSection(resolvedName, data.version, outputFile) !== null
       })
       if (allCached) {
         const baseDir = resolveBaseDir(cwd, config.agent, config.global)
@@ -242,14 +243,14 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
           if (!DEFAULT_SECTIONS.includes(s))
             continue
           const outputFile = SECTION_OUTPUT_FILES[s]
-          const content = readCachedSection(pkg, data.version, outputFile)
+          const content = readCachedSection(resolvedName, data.version, outputFile)
           if (content)
             cachedParts.push(wrapSection(s, content))
         }
         const cachedBody = cachedParts.join('\n\n')
 
         const skillMd = generateSkillMd({
-          name: pkg,
+          name: resolvedName,
           version: data.version,
           releasedAt: data.resolved.releasedAt,
           dependencies: data.resolved.dependencies,
