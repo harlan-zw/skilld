@@ -1,20 +1,4 @@
 skills:
-  bombshell-dev-clack:
-    packageName: "@clack/prompts"
-    version: 1.0.1
-    packages: "@clack/prompts@1.0.1"
-    repo: bombshell-dev/clack
-    source: "ungh://bombshell-dev/clack/packages/prompts"
-    syncedAt: 2026-02-14
-    generator: skilld
-  unjs-citty:
-    packageName: citty
-    version: 0.2.1
-    packages: "citty@0.2.1"
-    repo: unjs/citty
-    source: "ungh://unjs/citty"
-    syncedAt: 2026-02-14
-    generator: skilld
   sindresorhus-log-update:
     packageName: log-update
     version: 7.1.0
@@ -32,11 +16,11 @@ skills:
     generator: skilld
   vue-skilld:
     packageName: vue
-    version: 3.5.29
-    packages: "vue@3.5.29"
+    version: 3.5.30
+    packages: "vue@3.5.30"
     repo: vuejs/core
-    source: "https://github.com/vuejs/core/tree/v3.5.29/docs"
-    syncedAt: 2026-03-02
+    source: "https://github.com/vuejs/core/tree/v3.5.30/docs"
+    syncedAt: 2026-03-21
     generator: skilld
   sqlite-vec-skilld:
     packageName: sqlite-vec
@@ -48,11 +32,11 @@ skills:
     generator: skilld
   motion-v-skilld:
     packageName: motion-v
-    version: 2.0.0-beta.5
-    packages: "motion-v@2.0.0-beta.5"
+    version: 2.0.1
+    packages: "motion-v@2.0.1"
     repo: motiondivision/motion-vue
-    source: "https://motion.dev/docs/vue**"
-    syncedAt: 2026-02-24
+    source: "https://github.com/motiondivision/motion-vue/tree/v2.0.1/docs"
+    syncedAt: 2026-03-21
     generator: skilld
   citty-skilld:
     packageName: citty
@@ -65,9 +49,10 @@ skills:
   log-update-skilld:
     packageName: log-update
     version: 7.2.0
+    packages: "log-update@7.2.0"
     repo: sindresorhus/log-update
-    source: "https://raw.githubusercontent.com/sindresorhus/log-update/main/readme.md"
-    syncedAt: 2026-02-27
+    source: "ungh://sindresorhus/log-update"
+    syncedAt: 2026-03-21
     generator: skilld
   tinyglobby-skilld:
     packageName: tinyglobby
@@ -86,18 +71,19 @@ skills:
     generator: skilld
   nuxt-og-image-skilld:
     packageName: nuxt-og-image
-    version: 5.1.13
-    packages: "nuxt-og-image@5.1.13"
+    version: 6.0.7
+    packages: "nuxt-og-image@6.0.7"
     repo: nuxt-modules/og-image
-    source: "https://nuxtseo.com/llms.txt"
-    syncedAt: 2026-03-05
+    source: "ungh://nuxt-modules/og-image@v6.0.7"
+    syncedAt: 2026-03-21
     generator: skilld
   clack-prompts-skilld:
     packageName: "@clack/prompts"
     version: 1.1.0
+    packages: "@clack/prompts@1.1.0"
     repo: bombshell-dev/clack
-    source: "ungh://bombshell-dev/clack/packages/prompts"
-    syncedAt: 2026-03-12
+    source: "https://raw.githubusercontent.com/bombshell-dev/clack/main/packages/prompts/README.md"
+    syncedAt: 2026-03-21
     generator: skilld
   defu-skilld:
     packageName: defu
@@ -105,4 +91,11 @@ skills:
     repo: unjs/defu
     source: "ungh://unjs/defu"
     syncedAt: 2026-03-12
+    generator: skilld
+  mdream-skilld:
+    packageName: mdream
+    version: 1.0.0
+    repo: harlan-zw/mdream
+    source: "ungh://harlan-zw/mdream/packages/mdream"
+    syncedAt: 2026-03-21
     generator: skilld

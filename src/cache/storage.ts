@@ -154,9 +154,8 @@ export function linkPkg(skillDir: string, name: string, cwd: string, version?: s
   mkdirSync(referencesDir, { recursive: true })
 
   const pkgLinkPath = join(referencesDir, 'pkg')
-  if (existsSync(pkgLinkPath)) {
-    unlinkSync(pkgLinkPath)
-  }
+  try { lstatSync(pkgLinkPath); unlinkSync(pkgLinkPath) }
+  catch {}
   symlinkSync(pkgPath, pkgLinkPath, 'junction')
 }
 
@@ -177,8 +176,8 @@ export function linkPkgNamed(skillDir: string, name: string, cwd: string, versio
   mkdirSync(referencesDir, { recursive: true })
 
   const linkPath = join(referencesDir, `pkg-${shortName}`)
-  if (existsSync(linkPath))
-    unlinkSync(linkPath)
+  try { lstatSync(linkPath); unlinkSync(linkPath) }
+  catch {}
   symlinkSync(pkgPath, linkPath, 'junction')
 }
 

@@ -414,6 +414,7 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
     }],
   }, {
     reasoning: 'medium',
+    maxTokens: 16_384,
     ...(apiKey ? { apiKey } : {}),
   })
 

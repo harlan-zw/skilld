@@ -363,7 +363,19 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   ensureCacheDir()
 
   const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-  const skillDirName = config.name ? sanitizeName(config.name) : computeSkillDirName(packageName)
+  // In update mode, find the existing skill dir name for this package (may differ from computed name)
+  let skillDirName = config.name ? sanitizeName(config.name) : computeSkillDirName(packageName)
+  if (config.mode === 'update' && !config.name) {
+    const lock = readLock(baseDir)
+    if (lock) {
+      for (const [name, info] of Object.entries(lock.skills)) {
+        if (info.packageName === packageName || parsePackages(info.packages).some(p => p.name === packageName)) {
+          skillDirName = name
+          break
+        }
+      }
+    }
+  }
   // Eject path override: default to ./skills/<name>, or use specified directory
   const skillDir = config.eject
     ? typeof config.eject === 'string'

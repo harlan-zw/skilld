@@ -54,6 +54,9 @@ interface ToolProgressLog {
 export function createToolProgress(log: ToolProgressLog): (progress: StreamProgress) => void {
   let lastMsg = ''
   let repeatCount = 0
+  /** Per-section timestamp of last "Writing..." emission — throttles text_delta spam */
+  const lastTextEmit = new Map<string, number>()
+  const TEXT_THROTTLE_MS = 2000
 
   function emit(msg: string) {
     if (msg === lastMsg) {
@@ -69,6 +72,12 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
 
   return ({ type, chunk, section }) => {
     if (type === 'text') {
+      const key = section ?? ''
+      const now = Date.now()
+      const last = lastTextEmit.get(key) ?? 0
+      if (now - last < TEXT_THROTTLE_MS)
+        return
+      lastTextEmit.set(key, now)
       emit(`${section ? `\x1B[90m[${section}]\x1B[0m ` : ''}Writing...`)
       return
     }

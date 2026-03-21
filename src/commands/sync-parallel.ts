@@ -464,7 +464,19 @@ async function syncBaseSkill(
   }
 
   const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-  const skillDirName = computeSkillDirName(packageName)
+  // In update mode, find the existing skill dir name for this package (may differ from computed name)
+  let skillDirName = computeSkillDirName(packageName)
+  if (config.mode === 'update') {
+    const lock = readLock(baseDir)
+    if (lock) {
+      for (const [name, info] of Object.entries(lock.skills)) {
+        if (info.packageName === packageName || parsePackages(info.packages).some(p => p.name === packageName)) {
+          skillDirName = name
+          break
+        }
+      }
+    }
+  }
   const skillDir = join(baseDir, skillDirName)
   mkdirSync(skillDir, { recursive: true })
 

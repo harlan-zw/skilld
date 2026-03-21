@@ -534,7 +534,10 @@ const main = defineCommand({
       onSelect: async (action) => {
         switch (action) {
           case 'install': {
-            const installedNames = new Set(state.skills.map(s => s.packageName || s.name))
+            const installedNames = new Set([
+              ...state.synced.map(s => s.packageName),
+              ...state.outdated.map(s => s.packageName),
+            ].filter(Boolean) as string[])
             const uninstalledDeps = [...state.deps.keys()].filter(d => !installedNames.has(d))
             const allDepsInstalled = uninstalledDeps.length === 0
             const hasPkgJsonMenu = existsSync(join(cwd, 'package.json'))
@@ -576,16 +579,20 @@ const main = defineCommand({
                 }
                 else {
                   const depSet = new Set(state.deps.keys())
-                  usages = result.packages
+                  const matched = result.packages
                     .filter(pkg => depSet.has(pkg.name) || pkg.source === 'preset')
-                    .filter(pkg => !installedNames.has(pkg.name))
+                  const alreadyInstalled = matched.filter(pkg => installedNames.has(pkg.name))
+                  usages = matched.filter(pkg => !installedNames.has(pkg.name))
 
                   if (usages.length === 0) {
                     spinner.stop('All detected imports already have skills')
                     return
                   }
                   else {
-                    spinner.stop(`Found ${usages.length} imported packages`)
+                    spinner.stop(`Found ${matched.length} imported packages`)
+                    if (alreadyInstalled.length > 0) {
+                      p.log.info(`${alreadyInstalled.length} already have skills installed`)
+                    }
                   }
                 }
               }
@@ -598,19 +605,28 @@ const main = defineCommand({
                 p.log.warn('No packages found')
                 return
               }
+              const usageMap = new Map(usages.map(u => [u.name, u]))
               const sourceMap = new Map(usages.map(u => [u.name, u.source]))
+              const frameworks = new Set(['vue', 'nuxt', 'react', 'next', 'svelte', '@sveltejs/kit', 'astro', 'solid-js', 'angular', 'typescript', 'vite', 'vitest'])
               const maxLen = Math.max(...packages.map(n => n.length))
               const choice = guard(await p.multiselect({
-                message: `Select packages (${packages.length} found)`,
+                message: `Select packages your agent struggles with or that are new to you (${packages.length} found)`,
                 options: packages.map((name) => {
                   const ver = state.deps.get(name)?.replace(/^[\^~>=<]/, '') || ''
                   const repo = getRepoHint(name, cwd)
-                  const hint = sourceMap.get(name) === 'preset' ? 'nuxt module' : undefined
+                  const src = sourceMap.get(name)
+                  const hint = src === 'preset'
+                    ? 'nuxt module'
+                    : frameworks.has(name)
+                      ? 'framework'
+                      : (usageMap.get(name)?.count ?? 0) >= 5
+                          ? `${usageMap.get(name)!.count} imports`
+                          : undefined
                   const pad = ' '.repeat(maxLen - name.length + 2)
                   const meta = [ver, hint, repo].filter(Boolean).join('  ')
                   return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
                 }),
-                initialValues: packages,
+                initialValues: [],
               }))
 
               if (choice.length === 0)
@@ -650,6 +666,7 @@ const main = defineCommand({
               global: false,
               agent,
               yes: false,
+              mode: 'update',
             })
             await refreshState()
             return true
