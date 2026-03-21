@@ -1,9 +1,28 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'pathe'
 import { defineTarget, SPEC_FRONTMATTER } from './base.ts'
 
 const home = homedir()
+
+function hasCopilotExtension(): boolean {
+  // Check common VS Code extension dirs for github.copilot
+  const extDirs = [
+    join(home, '.vscode', 'extensions'),
+    join(home, '.vscode-server', 'extensions'),
+    join(home, '.cursor', 'extensions'),
+  ]
+  for (const dir of extDirs) {
+    if (!existsSync(dir))
+      continue
+    try {
+      if (readdirSync(dir).some(e => e.startsWith('github.copilot-')))
+        return true
+    }
+    catch {}
+  }
+  return false
+}
 
 /**
  * GitHub Copilot
@@ -20,9 +39,13 @@ const home = homedir()
 export const githubCopilot = defineTarget({
   agent: 'github-copilot',
   displayName: 'GitHub Copilot',
-  detectInstalled: () => existsSync(join(home, '.copilot')),
+  detectInstalled: () => existsSync(join(home, '.copilot')) || hasCopilotExtension(),
   detectEnv: () => !!process.env.COPILOT_RUN_APP,
-  detectProject: cwd => existsSync(join(cwd, '.github', 'copilot-instructions.md')),
+  detectProject: cwd =>
+    existsSync(join(cwd, '.github', 'copilot-instructions.md'))
+    || existsSync(join(cwd, '.github', 'skills'))
+    || existsSync(join(cwd, 'AGENTS.md'))
+    || existsSync(join(cwd, '.github', 'instructions')),
   instructionFile: '.github/copilot-instructions.md',
 
   skillsDir: '.github/skills',
@@ -45,6 +68,8 @@ export const githubCopilot = defineTarget({
   discoveryNotes: '3-level progressive disclosure: (1) ~100 tokens for name+description, (2) full SKILL.md body <5000 tokens on activation, (3) resources from scripts/references/assets/ on demand.',
 
   agentSkillsSpec: true,
+
+  skillActivationHint: 'Before modifying code, evaluate each installed skill against the current task.\nFor each skill, determine YES/NO relevance and invoke all YES skills before proceeding.',
 
   docs: 'https://docs.github.com/en/copilot/concepts/agents/about-agent-skills',
   notes: [

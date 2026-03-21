@@ -1,7 +1,7 @@
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join } from 'pathe'
-import { gt as _semverGt, valid as _semverValid } from 'semver'
+import { diff as _semverDiff, gt as _semverGt, valid as _semverValid } from 'semver'
 import { isWindows } from 'std-env'
 
 /** Get-or-create for Maps. Polyfill for Map.getOrInsertComputed (not yet in Node.js). */
@@ -22,6 +22,11 @@ export function semverValid(v: string): string | null {
 /** Compare two semver strings: returns true if a > b. Handles prereleases. */
 export function semverGt(a: string, b: string): boolean {
   return _semverGt(a, b, true)
+}
+
+/** Returns the semver diff type between two versions (e.g. 'major', 'minor', 'patch', 'prerelease'), or null if equal/invalid. */
+export function semverDiff(a: string, b: string): string | null {
+  return _semverDiff(a, b)
 }
 
 let _skilldCommand: string | undefined

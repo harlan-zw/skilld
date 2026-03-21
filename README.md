@@ -21,7 +21,7 @@ Skilld generates [agent skills](https://agentskills.io/home) from the references
 <table>
 <tbody>
 <td align="center">
-<sub>Made possible by my <a href="https://github.com/sponsors/harlan-zw">Sponsor Program 💖</a><br> Follow me <a href="https://twitter.com/harlan_zw">@harlan_zw</a> 🐦 • Join <a href="https://discord.gg/275MBUBvgP">Discord</a> for help</sub><br>
+<sub>Made possible by my <a href="https://github.com/sponsors/harlan-zw">Sponsor Program 💖</a><br> Follow me <a href="https://twitter.com/harlan_zw">@harlan_zw</a> 🐦 - Join <a href="https://discord.gg/275MBUBvgP">Discord</a> for help</sub><br>
 </td>
 </tbody>
 </table>
@@ -34,9 +34,9 @@ Skilld generates [agent skills](https://agentskills.io/home) from the references
 - 📚 **Opt-in LLM Sections** - Enhance skills with LLM-generated `Best Practices`, `API Changes`, or your own custom prompts
 - 🧩 **No Agent Required** - Export prompts and run them in any LLM (ChatGPT, Claude web, API). No CLI agent dependency.
 - 🔍 **Semantic Search** - Query indexed docs across all skills via [retriv](https://github.com/harlan-zw/retriv) embeddings
-- 🧠 **Context-Aware** - Follows [Claude Code skill best practices](https://code.claude.com/docs/en/skills#add-supporting-files): SKILL.md stays under 500 lines, references are separate files the agent discovers on-demand — not inlined into context
+- 🧠 **Context-Aware** - Follows [Claude Code skill best practices](https://code.claude.com/docs/en/skills#add-supporting-files): SKILL.md stays under 500 lines, references are separate files the agent discovers on-demand - not inlined into context
 - 🎯 **Safe & Versioned** - Prompt injection sanitization, version-aware caching, auto-updates on new releases
-- 🤝 **Ecosystem** - Compatible with [`npx skills`](https://skills.sh/) and [skills-npm](https://github.com/antfu/skills-npm)
+- 🤝 **Ecosystem** - Compatible with [`npx skills`](https://skills.sh/) and [skills-npm](https://github.com/antfu/skills-npm). Skilld auto-detects and uses skills-npm packages when available.
 
 ## Quick Start
 
@@ -56,11 +56,11 @@ npx -y skilld add vue
 
 If you need to re-configure skilld, just run `npx -y skilld config` to update your agent, model, or preferences.
 
-**No agent CLI?** No problem — choose "No agent" when prompted. You get a base skill immediately, plus portable prompts you can run in any LLM:
+**No agent CLI?** No problem - choose "No agent" when prompted. You get a base skill immediately, plus portable prompts you can run in any LLM:
 
 ```bash
 npx -y skilld add vue
-# Choose "No agent" → base skill + prompts exported
+# Choose "No agent" -> base skill + prompts exported
 # Paste prompts into ChatGPT/Claude web, save outputs, then:
 npx -y skilld assemble
 ```
@@ -195,12 +195,12 @@ No Claude, Gemini, or Codex CLI? Choose "No agent" when prompted. You get a base
 
 ```bash
 skilld add vue
-# Choose "No agent" → installs to .claude/skills/vue-skilld/
+# Choose "No agent" -> installs to .claude/skills/vue-skilld/
 
 # What you get:
-#   SKILL.md           ← base skill (works immediately)
-#   PROMPT_*.md        ← prompts to enhance it with any LLM
-#   references/        ← docs, issues, releases as real files
+#   SKILL.md           <- base skill (works immediately)
+#   PROMPT_*.md        <- prompts to enhance it with any LLM
+#   references/        <- docs, issues, releases as real files
 
 # Run each PROMPT_*.md in ChatGPT/Claude web/any LLM
 # Save outputs as _BEST_PRACTICES.md, _API_CHANGES.md, then:
@@ -220,7 +220,7 @@ skilld eject vue --out ./skills/    # Custom path
 skilld eject vue --from 2025-07-01  # Only recent releases/issues
 ```
 
-Share via `skilld add owner/repo` — consumers get fully functional skills with no LLM cost.
+Share via `skilld add owner/repo` - consumers get fully functional skills with no LLM cost.
 
 ### CLI Options
 
@@ -242,20 +242,20 @@ Several approaches exist for steering agent knowledge. Each fills a different ni
 
 | Approach | Versioned | Curated | No Opt-in | Local | Any LLM |
 |:---------|:---------:|:-------:|:---------:|:-----:|:-------:|
-| **Manual rules** | ✗ | ✓ | ✓ | ✓ | ✓ |
-| **llms.txt** | ~ | ✗ | ✗ | ✗ | ✓ |
-| **MCP servers** | ✓ | ✗ | ✗ | ✗ | ✗ |
-| **skills.sh** | ✗ | ~ | ✓ | ✗ | ✗ |
-| **skills-npm** | ✓ | ✓ | ✗ | ✓ | ✗ |
-| **skilld** | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **Manual rules** | - | yes | yes | yes | yes |
+| **llms.txt** | ~ | - | - | - | yes |
+| **MCP servers** | yes | - | - | - | - |
+| **skills.sh** | - | ~ | yes | - | - |
+| **skills-npm** | yes | yes | - | yes | - |
+| **skilld** | yes | yes | yes | yes | yes |
 
-> **Versioned** — tied to your installed package version. **Curated** — distilled best practices, not raw docs. **No Opt-in** — works without the package author doing anything. **Local** — runs on your machine, no external service dependency. **Any LLM** — works with any LLM, not just agent CLIs.
+> **Versioned** - tied to your installed package version. **Curated** - distilled best practices, not raw docs. **No Opt-in** - works without the package author doing anything. **Local** - runs on your machine, no external service dependency. **Any LLM** - works with any LLM, not just agent CLIs.
 
 - **Manual rules** (CLAUDE.md, .cursorrules): full control, but you need to already know the best practices and maintain them across every dep.
 - **[llms.txt](https://llmstxt.org/)**: standard convention for exposing docs to LLMs, but it's full docs not curated guidance and requires author adoption.
-- **MCP servers**: live, version-aware responses, but adds per-request latency and the maintainer has to build and maintain a server.
+- **MCP servers** (Context7, etc.): live, version-aware responses, but adds per-request latency and the maintainer has to build and maintain a server.
 - **[skills.sh](https://skills.sh/)**: easy skill sharing with a growing ecosystem, but community-sourced without version-awareness or author oversight.
-- **[skills-npm](https://github.com/antfu/skills-npm)**: the ideal end-state: zero-token skills shipped by the package author, but requires every maintainer to opt in.
+- **[skills-npm](https://github.com/antfu/skills-npm)**: the ideal end-state: zero-token skills shipped by the package author, but requires every maintainer to opt in. Skilld auto-detects and uses skills-npm packages when available.
 - **skilld**: generates version-aware skills from existing docs, changelogs, issues, and discussions. Works for any package without author opt-in.
 
 ## Telemetry
@@ -274,6 +274,7 @@ DO_NOT_TRACK=1
 ## Related
 
 - [skills-npm](https://github.com/antfu/skills-npm) - Convention for shipping agent skills in npm packages
+- [agentskills.io](https://agentskills.io) - Agent skills specification
 - [mdream](https://github.com/harlan-zw/mdream) - HTML to Markdown converter
 - [retriv](https://github.com/harlan-zw/retriv) - Vector search with sqlite-vec
 

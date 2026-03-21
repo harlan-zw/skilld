@@ -6,14 +6,15 @@ import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
-import { detectImportedPackages } from './agent/index.ts'
-import { formatStatus, getRepoHint, isInteractive, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers.ts'
+import { agents, detectImportedPackages, detectInstalledAgents } from './agent/index.ts'
+import { formatStatus, getRepoHint, guard, isInteractive, isRunningInsideAgent, menuLoop, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers.ts'
 import { configCommand, configCommandDef } from './commands/config.ts'
 import { removeCommand, removeCommandDef } from './commands/remove.ts'
 import { infoCommandDef, statusCommand } from './commands/status.ts'
 import { runWizard } from './commands/wizard.ts'
 import { timedSpinner } from './core/formatting.ts'
 import { getProjectState, hasCompletedWizard, isOutdated, readConfig, semverGt } from './core/index.ts'
+import { iterateSkills } from './core/skills.ts'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index.ts'
 
 import { version } from './version.ts'
@@ -149,7 +150,7 @@ async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> 
 
 // ── Subcommands (lazy-loaded) ──
 
-const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate', 'assemble']
+const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate', 'assemble', 'setup']
 
 // ── Main command ──
 
@@ -176,6 +177,7 @@ const main = defineCommand({
     cache: () => import('./commands/cache.ts').then(m => m.cacheCommandDef),
     validate: () => import('./commands/validate.ts').then(m => m.validateCommandDef),
     assemble: () => import('./commands/assemble.ts').then(m => m.assembleCommandDef),
+    setup: () => import('./commands/setup.ts').then(m => m.setupCommandDef),
   },
   async run({ args }) {
     // Guard: citty always calls parent run() after subcommand dispatch.
@@ -191,6 +193,8 @@ const main = defineCommand({
       const state = await getProjectState(cwd)
       const status = formatStatus(state.synced.length, state.outdated.length)
       console.log(`skilld v${version} · ${status}`)
+      if (isRunningInsideAgent())
+        console.log('Interactive wizard requires a standalone terminal (detected agent session).\nUse `skilld add <pkg>` to add skills non-interactively, or run `npx skilld` in a separate terminal.')
       return
     }
 
@@ -202,9 +206,17 @@ const main = defineCommand({
         return
     }
 
-    // No-agent mode: skip interactive menu, just offer `skilld add <pkg>` usage
+    // No-agent mode: run wizard, then guide them
     if (currentAgent === 'none') {
-      p.log.info('No agent selected. Use `skilld add <pkg>` to export portable prompts.')
+      if (!hasCompletedWizard()) {
+        if (!await runWizard())
+          return
+      }
+      p.log.info(
+        'No agent selected - skills export as portable PROMPT_*.md files.\n'
+        + '  Run \x1B[36mskilld add <pkg>\x1B[0m to generate prompts for any package.\n'
+        + '  Run \x1B[36mskilld config\x1B[0m to set a target agent later.',
+      )
       return
     }
 
@@ -212,7 +224,7 @@ const main = defineCommand({
     const agent: AgentType = currentAgent
 
     // Animate brand while bootstrapping + check for updates
-    const { state, selfUpdate } = await brandLoader(async () => {
+    let { state, selfUpdate } = await brandLoader(async () => {
       const config = readConfig()
       const state = await getProjectState(cwd)
 
@@ -266,10 +278,14 @@ const main = defineCommand({
       )
     }
 
-    // First time setup - no skills yet
+    // First time setup or returning with no skills (e.g. cancelled last time)
     if (state.skills.length === 0) {
       if (!hasCompletedWizard()) {
-        await runWizard()
+        if (!await runWizard({ agent, showOutro: false }))
+          return
+      }
+      else {
+        p.log.step('No skills installed yet - pick some packages to get started.')
       }
 
       // Transition to project setup
@@ -284,10 +300,10 @@ const main = defineCommand({
       p.log.step(projectLabel)
 
       if (!hasPkgJson) {
-        p.log.warn('No package.json found — enter package names manually or run inside a project')
+        p.log.warn('No package.json found - enter npm package names manually.\n  For best results, run skilld inside a JS/TS project directory.')
       }
 
-      p.log.info('Tip: Only generate skills for packages your agent struggles with.\n     The fewer skills, the more context you have for everything else :)')
+      p.log.info('Tip: Add skills for packages with complex APIs or frequent breaking changes - not every dependency needs one.')
 
       // Initial setup loop — allow user to go back
       let setupComplete = false
@@ -296,15 +312,21 @@ const main = defineCommand({
           ? await p.select({
               message: 'How should I find packages?',
               options: [
-                { label: 'Scan source files', value: 'imports', hint: 'Find actually used imports' },
-                { label: 'Use package.json', value: 'deps', hint: `All ${state.deps.size} dependencies` },
+                { label: 'Scan source files', value: 'imports', hint: 'find actually used imports' },
+                { label: 'Use package.json', value: 'deps', hint: `all ${state.deps.size} dependencies` },
                 { label: 'Enter manually', value: 'manual' },
+                { label: 'Skip for now', value: 'skip', hint: 'add skills later with `skilld add <pkg>`' },
               ],
             })
           : 'manual' as const
 
         if (p.isCancel(source)) {
           p.cancel('Setup cancelled')
+          return
+        }
+
+        if (source === 'skip') {
+          p.log.info('Run \x1B[36mskilld add <pkg>\x1B[0m or \x1B[36mskilld\x1B[0m anytime to add skills.')
           return
         }
 
@@ -369,6 +391,15 @@ const main = defineCommand({
           }
           const sourceMap = new Map(usages.map(u => [u.name, u.source]))
           const maxLen = Math.max(...packages.map(n => n.length))
+          // Pre-select frameworks and presets (most likely to benefit from skills)
+          const preselect = packages.filter((name) => {
+            if (sourceMap.get(name) === 'preset')
+              return true
+            // Common frameworks with complex/changing APIs
+            const frameworks = new Set(['vue', 'nuxt', 'react', 'next', 'svelte', '@sveltejs/kit', 'astro', 'solid-js', 'angular', 'typescript', 'vite', 'vitest'])
+            return frameworks.has(name)
+          })
+
           const choice = await p.multiselect({
             message: `Select packages (${packages.length} found)`,
             options: packages.map((name) => {
@@ -379,7 +410,7 @@ const main = defineCommand({
               const meta = [ver, hint, repo].filter(Boolean).join('  ')
               return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
             }),
-            initialValues: packages,
+            initialValues: preselect,
           })
 
           if (p.isCancel(choice)) {
@@ -392,15 +423,85 @@ const main = defineCommand({
           selected = choice
         }
 
-        // syncCommand will ask about LLM after generating base skills
+        // Pass wizard-configured model so sync doesn't re-prompt.
+        // Wizard already handled model selection - yes:true auto-resolves.
+        const wizardConfig = readConfig()
         const { syncCommand } = await import('./commands/sync.ts')
         await syncCommand(state, {
           packages: selected,
           global: false,
           agent,
-          yes: false,
+          model: wizardConfig.model as import('./agent/index.ts').OptimizeModel | undefined,
+          yes: !wizardConfig.skipLlm,
         })
         setupComplete = true
+      }
+
+      // Show SKILL.md preview and verification for newly generated skills
+      const postState = await getProjectState(cwd)
+      const previewSkill = postState.skills[0]
+      if (previewSkill) {
+        const previewPath = join(cwd, agents[agent].skillsDir, previewSkill.name, 'SKILL.md')
+        if (existsSync(previewPath)) {
+          const previewContent = readFileSync(previewPath, 'utf-8')
+          // eslint-disable-next-line no-control-regex, regexp/no-obscure-range
+          const previewLines = previewContent.split('\n').slice(0, 20).join('\n').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').replace(/\x1B\].*?(?:\x07|\x1B\\)/g, '')
+          const fileSize = (Buffer.byteLength(previewContent) / 1024).toFixed(1)
+          p.note(
+            `\x1B[90m${previewLines}\n...\x1B[0m`,
+            `${agents[agent].skillsDir}/${previewSkill.name}/SKILL.md (${fileSize} KB)`,
+          )
+        }
+      }
+
+      // First-run guidance with agent-specific verification tips
+      const agentName = agents[agent].displayName
+      const agentInstalled = detectInstalledAgents().includes(agent)
+      const verifyTips: Record<string, string> = {
+        'claude-code': 'Start a new Claude Code session - skills load automatically.\nOr type /skill-name to invoke a specific skill.',
+        'cursor': 'Restart Cursor to pick up new skills.\nSkills appear in Settings > Cursor Rules.',
+        'github-copilot': 'Restart your editor to pick up new skills.\nCopilot discovers skills from .github/skills/ at startup.',
+        'gemini-cli': 'Start a new Gemini CLI session.\nVerify with /skills list.',
+        'codex': 'Start a new Codex session.\nSkills in .agents/skills/ are discovered at startup.',
+        'windsurf': 'Restart Windsurf to pick up new skills.\nSkills auto-invoke when their description matches your prompt.',
+        'cline': 'Restart your editor. Cline reads skill descriptions at startup.\nFull content loads on-demand when the agent invokes use_skill.',
+        'goose': 'Start a new Goose session.\nSkills are discovered automatically at startup.',
+        'amp': 'Start a new Amp session.\nReads skill descriptions at startup, full content on invocation.',
+        'opencode': 'Start a new OpenCode session.\nSkills are discovered automatically at startup.',
+        'roo': 'Restart your editor. Roo reads skill descriptions at startup.',
+      }
+      const verifyLine = agentInstalled
+        ? (verifyTips[agent] ?? '')
+        : `Skills are ready in ${agents[agent].skillsDir}/.\n\x1B[90m${agentName} was not detected on this machine.\nInstall it to use these skills, or run \`skilld config\` to change agents.\x1B[0m`
+
+      // Build a "try it" suggestion that tests skill-specific knowledge
+      const firstPkg = previewSkill?.info?.packageName || previewSkill?.name
+      const trySuggestion = firstPkg
+        ? `\n\n\x1B[36mTry it:\x1B[0m ask your agent "What are the gotchas or breaking changes in ${firstPkg}?"`
+        : ''
+
+      p.note(
+        `${verifyLine}${trySuggestion}\n\n`
+        + `Run \x1B[36mskilld info\x1B[0m to see installed skills.\n`
+        + `Run \x1B[36mskilld\x1B[0m again to add more, update, or search.`,
+        `${agentName} - next steps`,
+      )
+
+      // Team advice: suggest prepare hook + lockfile
+      if (hasPkgJson) {
+        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+        const hasHook = pkgJson.scripts?.prepare?.includes('skilld')
+        if (!hasHook) {
+          const prepareCmd = pkgJson.scripts?.prepare
+            ? `${pkgJson.scripts.prepare} && skilld update -b`
+            : 'skilld update -b'
+          p.log.info(
+            `\x1B[90mKeep skills fresh by adding to package.json scripts:\n`
+            + `  \x1B[36m"prepare": "${prepareCmd}"\x1B[0m\n`
+            + `  \x1B[90mRefreshes docs on install. Run \`skilld update\` to regenerate LLM enhancements.\n`
+            + `  Commit skilld-lock.yaml so teammates can run \`skilld install\`.\x1B[0m`,
+          )
+        }
       }
       return
     }
@@ -409,174 +510,187 @@ const main = defineCommand({
     const status = formatStatus(state.synced.length, state.outdated.length)
     p.log.info(status)
 
-    // Menu loop — Escape in sub-actions returns to menu
+    const refreshState = async () => {
+      state = await getProjectState(cwd)
+    }
 
-    while (true) {
-      type ActionValue = 'install' | 'update' | 'remove' | 'search' | 'info' | 'config'
-      const options: Array<{ label: string, value: ActionValue, hint?: string }> = []
+    // Main menu — Escape in sub-actions returns to menu via guard()
+    await menuLoop({
+      message: 'What would you like to do?',
+      options: () => {
+        const opts: Array<{ label: string, value: string, hint?: string }> = []
+        opts.push({ label: 'Add new skills', value: 'install' })
+        if (state.outdated.length > 0) {
+          opts.push({ label: 'Update skills', value: 'update', hint: `\x1B[33m${state.outdated.length} outdated\x1B[0m` })
+        }
+        opts.push(
+          { label: 'Remove skills', value: 'remove' },
+          { label: 'Search docs', value: 'search' },
+          { label: 'Info', value: 'info' },
+          { label: 'Configure', value: 'config' },
+        )
+        return opts
+      },
+      onSelect: async (action) => {
+        switch (action) {
+          case 'install': {
+            const installedNames = new Set(state.skills.map(s => s.packageName || s.name))
+            const uninstalledDeps = [...state.deps.keys()].filter(d => !installedNames.has(d))
+            const allDepsInstalled = uninstalledDeps.length === 0
+            const hasPkgJsonMenu = existsSync(join(cwd, 'package.json'))
 
-      options.push({ label: 'Add new skills', value: 'install' })
-      if (state.outdated.length > 0) {
-        options.push({ label: 'Update skills', value: 'update', hint: `\x1B[33m${state.outdated.length} outdated\x1B[0m` })
-      }
-      options.push(
-        { label: 'Remove skills', value: 'remove' },
-        { label: 'Search docs', value: 'search' },
-        { label: 'Info', value: 'info' },
-        { label: 'Configure', value: 'config' },
-      )
+            const source = hasPkgJsonMenu
+              ? guard(await p.select({
+                  message: 'How should I find packages?',
+                  options: [
+                    { label: 'Scan source files', value: 'imports' as const, hint: allDepsInstalled ? 'all installed' : 'find actually used imports', disabled: allDepsInstalled },
+                    { label: 'Use package.json', value: 'deps' as const, hint: allDepsInstalled ? 'all installed' : `${uninstalledDeps.length} uninstalled`, disabled: allDepsInstalled },
+                    { label: 'Enter manually', value: 'manual' as const },
+                  ],
+                }))
+              : 'manual' as const
 
-      const action = await p.select({
-        message: 'What would you like to do?',
-        options,
-      })
+            let selected: string[]
 
-      if (p.isCancel(action)) {
-        p.cancel('Cancelled')
-        return
-      }
-
-      switch (action) {
-        case 'install': {
-          const installedNames = new Set(state.skills.map(s => s.packageName || s.name))
-          const uninstalledDeps = [...state.deps.keys()].filter(d => !installedNames.has(d))
-          const allDepsInstalled = uninstalledDeps.length === 0
-          const hasPkgJsonMenu = existsSync(join(cwd, 'package.json'))
-
-          const source = hasPkgJsonMenu
-            ? await p.select({
-                message: 'How should I find packages?',
-                options: [
-                  { label: 'Scan source files', value: 'imports' as const, hint: allDepsInstalled ? 'all installed' : 'find actually used imports', disabled: allDepsInstalled },
-                  { label: 'Use package.json', value: 'deps' as const, hint: allDepsInstalled ? 'all installed' : `${uninstalledDeps.length} uninstalled`, disabled: allDepsInstalled },
-                  { label: 'Enter manually', value: 'manual' as const },
-                ],
-              })
-            : 'manual' as const
-
-          if (p.isCancel(source))
-            continue
-
-          let selected: string[]
-
-          if (source === 'manual') {
-            const input = await p.text({
-              message: 'Enter package names (space or comma-separated)',
-              placeholder: 'vue nuxt pinia',
-            })
-            if (p.isCancel(input) || !input)
-              continue
-            selected = input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
-            if (selected.length === 0)
-              continue
-          }
-          else {
-            let usages: PackageUsage[]
-            if (source === 'imports') {
-              const spinner = timedSpinner()
-              spinner.start('Scanning imports...')
-              const result = await detectImportedPackages(cwd)
-
-              if (result.packages.length === 0) {
-                spinner.stop('No imports found, falling back to package.json')
-                usages = uninstalledDeps.map(name => ({ name, count: 0 }))
-              }
-              else {
-                const depSet = new Set(state.deps.keys())
-                usages = result.packages
-                  .filter(pkg => depSet.has(pkg.name) || pkg.source === 'preset')
-                  .filter(pkg => !installedNames.has(pkg.name))
-
-                if (usages.length === 0) {
-                  spinner.stop('All detected imports already have skills')
-                  continue
-                }
-                else {
-                  spinner.stop(`Found ${usages.length} imported packages`)
-                }
-              }
+            if (source === 'manual') {
+              const input = guard(await p.text({
+                message: 'Enter package names (space or comma-separated)',
+                placeholder: 'vue nuxt pinia',
+              }))
+              if (!input)
+                return
+              selected = input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
+              if (selected.length === 0)
+                return
             }
             else {
-              usages = uninstalledDeps.map(name => ({ name, count: 0 }))
+              let usages: PackageUsage[]
+              if (source === 'imports') {
+                const spinner = timedSpinner()
+                spinner.start('Scanning imports...')
+                const result = await detectImportedPackages(cwd)
+
+                if (result.packages.length === 0) {
+                  spinner.stop('No imports found, falling back to package.json')
+                  usages = uninstalledDeps.map(name => ({ name, count: 0 }))
+                }
+                else {
+                  const depSet = new Set(state.deps.keys())
+                  usages = result.packages
+                    .filter(pkg => depSet.has(pkg.name) || pkg.source === 'preset')
+                    .filter(pkg => !installedNames.has(pkg.name))
+
+                  if (usages.length === 0) {
+                    spinner.stop('All detected imports already have skills')
+                    return
+                  }
+                  else {
+                    spinner.stop(`Found ${usages.length} imported packages`)
+                  }
+                }
+              }
+              else {
+                usages = uninstalledDeps.map(name => ({ name, count: 0 }))
+              }
+
+              const packages = usages.map(u => u.name)
+              if (packages.length === 0) {
+                p.log.warn('No packages found')
+                return
+              }
+              const sourceMap = new Map(usages.map(u => [u.name, u.source]))
+              const maxLen = Math.max(...packages.map(n => n.length))
+              const choice = guard(await p.multiselect({
+                message: `Select packages (${packages.length} found)`,
+                options: packages.map((name) => {
+                  const ver = state.deps.get(name)?.replace(/^[\^~>=<]/, '') || ''
+                  const repo = getRepoHint(name, cwd)
+                  const hint = sourceMap.get(name) === 'preset' ? 'nuxt module' : undefined
+                  const pad = ' '.repeat(maxLen - name.length + 2)
+                  const meta = [ver, hint, repo].filter(Boolean).join('  ')
+                  return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
+                }),
+                initialValues: packages,
+              }))
+
+              if (choice.length === 0)
+                return
+              selected = choice
             }
 
-            const packages = usages.map(u => u.name)
-            if (packages.length === 0) {
-              p.log.warn('No packages found')
-              continue
-            }
-            const sourceMap = new Map(usages.map(u => [u.name, u.source]))
-            const maxLen = Math.max(...packages.map(n => n.length))
-            const choice = await p.multiselect({
-              message: `Select packages (${packages.length} found)`,
-              options: packages.map((name) => {
-                const ver = state.deps.get(name)?.replace(/^[\^~>=<]/, '') || ''
-                const repo = getRepoHint(name, cwd)
-                const hint = sourceMap.get(name) === 'preset' ? 'nuxt module' : undefined
-                const pad = ' '.repeat(maxLen - name.length + 2)
-                const meta = [ver, hint, repo].filter(Boolean).join('  ')
-                return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
-              }),
-              initialValues: packages,
+            const { syncCommand: sync } = await import('./commands/sync.ts')
+            await sync(state, {
+              packages: selected,
+              global: false,
+              agent,
+              yes: false,
             })
-
-            if (p.isCancel(choice) || choice.length === 0)
-              continue
-            selected = choice
+            await refreshState()
+            return true
           }
-
-          const { syncCommand: sync } = await import('./commands/sync.ts')
-          return sync(state, {
-            packages: selected,
-            global: false,
-            agent,
-            yes: false,
-          })
-        }
-        case 'update': {
-          if (state.outdated.length === 0) {
-            p.log.success('All skills up to date')
-            return
+          case 'update': {
+            if (state.outdated.length === 0) {
+              p.log.success('All skills up to date')
+              return true
+            }
+            const selected = guard(await p.multiselect({
+              message: 'Select packages to update',
+              options: state.outdated.map(s => ({
+                label: s.name,
+                value: s.packageName || s.name,
+                hint: `${s.info?.version ?? 'unknown'} → ${s.latestVersion}`,
+              })),
+              initialValues: state.outdated.map(s => s.packageName || s.name),
+            }))
+            if (selected.length === 0)
+              return
+            const { syncCommand: syncUpdate } = await import('./commands/sync.ts')
+            await syncUpdate(state, {
+              packages: selected,
+              global: false,
+              agent,
+              yes: false,
+            })
+            await refreshState()
+            return true
           }
-          const selected = await p.multiselect({
-            message: 'Select packages to update',
-            options: state.outdated.map(s => ({
-              label: s.name,
-              value: s.packageName || s.name,
-              hint: `${s.info?.version ?? 'unknown'} → ${s.latestVersion}`,
-            })),
-            initialValues: state.outdated.map(s => s.packageName || s.name),
-          })
-          if (p.isCancel(selected) || selected.length === 0)
-            continue
-          const { syncCommand: syncUpdate } = await import('./commands/sync.ts')
-          return syncUpdate(state, {
-            packages: selected,
-            global: false,
-            agent,
-            yes: false,
-          })
+          case 'remove': {
+            // Check if global skills exist to offer scope choice
+            const globalSkills = [...iterateSkills({ scope: 'global' })]
+            let removeGlobal = false
+            if (globalSkills.length > 0) {
+              const scope = guard(await p.select({
+                message: 'Which skills?',
+                options: [
+                  { label: 'Project skills', value: 'local' as const },
+                  { label: 'Global skills', value: 'global' as const, hint: `${globalSkills.length} installed` },
+                ],
+              }))
+              removeGlobal = scope === 'global'
+            }
+            await removeCommand(state, {
+              global: removeGlobal,
+              agent,
+              yes: false,
+            })
+            await refreshState()
+            break
+          }
+          case 'search': {
+            const { interactiveSearch } = await import('./commands/search-interactive.ts')
+            await interactiveSearch()
+            break
+          }
+          case 'info':
+            await statusCommand({ global: false })
+            break
+          case 'config':
+            await configCommand()
+            await refreshState()
+            break
         }
-        case 'remove':
-          await removeCommand(state, {
-            global: false,
-            agent,
-            yes: false,
-          })
-          continue
-        case 'search': {
-          const { interactiveSearch } = await import('./commands/search-interactive.ts')
-          await interactiveSearch()
-          continue
-        }
-        case 'info':
-          await statusCommand({ global: false })
-          continue
-        case 'config':
-          await configCommand()
-          continue
-      }
-    }
+      },
+    })
   },
 })
 

@@ -17,7 +17,6 @@ import {
 } from '../agent/index.ts'
 import { maxItems, maxLines } from '../agent/prompts/optional/budget.ts'
 import {
-  CACHE_DIR,
   clearCache,
   getCacheDir,
   getPackageDbPath,
@@ -35,12 +34,12 @@ import {
   writeToCache,
   writeToRepoCache,
 } from '../cache/index.ts'
-import { isInteractive } from '../cli-helpers.ts'
+import { isInteractive, NO_MODELS_MESSAGE, pickModel } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
-import { getSharedSkillsDir } from '../core/shared.ts'
+import { getSharedSkillsDir, semverDiff } from '../core/shared.ts'
 import { createIndex, listIndexIds, SearchDepsUnavailableError } from '../retriv/index.ts'
 import {
   downloadLlmsDocs,
@@ -230,11 +229,7 @@ export function handleShippedSkills(
   if (shippedSkills.length === 0)
     return null
 
-  const shared = getSharedSkillsDir(cwd)
-  const agentConfig = agents[agent]
-  const baseDir = global
-    ? join(CACHE_DIR, 'skills')
-    : shared || join(cwd, agentConfig.skillsDir)
+  const baseDir = resolveBaseDir(cwd, agent, global)
   mkdirSync(baseDir, { recursive: true })
 
   for (const shipped of shippedSkills) {
@@ -256,8 +251,10 @@ export function handleShippedSkills(
 
 /** Resolve the base skills directory for an agent */
 export function resolveBaseDir(cwd: string, agent: AgentType, global: boolean): string {
-  if (global)
-    return join(CACHE_DIR, 'skills')
+  if (global) {
+    const agentConfig = agents[agent]
+    return agentConfig.globalSkillsDir
+  }
   const shared = getSharedSkillsDir(cwd)
   if (shared)
     return shared
@@ -997,10 +994,17 @@ export async function ensureGitignore(skillsDir: string, cwd: string, isGlobal: 
 export const SKILLD_MARKER_START = '<!-- skilld -->'
 export const SKILLD_MARKER_END = '<!-- /skilld -->'
 
-const SKILLD_INSTRUCTIONS = `${SKILLD_MARKER_START}
-Before modifying code, evaluate each installed skill against the current task.
-For each skill, determine YES/NO relevance and invoke all YES skills before proceeding.
-${SKILLD_MARKER_END}`
+const DEFAULT_SKILL_HINT = 'Before modifying code, evaluate each installed skill against the current task.\nFor each skill, determine YES/NO relevance and invoke all YES skills before proceeding.'
+
+function getSkillInstructions(agent: AgentType): string {
+  const hint = agents[agent].skillActivationHint || DEFAULT_SKILL_HINT
+  return `${SKILLD_MARKER_START}\n${hint}\n${SKILLD_MARKER_END}`
+}
+
+function getMdcSkillInstructions(agent: AgentType): string {
+  const hint = agents[agent].skillActivationHint || DEFAULT_SKILL_HINT
+  return `---\ndescription: "Activates installed skilld skills before code changes"\nalwaysApply: true\n---\n\n${hint}`
+}
 
 /**
  * Check if agent instruction file has skilld skill-activation snippet.
@@ -1015,6 +1019,43 @@ export async function ensureAgentInstructions(agent: AgentType, cwd: string, isG
     return
 
   const filePath = join(cwd, agentConfig.instructionFile)
+  const isMdc = agentConfig.instructionFile.endsWith('.mdc')
+
+  // MDC format: dedicated file, no markers needed
+  if (isMdc) {
+    if (existsSync(filePath))
+      return
+
+    const content = `${getMdcSkillInstructions(agent)}\n`
+
+    if (!isInteractive()) {
+      mkdirSync(join(filePath, '..'), { recursive: true })
+      writeFileSync(filePath, content)
+      return
+    }
+
+    p.note(
+      `This tells your agent to check installed skills before making\n`
+      + `code changes. Without it, skills are available but may not\n`
+      + `activate automatically.\n`
+      + `\n`
+      + `\x1B[90m${getMdcSkillInstructions(agent)}\x1B[0m`,
+      `Create ${agentConfig.instructionFile}`,
+    )
+
+    const add = await p.confirm({
+      message: `Create ${agentConfig.instructionFile} with skill activation instructions?`,
+      initialValue: true,
+    })
+
+    if (p.isCancel(add) || !add)
+      return
+
+    mkdirSync(join(filePath, '..'), { recursive: true })
+    writeFileSync(filePath, content)
+    p.log.success(`Created ${agentConfig.instructionFile}`)
+    return
+  }
 
   // Check if marker already present
   if (existsSync(filePath)) {
@@ -1028,18 +1069,27 @@ export async function ensureAgentInstructions(agent: AgentType, cwd: string, isG
     if (existsSync(filePath)) {
       const existing = readFileSync(filePath, 'utf-8')
       const separator = existing.endsWith('\n') ? '' : '\n'
-      appendFileSync(filePath, `${separator}\n${SKILLD_INSTRUCTIONS}\n`)
+      appendFileSync(filePath, `${separator}\n${getSkillInstructions(agent)}\n`)
     }
     else {
-      writeFileSync(filePath, `${SKILLD_INSTRUCTIONS}\n`)
+      writeFileSync(filePath, `${getSkillInstructions(agent)}\n`)
     }
     return
   }
 
-  p.note(SKILLD_INSTRUCTIONS, `Will be added to ${agentConfig.instructionFile}`)
+  const fileExists = existsSync(filePath)
+  const action = fileExists ? 'Append to' : 'Create'
+  p.note(
+    `This tells your agent to check installed skills before making\n`
+    + `code changes. Without it, skills are available but may not\n`
+    + `activate automatically.\n`
+    + `\n`
+    + `\x1B[90m${getSkillInstructions(agent).replace(/\n/g, '\n')}\x1B[0m`,
+    `${action} ${agentConfig.instructionFile}`,
+  )
 
   const add = await p.confirm({
-    message: `Add skill activation instructions to ${agentConfig.instructionFile}?`,
+    message: `${action} ${agentConfig.instructionFile} with skill activation instructions?`,
     initialValue: true,
   })
 
@@ -1049,10 +1099,10 @@ export async function ensureAgentInstructions(agent: AgentType, cwd: string, isG
   if (existsSync(filePath)) {
     const existing = readFileSync(filePath, 'utf-8')
     const separator = existing.endsWith('\n') ? '' : '\n'
-    appendFileSync(filePath, `${separator}\n${SKILLD_INSTRUCTIONS}\n`)
+    appendFileSync(filePath, `${separator}\n${getSkillInstructions(agent)}\n`)
   }
   else {
-    writeFileSync(filePath, `${SKILLD_INSTRUCTIONS}\n`)
+    writeFileSync(filePath, `${getSkillInstructions(agent)}\n`)
   }
 
   p.log.success(`Updated ${agentConfig.instructionFile}`)
@@ -1064,7 +1114,7 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
   const available = await getAvailableModels()
 
   if (available.length === 0) {
-    p.log.warn('No LLM CLIs found (claude, gemini, codex)')
+    p.log.warn(NO_MODELS_MESSAGE)
     return null
   }
 
@@ -1072,34 +1122,27 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
   if (skipPrompt) {
     if (config.model && available.some(m => m.id === config.model))
       return config.model
+    // Warn if configured model is unavailable (auth revoked, CLI uninstalled, etc.)
+    if (config.model)
+      p.log.warn(`Configured model \x1B[36m${config.model}\x1B[0m is unavailable — using auto-selected fallback`)
     return available.find(m => m.recommended)?.id ?? available[0]!.id
   }
 
-  const modelChoice = await p.select({
-    message: 'Model for SKILL.md generation',
-    options: available.map(m => ({
-      label: m.recommended ? `${m.name} (Recommended)` : m.name,
-      value: m.id,
-      hint: `${m.agentName} · ${m.hint}`,
-    })),
-    initialValue: available.find(m => m.recommended)?.id ?? available[0]!.id,
-  })
-
-  if (p.isCancel(modelChoice)) {
-    p.cancel('Cancelled')
+  // Smart provider → model (skips provider step when only 1 provider)
+  const choice = await pickModel(available)
+  if (!choice)
     return null
-  }
 
   // Remember choice for next time
-  updateConfig({ model: modelChoice as OptimizeModel })
+  updateConfig({ model: choice as OptimizeModel })
 
-  return modelChoice as OptimizeModel
+  return choice as OptimizeModel
 }
 
 /** Default sections when model is pre-set (non-interactive) */
 export const DEFAULT_SECTIONS: SkillSection[] = ['best-practices', 'api-changes']
 
-export async function selectSkillSections(message = 'Generate SKILL.md with LLM'): Promise<{ sections: SkillSection[], customPrompt?: CustomPrompt, cancelled: boolean }> {
+export async function selectSkillSections(message = 'Enhance SKILL.md'): Promise<{ sections: SkillSection[], customPrompt?: CustomPrompt, cancelled: boolean }> {
   p.log.info('Budgets adapt to package release density.')
   const selected = await p.multiselect({
     message,
@@ -1168,14 +1211,31 @@ export interface LlmConfig {
   promptOnly?: boolean
 }
 
+/** Context about the existing skill when running an update (not a fresh add). */
+export interface UpdateContext {
+  oldVersion?: string
+  newVersion?: string
+  syncedAt?: string
+  /** Whether the existing SKILL.md was LLM-enhanced (has generated_by in frontmatter). */
+  wasEnhanced: boolean
+  /** Pre-computed bump type (used by parallel sync to pass the max across packages). */
+  bumpType?: string
+}
+
 /**
  * Resolve sections + model for LLM enhancement.
  * If presetModel is provided, uses DEFAULT_SECTIONS without prompting.
  * Returns null if cancelled or no sections/model selected.
  */
-export async function selectLlmConfig(presetModel?: OptimizeModel, message?: string): Promise<LlmConfig | null> {
+export async function selectLlmConfig(presetModel?: OptimizeModel, message?: string, updateCtx?: UpdateContext): Promise<LlmConfig | null> {
   if (presetModel) {
-    return { model: presetModel, sections: DEFAULT_SECTIONS }
+    // Validate preset model is still available (env/OAuth may have changed)
+    const available = await getAvailableModels()
+    if (available.some(m => m.id === presetModel))
+      return { model: presetModel, sections: DEFAULT_SECTIONS }
+    // Fall through to interactive selection if preset unavailable
+    if (!isInteractive())
+      return null
   }
 
   // Non-interactive (CI, agent, no TTY): skip generation unless model explicitly provided
@@ -1184,20 +1244,73 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
   }
 
   // Resolve default model (configured or recommended) without prompting
-  const defaultModel = await selectModel(true)
-  if (!defaultModel)
+  const config = readConfig()
+  const available = await getAvailableModels()
+
+  if (available.length === 0) {
+    p.log.warn(NO_MODELS_MESSAGE)
     return null
+  }
+
+  // Inline the skipPrompt logic from selectModel to avoid a second getAvailableModels() call
+  let defaultModel: OptimizeModel
+  if (config.model && available.some(m => m.id === config.model)) {
+    defaultModel = config.model
+  }
+  else {
+    if (config.model)
+      p.log.warn(`Configured model \x1B[36m${config.model}\x1B[0m is unavailable — using auto-selected fallback`)
+    defaultModel = (available.find(m => m.recommended)?.id ?? available[0]!.id) as OptimizeModel
+  }
 
   const defaultModelName = getModelName(defaultModel)
+  const defaultModelInfo = available.find(m => m.id === defaultModel)
+  const providerHint = defaultModelInfo?.providerName ?? ''
+  const sourceHint = config.model === defaultModel ? 'configured' : 'recommended'
+  const defaultHint = providerHint ? `${providerHint} · ${sourceHint}` : sourceHint
+
+  // Build update context hint for the prompt message
+  let enhanceMessage = 'Enhance SKILL.md?'
+  let defaultToSkip = false
+  if (updateCtx) {
+    const diff = updateCtx.bumpType
+      ?? (updateCtx.oldVersion && updateCtx.newVersion ? semverDiff(updateCtx.oldVersion, updateCtx.newVersion) : null)
+    const isSmallBump = diff === 'patch' || diff === 'prerelease' || diff === 'prepatch' || diff === 'preminor' || diff === 'premajor'
+
+    const ageParts: string[] = []
+    if (diff)
+      ageParts.push(diff)
+    if (updateCtx.syncedAt) {
+      const syncedAtMs = new Date(updateCtx.syncedAt).getTime()
+      if (Number.isFinite(syncedAtMs)) {
+        const days = Math.floor((Date.now() - syncedAtMs) / 86_400_000)
+        ageParts.push(days === 0 ? 'today' : days === 1 ? '1d ago' : `${days}d ago`)
+      }
+    }
+    if (updateCtx.wasEnhanced)
+      ageParts.push('LLM-enhanced')
+
+    const versionHint = updateCtx.oldVersion && updateCtx.newVersion
+      ? `${updateCtx.oldVersion} → ${updateCtx.newVersion}`
+      : null
+    const hint = [versionHint, ...ageParts].filter(Boolean).join(' · ')
+    if (hint)
+      enhanceMessage = `Enhance SKILL.md? \x1B[90m(${hint})\x1B[0m`
+
+    // Default to Skip for patch/prerelease bumps on already-enhanced skills
+    if (updateCtx.wasEnhanced && isSmallBump)
+      defaultToSkip = true
+  }
 
   const choice = await p.select({
-    message: 'Generate enhanced SKILL.md?',
+    message: enhanceMessage,
     options: [
-      { label: defaultModelName, value: 'default' as const, hint: 'configured default' },
-      { label: 'Different model', value: 'pick' as const, hint: 'choose another model' },
+      { label: defaultModelName, value: 'default' as const, hint: defaultHint },
+      { label: 'Different model', value: 'pick' as const, hint: 'choose another enhancement model' },
       { label: 'Prompt only', value: 'prompt' as const, hint: 'write prompts for manual use' },
-      { label: 'Skip', value: 'skip' as const, hint: 'base skill only' },
+      { label: 'Skip', value: 'skip' as const, hint: 'base skill with docs, issues, and types' },
     ],
+    ...(defaultToSkip ? { initialValue: 'skip' as const } : {}),
   })
 
   if (p.isCancel(choice))
@@ -1216,13 +1329,23 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
     return { model: defaultModel, sections, customPrompt, promptOnly: true }
   }
 
-  const model = choice === 'pick' ? await selectModel(false) : defaultModel
+  let model: OptimizeModel
+  if (choice === 'pick') {
+    const picked = await pickModel(available)
+    if (!picked)
+      return null
+    updateConfig({ model: picked as OptimizeModel })
+    model = picked as OptimizeModel
+  }
+  else {
+    model = defaultModel
+  }
   if (!model)
     return null
 
   const modelName = getModelName(model)
   const { sections, customPrompt, cancelled } = await selectSkillSections(
-    message ? `${message} (${modelName})` : `Generate SKILL.md with ${modelName}`,
+    message ? `${message} (${modelName})` : `Enhance SKILL.md with ${modelName}`,
   )
 
   if (cancelled || sections.length === 0)
@@ -1326,7 +1449,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
-    llmLog.error(`LLM optimization failed${error ? `: ${error}` : ''}`)
+    llmLog.error(`Enhancement failed${error ? `: ${error}` : ''}`)
   }
 }
 

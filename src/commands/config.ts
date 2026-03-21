@@ -1,116 +1,215 @@
+import type { OptimizeModel } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
-import { agents, getAvailableModels } from '../agent/index.ts'
-import { getInstalledGenerators, introLine, requireInteractive } from '../cli-helpers.ts'
+import { getOAuthProviderList, loginOAuthProvider, logoutOAuthProvider } from '../agent/clis/pi-ai.ts'
+import { agents, detectTargetAgent, getAvailableModels, getModelName } from '../agent/index.ts'
+import { guard, introLine, menuLoop, NO_MODELS_MESSAGE, OAUTH_NOTE, pickModel, requireInteractive } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig, updateConfig } from '../core/config.ts'
 import { getProjectState } from '../core/skills.ts'
 
 export async function configCommand(): Promise<void> {
-  const config = readConfig()
+  const initConfig = readConfig()
+  const agentId = initConfig.agent || detectTargetAgent() || undefined
+  const cyan = (s: string) => `\x1B[36m${s}\x1B[90m`
+  const modelLabel = initConfig.skipLlm
+    ? 'skip'
+    : initConfig.model
+      ? cyan(getModelName(initConfig.model))
+      : 'auto'
+  const agentLabel = agentId && agents[agentId as keyof typeof agents]
+    ? cyan(agents[agentId as keyof typeof agents].displayName)
+    : 'auto-detect'
+  p.note(`\x1B[90mFetch docs → Enhance with ${modelLabel} → Install to ${agentLabel}\x1B[0m`, 'How skilld works')
 
-  const features = config.features ?? defaultFeatures
-  const enabledCount = Object.values(features).filter(Boolean).length
-
-  const action = await p.select({
+  await menuLoop({
     message: 'Settings',
-    options: [
-      { label: 'Change features', value: 'features', hint: `${enabledCount}/4 enabled` },
-      { label: 'Change model', value: 'model', hint: config.model || 'auto' },
-      { label: 'Change agent', value: 'agent', hint: config.agent || 'auto-detect' },
-    ],
+    options: () => {
+      const config = readConfig()
+      const features = config.features ?? defaultFeatures
+      const enabledCount = Object.values(features).filter(Boolean).length
+      const modelHint = config.skipLlm
+        ? 'disabled'
+        : config.model
+          ? getModelName(config.model)
+          : 'auto'
+      const connectedOAuth = getOAuthProviderList().filter(pr => pr.loggedIn).length
+      const oauthHint = connectedOAuth > 0 ? `${connectedOAuth} connected` : 'none'
+      return [
+        { label: 'Data sources', value: 'features', hint: `${enabledCount}/4 enabled · issues, releases, search, discussions` },
+        { label: 'OAuth providers', value: 'oauth', hint: `${oauthHint} · pi-ai direct API` },
+        { label: 'Enhancement model', value: 'model', hint: `${modelHint} · rewrites SKILL.md with best practices` },
+        { label: 'Target agent', value: 'agent', hint: `${config.agent || 'auto-detect'} · where skills are installed` },
+      ]
+    },
+    onSelect: async (action) => {
+      switch (action) {
+        case 'features': {
+          const config = readConfig()
+          const features = config.features ?? defaultFeatures
+          const selected = guard(await p.multiselect({
+            message: 'Data sources',
+            options: [
+              { label: 'Semantic + token search', value: 'search' as const, hint: 'local query engine to cut token costs and speed up grep' },
+              { label: 'Release notes', value: 'releases' as const, hint: 'track changelogs for installed packages' },
+              { label: 'GitHub issues', value: 'issues' as const, hint: 'surface common problems and solutions' },
+              { label: 'GitHub discussions', value: 'discussions' as const, hint: 'include Q&A and community knowledge' },
+            ],
+            initialValues: Object.entries(features)
+              .filter(([, v]) => v)
+              .map(([k]) => k) as Array<keyof FeaturesConfig>,
+            required: false,
+          }))
+          updateConfig({
+            features: {
+              search: selected.includes('search'),
+              issues: selected.includes('issues'),
+              discussions: selected.includes('discussions'),
+              releases: selected.includes('releases'),
+            },
+          })
+          p.log.success(`Data sources updated: ${selected.length} enabled`)
+          break
+        }
+
+        case 'oauth': {
+          await configureOAuth()
+          break
+        }
+
+        case 'model': {
+          await configureModel()
+          break
+        }
+
+        case 'agent': {
+          const config = readConfig()
+          const agentChoice = guard(await p.select({
+            message: 'Target agent — where should skills be installed?',
+            options: [
+              { label: 'Auto-detect', value: '' },
+              ...Object.entries(agents).map(([id, a]) => ({
+                label: a.displayName,
+                value: id,
+                hint: a.skillsDir,
+              })),
+            ],
+            initialValue: config.agent || '',
+          }))
+          updateConfig({ agent: agentChoice || undefined })
+          p.log.success(agentChoice ? `Target agent set to ${agentChoice}` : 'Target agent will be auto-detected')
+          break
+        }
+      }
+    },
   })
+}
 
-  if (p.isCancel(action)) {
-    p.cancel('Cancelled')
+async function configureOAuth(): Promise<void> {
+  p.note(OAUTH_NOTE, 'How OAuth works')
+
+  await menuLoop({
+    message: 'OAuth providers',
+    options: () => {
+      const providers = getOAuthProviderList()
+      return providers.map(pr => ({
+        label: pr.name,
+        value: pr.id,
+        hint: pr.loggedIn ? '\x1B[32mconnected\x1B[0m' : 'not connected',
+      }))
+    },
+    onSelect: async (providerId) => {
+      const providers = getOAuthProviderList()
+      const pr = providers.find(p2 => p2.id === providerId)
+      if (!pr)
+        return
+
+      if (pr.loggedIn) {
+        const action = guard(await p.select({
+          message: pr.name,
+          options: [
+            { label: 'Disconnect', value: 'disconnect' },
+            { label: 'Back', value: 'back' },
+          ],
+        }))
+        if (action === 'disconnect') {
+          logoutOAuthProvider(providerId as string)
+          p.log.success(`Disconnected from ${pr.name}`)
+        }
+        return
+      }
+
+      const spinner = p.spinner()
+      spinner.start('Connecting...')
+
+      const success = await loginOAuthProvider(providerId as string, {
+        onAuth: (url, instructions) => {
+          spinner.stop('Open this URL in your browser:')
+          p.log.info(`  \x1B[36m${url}\x1B[0m`)
+          if (instructions)
+            p.log.info(`  \x1B[90m${instructions}\x1B[0m`)
+          spinner.start('Waiting for authentication...')
+        },
+        onPrompt: async (message, placeholder) => {
+          const value = await p.text({ message, placeholder })
+          if (p.isCancel(value))
+            return ''
+          return value as string
+        },
+        onProgress: msg => p.log.step(msg),
+      }).catch((err: Error) => {
+        spinner.stop(`Login failed: ${err.message}`)
+        return false
+      })
+
+      spinner.stop()
+      if (success)
+        p.log.success(`Connected to ${pr.name}`)
+    },
+  })
+}
+
+// ── Model selection ──────────────────────────────────────────────────
+
+async function configureModel(): Promise<void> {
+  // Loop so user can connect OAuth and come back to pick a model
+  while (true) {
+    const available = await getAvailableModels()
+
+    if (available.length === 0)
+      p.log.warn(NO_MODELS_MESSAGE)
+
+    const choice = await pickModel(available, {
+      before: available.length > 0
+        ? [{ label: 'Auto', value: '_auto', hint: 'picks best available model from connected providers' }]
+        : [],
+      after: [
+        { label: 'Connect OAuth provider...', value: '_connect', hint: 'use existing Claude Pro, ChatGPT Plus, etc.' },
+        { label: 'Skip enhancement', value: '_skip', hint: 'base skill with docs, issues, and types' },
+      ],
+    })
+
+    if (!choice)
+      return
+
+    if (choice === '_connect') {
+      await configureOAuth()
+      continue
+    }
+
+    if (choice === '_skip') {
+      updateConfig({ model: undefined, skipLlm: true })
+      p.log.success('Enhancement disabled - skills will use raw docs only')
+    }
+    else if (choice === '_auto') {
+      updateConfig({ model: undefined, skipLlm: false })
+      p.log.success('Enhancement model will be auto-selected')
+    }
+    else {
+      updateConfig({ model: choice as OptimizeModel, skipLlm: false })
+      p.log.success(`Enhancement model set to ${getModelName(choice as OptimizeModel)}`)
+    }
     return
-  }
-
-  switch (action) {
-    case 'features': {
-      const featureOptions = [
-        { label: 'Semantic + token search', value: 'search' as const, hint: 'local query engine to cut token costs and speed up grep' },
-        { label: 'Release notes', value: 'releases' as const, hint: 'track changelogs for installed packages' },
-        { label: 'GitHub issues', value: 'issues' as const, hint: 'surface common problems and solutions' },
-        { label: 'GitHub discussions', value: 'discussions' as const, hint: 'include Q&A and community knowledge' },
-      ] as const
-
-      const selected = await p.multiselect({
-        message: 'Enable features',
-        options: featureOptions.map(f => ({
-          label: f.label,
-          value: f.value,
-          hint: f.hint,
-        })),
-        initialValues: Object.entries(features)
-          .filter(([, v]) => v)
-          .map(([k]) => k) as Array<keyof FeaturesConfig>,
-        required: false,
-      })
-
-      if (p.isCancel(selected))
-        return
-
-      const updated: FeaturesConfig = {
-        search: selected.includes('search'),
-        issues: selected.includes('issues'),
-        discussions: selected.includes('discussions'),
-        releases: selected.includes('releases'),
-      }
-      updateConfig({ features: updated })
-      p.log.success(`Features updated: ${selected.length} enabled`)
-      break
-    }
-
-    case 'model': {
-      const available = await getAvailableModels()
-      if (available.length === 0) {
-        p.log.warn('No LLM CLIs found')
-        return
-      }
-
-      const model = await p.select({
-        message: 'Select default model',
-        options: [
-          { label: 'Auto (prompt each time)', value: '' },
-          ...available.map(m => ({
-            label: m.recommended ? `${m.name} (Recommended)` : m.name,
-            value: m.id,
-            hint: m.hint,
-          })),
-        ],
-        initialValue: config.model || '',
-      })
-
-      if (p.isCancel(model))
-        return
-
-      updateConfig({ model: (model || undefined) as typeof config.model })
-      p.log.success(model ? `Default model set to ${model}` : 'Model will be prompted each time')
-      break
-    }
-
-    case 'agent': {
-      const agentChoice = await p.select({
-        message: 'Select default agent',
-        options: [
-          { label: 'Auto-detect', value: '' },
-          ...Object.entries(agents).map(([id, a]) => ({
-            label: a.displayName,
-            value: id,
-            hint: a.skillsDir,
-          })),
-        ],
-        initialValue: config.agent || '',
-      })
-
-      if (p.isCancel(agentChoice))
-        return
-
-      updateConfig({ agent: agentChoice || undefined })
-      p.log.success(agentChoice ? `Default agent set to ${agentChoice}` : 'Agent will be auto-detected')
-      break
-    }
   }
 }
 
@@ -121,9 +220,7 @@ export const configCommandDef = defineCommand({
     requireInteractive('config')
     const cwd = process.cwd()
     const state = await getProjectState(cwd)
-    const generators = getInstalledGenerators()
-    const config = readConfig()
-    p.intro(introLine({ state, generators, modelId: config.model }))
+    p.intro(introLine({ state }))
     return configCommand()
   },
 })

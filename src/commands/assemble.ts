@@ -173,7 +173,7 @@ function assembleDir(targetDir: string, cwd: string): void {
 }
 
 export const assembleCommandDef = defineCommand({
-  meta: { name: 'assemble', description: 'Merge LLM output files into SKILL.md' },
+  meta: { name: 'assemble', description: 'Merge enhancement output files into SKILL.md' },
   args: {
     dir: {
       type: 'positional',

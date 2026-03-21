@@ -125,7 +125,7 @@ export const removeCommandDef = defineCommand({
     const generators = getInstalledGenerators()
     const config = readConfig()
     const scope = args.global ? 'global' : 'project'
-    const intro = { state, generators, modelId: config.model }
+    const intro = { state, generators, modelId: config.model, agentId: agent || config.agent || undefined }
     p.intro(`${introLine(intro)} · remove (${scope})`)
 
     // Collect packages from positional args
