@@ -90,7 +90,7 @@ vi.mock('../../src/core/lockfile', () => ({
 
 vi.mock('../../src/retriv', async (importOriginal) => {
   const orig = await importOriginal<typeof import('../../src/retriv')>()
-  return { ...orig, createIndex: vi.fn() }
+  return { ...orig, createIndex: vi.fn(), listIndexIds: vi.fn().mockResolvedValue([]) }
 })
 
 vi.mock('../../src/agent', () => ({
@@ -104,7 +104,7 @@ const { getCacheDir, getPackageDbPath, readCachedDocs, writeToCache, writeToRepo
 const { fetchCrawledDocs, fetchGitDocs, fetchGitHubIssues, fetchGitHubDiscussions, fetchGitHubRaw, fetchLlmsTxt, fetchReadmeContent, fetchReleaseNotes, downloadLlmsDocs, isGhAvailable, isShallowGitDocs, resolveEntryFiles, resolveLocalPackageDocs } = await import('../../src/sources')
 const { registerProject } = await import('../../src/core/config')
 const { writeLock } = await import('../../src/core/lockfile')
-const { createIndex } = await import('../../src/retriv')
+const { createIndex, listIndexIds } = await import('../../src/retriv')
 const { getShippedSkills, linkShippedSkill, resolvePkgDir } = await import('../../src/cache')
 
 const {
@@ -693,11 +693,49 @@ describe('sync-shared', () => {
       onProgress: vi.fn(),
     }
 
-    // 6a: db already exists → skips
-    it('skips when db exists', async () => {
+    // 6a: db already exists, no changes → reports up to date
+    it('reports up to date when db exists and no changes', async () => {
       vi.mocked(existsSync).mockReturnValue(true)
-      await indexResources({ ...baseOpts, docsToIndex: [{ id: 'a.md', content: 'x', metadata: {} }] })
+      vi.mocked(listIndexIds).mockResolvedValue(['a.md'])
+      vi.mocked(resolvePkgDir).mockReturnValue(null)
+      const onProgress = vi.fn()
+      await indexResources({ ...baseOpts, docsToIndex: [{ id: 'a.md', content: 'x', metadata: {} }], onProgress })
       expect(createIndex).not.toHaveBeenCalled()
+      expect(onProgress).toHaveBeenCalledWith('Search index up to date')
+    })
+
+    // 6a2: db exists with new docs → incremental index
+    it('incrementally indexes new docs when db exists', async () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(listIndexIds).mockResolvedValue(['a.md'])
+      vi.mocked(resolvePkgDir).mockReturnValue(null)
+      const docs = [
+        { id: 'a.md', content: 'existing', metadata: { type: 'doc' } },
+        { id: 'b.md', content: 'new', metadata: { type: 'doc' } },
+      ]
+      await indexResources({ ...baseOpts, docsToIndex: docs })
+      expect(createIndex).toHaveBeenCalled()
+      const call = vi.mocked(createIndex).mock.calls[0]
+      // Only the new doc should be indexed
+      expect(call[0]).toHaveLength(1)
+      expect(call[0][0].id).toBe('b.md')
+      // No removals
+      expect(call[1].removeIds).toEqual([])
+    })
+
+    // 6a3: db exists with stale docs → removes them
+    it('removes stale docs from existing index', async () => {
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(listIndexIds).mockResolvedValue(['a.md', 'old.md', 'old.md#chunk-0', 'old.md#chunk-1'])
+      vi.mocked(resolvePkgDir).mockReturnValue(null)
+      const docs = [{ id: 'a.md', content: 'content', metadata: { type: 'doc' } }]
+      await indexResources({ ...baseOpts, docsToIndex: docs })
+      expect(createIndex).toHaveBeenCalled()
+      const call = vi.mocked(createIndex).mock.calls[0]
+      // No new docs (a.md already exists)
+      expect(call[0]).toHaveLength(0)
+      // Stale IDs removed (old.md and its chunks)
+      expect(call[1].removeIds).toEqual(['old.md', 'old.md#chunk-0', 'old.md#chunk-1'])
     })
 
     // 6b: empty docs + no entry files → skips
