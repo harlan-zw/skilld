@@ -578,7 +578,12 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     return { optimized: '', wasOptimized: false, error: 'No valid sections to generate' }
   }
 
-  if (!isPiAiModel(model) && !CLI_MODELS[model]) {
+  if (isPiAiModel(model)) {
+    const available = new Set(getAvailablePiAiModels().map(m => m.id as OptimizeModel))
+    if (!available.has(model))
+      return { optimized: '', wasOptimized: false, error: `Pi model unavailable or not authenticated: ${model}` }
+  }
+  else if (!CLI_MODELS[model]) {
     return { optimized: '', wasOptimized: false, error: `No CLI mapping for model: ${model}` }
   }
 

@@ -55,9 +55,11 @@ export async function getDb(config: Pick<IndexConfig, 'dbPath'>) {
  */
 export async function createIndexDirect(
   documents: Document[],
-  config: IndexConfig,
+  config: IndexConfig & { removeIds?: string[] },
 ): Promise<void> {
   const db = await getDb(config)
+  if (config.removeIds?.length)
+    await db.remove?.(config.removeIds)
   await db.index(documents, { onProgress: config.onProgress })
   await db.close?.()
 }
@@ -68,11 +70,47 @@ export async function createIndexDirect(
  */
 export async function createIndex(
   documents: Document[],
-  config: IndexConfig,
+  config: IndexConfig & { removeIds?: string[] },
 ): Promise<void> {
   // Dynamic import justified: search/searchSnippets shouldn't pull in worker_threads
   const { createIndexInWorker } = await import('./pool.ts')
   return createIndexInWorker(documents, config)
+}
+
+/**
+ * List all raw document IDs in an existing index.
+ * Returns chunk IDs (e.g. "doc-id#chunk-0") for chunked docs.
+ * Queries sqlite directly to bypass createRetriv's parent-ID deduplication,
+ * so callers can use these IDs for exact removal and parent-ID grouping.
+ */
+export async function listIndexIds(
+  config: Pick<IndexConfig, 'dbPath'>,
+): Promise<string[]> {
+  const nodeSqlite = globalThis.process?.getBuiltinModule?.('node:sqlite') as typeof import('node:sqlite') | undefined
+  if (!nodeSqlite)
+    return []
+  const db = new nodeSqlite.DatabaseSync(config.dbPath, { open: true, readOnly: true })
+  try {
+    const rows = db.prepare('SELECT id FROM documents_meta').all() as Array<{ id: string }>
+    return rows.map(r => r.id)
+  }
+  finally {
+    db.close()
+  }
+}
+
+/**
+ * Remove documents by ID from an existing index.
+ */
+export async function removeFromIndex(
+  ids: string[],
+  config: Pick<IndexConfig, 'dbPath'>,
+): Promise<void> {
+  if (ids.length === 0)
+    return
+  const db = await getDb(config)
+  await db.remove?.(ids)
+  await db.close?.()
 }
 
 export async function search(

@@ -6,6 +6,8 @@ export interface WorkerIndexMessage {
   id: number
   documents: RetrivDocument[]
   dbPath: string
+  /** Exact IDs (including chunk IDs) to remove before indexing */
+  removeIds?: string[]
 }
 
 export interface WorkerShutdownMessage {
@@ -54,6 +56,8 @@ if (parentPort) {
 
         const { getDb } = await import('./index.ts')
         const db = await getDb(config)
+        if (msg.removeIds?.length)
+          await db.remove?.(msg.removeIds)
         await db.index(documents, { onProgress: config.onProgress })
         await db.close?.()
 

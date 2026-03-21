@@ -40,7 +40,7 @@ import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir, semverDiff } from '../core/shared.ts'
-import { createIndex, SearchDepsUnavailableError } from '../retriv/index.ts'
+import { createIndex, listIndexIds, SearchDepsUnavailableError } from '../retriv/index.ts'
 import {
   downloadLlmsDocs,
   fetchBlogReleases,
@@ -727,7 +727,32 @@ export async function fetchAndCacheResources(opts: {
   }
 }
 
-/** Index all resources into the search database (single batch) */
+/**
+ * Extract the parent document ID from a chunk ID.
+ * Chunk IDs have the form "docId#chunk-N"; non-chunk IDs return as-is.
+ */
+function parentDocId(id: string): string {
+  const idx = id.indexOf('#chunk-')
+  return idx === -1 ? id : id.slice(0, idx)
+}
+
+/** Cap and sort docs by type priority, mutates and truncates allDocs in place */
+function capDocs(allDocs: IndexDoc[], max: number, onProgress: (msg: string) => void): void {
+  if (allDocs.length <= max)
+    return
+  const TYPE_PRIORITY: Record<string, number> = { doc: 0, issue: 1, discussion: 2, release: 3, source: 4, types: 5 }
+  allDocs.sort((a, b) => {
+    const ta = TYPE_PRIORITY[a.metadata?.type || 'doc'] ?? 3
+    const tb = TYPE_PRIORITY[b.metadata?.type || 'doc'] ?? 3
+    if (ta !== tb)
+      return ta - tb
+    return a.id.localeCompare(b.id)
+  })
+  onProgress(`Indexing capped at ${max}/${allDocs.length} docs (prioritized by type)`)
+  allDocs.length = max
+}
+
+/** Index all resources into the search database, with incremental support */
 export async function indexResources(opts: {
   packageName: string
   version: string
@@ -743,9 +768,7 @@ export async function indexResources(opts: {
     return
 
   const dbPath = getPackageDbPath(packageName, version)
-
-  if (existsSync(dbPath))
-    return
+  const dbExists = existsSync(dbPath)
 
   const allDocs = [...opts.docsToIndex]
 
@@ -766,27 +789,77 @@ export async function indexResources(opts: {
   if (allDocs.length === 0)
     return
 
-  // Cap docs to prevent oversized indexes
-  if (allDocs.length > MAX_INDEX_DOCS) {
-    const TYPE_PRIORITY: Record<string, number> = { doc: 0, issue: 1, discussion: 2, release: 3, source: 4, types: 5 }
-    allDocs.sort((a, b) => {
-      const ta = TYPE_PRIORITY[a.metadata?.type || 'doc'] ?? 3
-      const tb = TYPE_PRIORITY[b.metadata?.type || 'doc'] ?? 3
-      if (ta !== tb)
-        return ta - tb
-      return a.id.localeCompare(b.id)
-    })
-    onProgress(`Indexing capped at ${MAX_INDEX_DOCS}/${allDocs.length} docs (prioritized by type)`)
-    allDocs.length = MAX_INDEX_DOCS
+  capDocs(allDocs, MAX_INDEX_DOCS, onProgress)
+
+  // Full build when no existing DB
+  if (!dbExists) {
+    onProgress(`Building search index (${allDocs.length} docs)`)
+    try {
+      await createIndex(allDocs, {
+        dbPath,
+        onProgress: ({ phase, current, total }) => {
+          if (phase === 'storing') {
+            const d = allDocs[current - 1]
+            const type = d?.metadata?.type === 'source' || d?.metadata?.type === 'types' ? 'code' : (d?.metadata?.type || 'doc')
+            onProgress(`Storing ${type} (${current}/${total})`)
+          }
+          else if (phase === 'embedding') {
+            onProgress(`Creating embeddings (${current}/${total})`)
+          }
+        },
+      })
+    }
+    catch (err) {
+      if (err instanceof SearchDepsUnavailableError)
+        onProgress('Search indexing skipped (native deps unavailable)')
+      else
+        throw err
+    }
+    return
   }
 
-  onProgress(`Building search index (${allDocs.length} docs)`)
+  // Incremental update: diff incoming docs against existing index
+  let existingIds: string[]
   try {
-    await createIndex(allDocs, {
+    existingIds = await listIndexIds({ dbPath })
+  }
+  catch (err) {
+    if (err instanceof SearchDepsUnavailableError) {
+      onProgress('Search indexing skipped (native deps unavailable)')
+      return
+    }
+    throw err
+  }
+
+  // Group existing chunk IDs by parent doc ID
+  const existingParentIds = new Set(existingIds.map(parentDocId))
+  const incomingIds = new Set(allDocs.map(d => d.id))
+
+  // Docs to add: in incoming but not in existing index
+  const newDocs = allDocs.filter(d => !existingParentIds.has(d.id))
+
+  // Chunk IDs to remove: their parent doc is no longer in incoming set
+  const removeIds = existingIds.filter(id => !incomingIds.has(parentDocId(id)))
+
+  if (newDocs.length === 0 && removeIds.length === 0) {
+    onProgress('Search index up to date')
+    return
+  }
+
+  const parts: string[] = []
+  if (newDocs.length > 0)
+    parts.push(`+${newDocs.length} new`)
+  if (removeIds.length > 0)
+    parts.push(`-${removeIds.length} stale`)
+  onProgress(`Updating search index (${parts.join(', ')})`)
+
+  try {
+    await createIndex(newDocs, {
       dbPath,
+      removeIds,
       onProgress: ({ phase, current, total }) => {
         if (phase === 'storing') {
-          const d = allDocs[current - 1]
+          const d = newDocs[current - 1]
           const type = d?.metadata?.type === 'source' || d?.metadata?.type === 'types' ? 'code' : (d?.metadata?.type || 'doc')
           onProgress(`Storing ${type} (${current}/${total})`)
         }

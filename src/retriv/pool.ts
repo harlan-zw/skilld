@@ -88,7 +88,7 @@ function drainQueue() {
 
 export async function createIndexInWorker(
   documents: RetrivDocument[],
-  config: IndexConfig,
+  config: IndexConfig & { removeIds?: string[] },
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const run = () => {
@@ -126,6 +126,7 @@ export async function createIndexInWorker(
         id,
         documents,
         dbPath: config.dbPath,
+        removeIds: config.removeIds,
       }
 
       w.postMessage(msg)
