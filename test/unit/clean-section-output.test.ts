@@ -430,6 +430,41 @@ describe('cleanSectionOutput', () => {
       expect(result).toContain('[source](./.skilld/releases/v2.0.0.md)')
       expect(result).not.toContain('.skilld/.skilld')
     })
+
+    it('normalizes path-as-link-text to [source] for references/ paths', () => {
+      const input = '## Best Practices\n\n- Use shallowRef [./references/docs/reactivity.md#shallowref](./references/docs/reactivity.md#shallowref)'
+      const result = cleanSectionOutput(input)
+      expect(result).toContain('[source](./references/docs/reactivity.md#shallowref)')
+      expect(result).not.toContain('[./references/')
+    })
+
+    it('normalizes backtick-wrapped path link text to [source]', () => {
+      const input = '## API Changes\n\n- BREAKING: useLoader [`./references/docs/upgrade.md:L55:110`](./references/docs/upgrade.md#useloader)'
+      const result = cleanSectionOutput(input)
+      expect(result).toContain('[source](./references/docs/upgrade.md#useloader)')
+      expect(result).not.toContain('[`./references/')
+    })
+
+    it('normalizes paren-wrapped citation to [source]', () => {
+      const input = '## API Changes\n\n- BREAKING: foo ([`./references/docs/upgrade.md`](./references/docs/upgrade.md))'
+      const result = cleanSectionOutput(input)
+      expect(result).toContain('[source](./references/docs/upgrade.md)')
+      expect(result).not.toContain('([`')
+    })
+
+    it('normalizes .skilld/ path-as-link-text to [source]', () => {
+      const input = '## Best Practices\n\n- Tip [./.skilld/docs/api.md](./.skilld/docs/api.md)'
+      const result = cleanSectionOutput(input)
+      expect(result).toContain('[source](./.skilld/docs/api.md)')
+    })
+
+    it('does not normalize links where URL is not a reference path', () => {
+      // Link text looks like a reference path but URL points to a local non-reference path
+      const input = '## Best Practices\n\n- See [./references/docs/api.md](./some-other/path.md)'
+      const result = cleanSectionOutput(input)
+      // Should not become [source] since URL is not a .skilld/ or references/ path
+      expect(result).not.toContain('[source]')
+    })
   })
 
   // ── Content rejection ─────────────────────────────────────────────

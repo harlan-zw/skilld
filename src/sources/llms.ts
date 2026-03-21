@@ -43,20 +43,19 @@ export function parseMarkdownLinks(content: string): LlmsLink[] {
  * Download all .md files referenced in llms.txt
  */
 /** Reject non-https URLs and private/link-local IPs */
-function isSafeUrl(url: string): boolean {
+export function isSafeUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
     if (parsed.protocol !== 'https:')
       return false
     const host = parsed.hostname
     // Reject private/link-local/loopback
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1')
+    if (host === 'localhost' || host === '0.0.0.0' || host === '[::1]')
       return false
-    if (host === '169.254.169.254') // cloud metadata
+    if (/^(?:127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(host))
       return false
-    if (/^(?:10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host))
-      return false
-    if (host.startsWith('[')) // IPv6 link-local
+    // IPv6 private/link-local — hostname keeps brackets in Node.js
+    if (/^\[(?:f[cd]|fe[89ab]|::ffff:)/i.test(host))
       return false
     return true
   }
@@ -80,9 +79,8 @@ export async function downloadLlmsDocs(
       if (!isSafeUrl(url))
         return null
 
-      onProgress?.(link.url, completed++, llmsContent.links.length)
-
       const content = await fetchText(url)
+      onProgress?.(link.url, ++completed, llmsContent.links.length)
       if (content && content.length > 100) {
         // Normalize full URLs to just the pathname for cache paths
         const docUrl = link.url.startsWith('http') ? new URL(link.url).pathname : link.url

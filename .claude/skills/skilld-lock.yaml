@@ -40,9 +40,11 @@ skills:
     generator: skilld
   sqlite-vec-skilld:
     packageName: sqlite-vec
-    version: 0.1.7-alpha.10
-    source: "file:///home/harlan/pkg/skilld/node_modules/sqlite-vec/README.md"
-    syncedAt: 2026-02-24
+    version: 0.1.7
+    packages: "sqlite-vec@0.1.7"
+    repo: asg017/sqlite-vec
+    source: "https://github.com/asg017/sqlite-vec/tree/v0.1.7/docs"
+    syncedAt: 2026-03-19
     generator: skilld
   motion-v-skilld:
     packageName: motion-v

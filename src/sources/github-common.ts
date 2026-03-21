@@ -4,6 +4,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { ofetch } from 'ofetch'
+import { yamlEscape } from '../core/yaml.ts'
 
 export const BOT_USERS = new Set([
   'renovate[bot]',
@@ -21,7 +22,7 @@ export function buildFrontmatter(fields: Record<string, string | number | boolea
   const lines = ['---']
   for (const [k, v] of Object.entries(fields)) {
     if (v !== undefined)
-      lines.push(`${k}: ${typeof v === 'string' && /[:"[\]]/.test(v) ? `"${v.replace(/"/g, '\\"')}"` : v}`)
+      lines.push(`${k}: ${typeof v === 'string' ? yamlEscape(v) : v}`)
   }
   lines.push('---')
   return lines.join('\n')

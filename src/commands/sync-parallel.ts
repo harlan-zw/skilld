@@ -14,6 +14,9 @@ import {
   getModelLabel,
   linkSkillToAgents,
   optimizeDocs,
+  SECTION_MERGE_ORDER,
+  SECTION_OUTPUT_FILES,
+  wrapSection,
 
 } from '../agent/index.ts'
 import {
@@ -25,6 +28,7 @@ import {
   isCached,
   linkPkgNamed,
   listReferenceFiles,
+  readCachedSection,
   resolvePkgDir,
 } from '../cache/index.ts'
 import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
@@ -53,7 +57,7 @@ import {
   resolveBaseDir,
   resolveLocalDep,
 } from './sync-shared.ts'
-import { ensureAgentInstructions, ensureGitignore, selectLlmConfig, writePromptFiles } from './sync.ts'
+import { DEFAULT_SECTIONS, ensureAgentInstructions, ensureGitignore, selectLlmConfig, writePromptFiles } from './sync.ts'
 
 type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'exploring' | 'thinking' | 'generating' | 'done' | 'error'
 
@@ -228,6 +232,61 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     }
   }
 
+  // Apply cached LLM sections for packages that have all sections cached
+  const cachedPkgs: string[] = []
+  if (!config.force) {
+    for (const pkg of successfulPkgs) {
+      const data = skillData.get(pkg)!
+      const resolvedName = data.resolved.name
+      const allCached = DEFAULT_SECTIONS.every((s) => {
+        const outputFile = SECTION_OUTPUT_FILES[s]
+        return readCachedSection(resolvedName, data.version, outputFile) !== null
+      })
+      if (allCached) {
+        const baseDir = resolveBaseDir(cwd, config.agent, config.global)
+        const skillDir = join(baseDir, data.skillDirName)
+        const cachedParts: string[] = []
+        for (const s of SECTION_MERGE_ORDER) {
+          if (!DEFAULT_SECTIONS.includes(s))
+            continue
+          const outputFile = SECTION_OUTPUT_FILES[s]
+          const content = readCachedSection(resolvedName, data.version, outputFile)
+          if (content)
+            cachedParts.push(wrapSection(s, content))
+        }
+        const cachedBody = cachedParts.join('\n\n')
+
+        const skillMd = generateSkillMd({
+          name: resolvedName,
+          version: data.version,
+          releasedAt: data.resolved.releasedAt,
+          dependencies: data.resolved.dependencies,
+          distTags: data.resolved.distTags,
+          body: cachedBody,
+          relatedSkills: data.relatedSkills,
+          hasIssues: data.hasIssues,
+          hasDiscussions: data.hasDiscussions,
+          hasReleases: data.hasReleases,
+          hasChangelog: data.hasChangelog,
+          docsType: data.docsType,
+          hasShippedDocs: data.shippedDocs,
+          pkgFiles: data.pkgFiles,
+          generatedBy: 'cached',
+          dirName: data.skillDirName,
+          packages: data.packages,
+          repoUrl: data.resolved.repoUrl,
+          features: data.features,
+        })
+        writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+        cachedPkgs.push(pkg)
+      }
+    }
+  }
+
+  const uncachedPkgs = successfulPkgs.filter(pkg => !cachedPkgs.includes(pkg))
+  if (cachedPkgs.length > 0)
+    p.log.success(`Applied cached SKILL.md sections for ${cachedPkgs.join(', ')}`)
+
   // Phase 2: Ask about LLM enhancement (skip if skipLlm config)
   // When -y without -m: auto-resolve model from config or available models
   const globalConfig = readConfig()
@@ -240,7 +299,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     if (auto)
       resolvedModel = auto as import('../agent/index.ts').OptimizeModel
   }
-  if (successfulPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !resolvedModel)) {
+  if (uncachedPkgs.length > 0 && !globalConfig.skipLlm && !(config.yes && !resolvedModel)) {
     // Build combined update context from all successful packages
     const DIFF_RANK: Record<string, number> = { major: 5, premajor: 4, minor: 3, preminor: 2, patch: 1, prepatch: 1, prerelease: 0 }
     let parallelUpdateCtx: import('./sync-shared.ts').UpdateContext | undefined
@@ -273,7 +332,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     const llmConfig = await selectLlmConfig(resolvedModel, undefined, parallelUpdateCtx)
 
     if (llmConfig?.promptOnly) {
-      for (const pkg of successfulPkgs) {
+      for (const pkg of uncachedPkgs) {
         const data = skillData.get(pkg)!
         const baseDir = resolveBaseDir(cwd, config.agent, config.global)
         const skillDir = join(baseDir, data.skillDirName)
@@ -297,13 +356,13 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
     else if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))
       // Reset states for LLM phase
-      for (const pkg of successfulPkgs) {
+      for (const pkg of uncachedPkgs) {
         states.set(pkg, { name: pkg, status: 'pending', message: 'Waiting...' })
       }
       render()
 
       const llmResults = await Promise.allSettled(
-        successfulPkgs.map(pkg =>
+        uncachedPkgs.map(pkg =>
           limit(() => enhanceWithLLM(pkg, skillData.get(pkg)!, { ...config, model: llmConfig.model }, cwd, update, llmConfig.sections, llmConfig.customPrompt)),
         ),
       )
@@ -311,7 +370,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
       logUpdate.done()
 
       const llmSucceeded = llmResults.filter(r => r.status === 'fulfilled').length
-      p.log.success(`Enhanced ${llmSucceeded}/${successfulPkgs.length} skills`)
+      p.log.success(`Enhanced ${llmSucceeded}/${uncachedPkgs.length} skills with LLM`)
     }
   }
 
