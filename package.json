@@ -73,7 +73,7 @@
     "oxc-parser": "catalog:deps",
     "p-limit": "catalog:deps",
     "pathe": "catalog:",
-    "retriv": "catalog:deps",
+    "retriv": "catalog:",
     "semver": "catalog:",
     "sqlite-vec": "catalog:deps",
     "std-env": "catalog:",
