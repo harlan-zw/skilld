@@ -16,7 +16,9 @@ import {
   linkSkillToAgents,
   portabilizePrompt,
   sanitizeName,
+  SECTION_MERGE_ORDER,
   SECTION_OUTPUT_FILES,
+  wrapSection,
 } from '../agent/index.ts'
 import {
   ensureCacheDir,
@@ -27,6 +29,7 @@ import {
   isCached,
   linkPkgNamed,
   listReferenceFiles,
+  readCachedSection,
   resolvePkgDir,
 } from '../cache/index.ts'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
@@ -519,9 +522,55 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
   p.log.success(config.mode === 'update' ? `Updated skill: ${relative(cwd, skillDir)}` : `Created base skill: ${relative(cwd, skillDir)}`)
 
-  // Ask about LLM optimization (skip if -y flag, skipLlm config, or model already specified)
+  // Check if all default sections are already cached (skip prompt entirely if so)
+  const allSectionsCached = !config.force && DEFAULT_SECTIONS.every((s) => {
+    const outputFile = SECTION_OUTPUT_FILES[s]
+    return readCachedSection(packageName, version, outputFile) !== null
+  })
+
+  if (allSectionsCached) {
+    // Silently apply cached LLM content without prompting
+    const cachedParts: string[] = []
+    for (const s of SECTION_MERGE_ORDER) {
+      if (!DEFAULT_SECTIONS.includes(s))
+        continue
+      const outputFile = SECTION_OUTPUT_FILES[s]
+      const content = readCachedSection(packageName, version, outputFile)
+      if (content)
+        cachedParts.push(wrapSection(s, content))
+    }
+    const cachedBody = cachedParts.join('\n\n')
+
+    const skillMd = generateSkillMd({
+      name: packageName,
+      version,
+      releasedAt: resolved.releasedAt,
+      description: resolved.description,
+      dependencies: resolved.dependencies,
+      distTags: resolved.distTags,
+      body: cachedBody,
+      relatedSkills,
+      hasIssues: resources.hasIssues,
+      hasDiscussions: resources.hasDiscussions,
+      hasReleases: resources.hasReleases,
+      hasChangelog,
+      docsType: resources.docsType,
+      hasShippedDocs: shippedDocs,
+      pkgFiles,
+      generatedBy: 'cached',
+      dirName: skillDirName,
+      packages: allPackages.length > 1 ? allPackages : undefined,
+      repoUrl: resolved.repoUrl,
+      features,
+      eject: isEject,
+    })
+    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+    p.log.success('Applied cached SKILL.md sections')
+  }
+
+  // Ask about LLM optimization (skip if -y flag, skipLlm config, sections cached, or model already specified)
   const globalConfig = readConfig()
-  if (!globalConfig.skipLlm && (!config.yes || config.model)) {
+  if (!allSectionsCached && !globalConfig.skipLlm && (!config.yes || config.model)) {
     const llmConfig = await selectLlmConfig(config.model)
     if (llmConfig?.promptOnly) {
       writePromptFiles({
