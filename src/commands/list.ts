@@ -1,11 +1,12 @@
 import { defineCommand } from 'citty'
 import { sharedArgs } from '../cli-helpers.ts'
 import { formatSource, timeAgo } from '../core/formatting.ts'
-import { iterateSkills } from '../core/skills.ts'
+import { getProjectState, iterateSkills } from '../core/skills.ts'
 
 export interface ListOptions {
   global?: boolean
   json?: boolean
+  outdated?: boolean
 }
 
 interface ListEntry {
@@ -13,9 +14,47 @@ interface ListEntry {
   version: string
   source: string
   synced: string
+  latest?: string
 }
 
-export function listCommand(opts: ListOptions = {}): void {
+export async function listCommand(opts: ListOptions = {}): Promise<void> {
+  if (opts.outdated) {
+    const state = await getProjectState()
+    const entries: ListEntry[] = state.outdated.map(skill => ({
+      name: skill.name,
+      version: skill.info?.version || '',
+      latest: skill.latestVersion || '',
+      source: formatSource(skill.info?.source),
+      synced: timeAgo(skill.info?.syncedAt),
+    }))
+
+    if (opts.json) {
+      process.stdout.write(`${JSON.stringify(entries)}\n`)
+      return
+    }
+
+    if (entries.length === 0) {
+      process.stdout.write('All skills are up to date\n')
+      return
+    }
+
+    const nameW = Math.max(...entries.map(e => e.name.length))
+    const verW = Math.max(...entries.map(e => e.version.length))
+    const latW = Math.max(...entries.map(e => (e.latest || '').length))
+    const srcW = Math.max(...entries.map(e => e.source.length))
+
+    for (const e of entries) {
+      const line = [
+        e.name.padEnd(nameW),
+        `${e.version.padEnd(verW)}  →  ${(e.latest || '').padEnd(latW)}`,
+        e.source.padEnd(srcW),
+        e.synced,
+      ].join('  ')
+      process.stdout.write(`${line}\n`)
+    }
+    return
+  }
+
   const scope = opts.global ? 'global' : 'all'
   const skills = [...iterateSkills({ scope })]
 
@@ -71,8 +110,14 @@ export const listCommandDef = defineCommand({
       description: 'Output as JSON',
       default: false,
     },
+    outdated: {
+      type: 'boolean' as const,
+      alias: 'o',
+      description: 'Show only outdated skills',
+      default: false,
+    },
   },
   run({ args }) {
-    return listCommand({ global: args.global, json: args.json })
+    return listCommand({ global: args.global, json: args.json, outdated: args.outdated })
   },
 })
