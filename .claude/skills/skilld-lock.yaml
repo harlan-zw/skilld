@@ -94,8 +94,9 @@ skills:
     generator: skilld
   mdream-skilld:
     packageName: mdream
-    version: 1.0.0
+    version: 1.0.3
+    packages: "mdream@1.0.3"
     repo: harlan-zw/mdream
-    source: "ungh://harlan-zw/mdream/packages/mdream"
-    syncedAt: 2026-03-21
+    source: "https://github.com/harlan-zw/mdream/tree/v1.0.3/docs"
+    syncedAt: 2026-03-23
     generator: skilld
