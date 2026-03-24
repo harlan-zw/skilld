@@ -33,7 +33,7 @@ import {
   readCachedSection,
   resolvePkgDir,
 } from '../cache/index.ts'
-import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
+import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs, suggestPrepareHook } from '../cli-helpers.ts'
 import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
@@ -697,6 +697,8 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const ejectMsg = isEject ? ' (ejected)' : ''
   const relDir = relative(cwd, skillDir)
   p.outro(config.mode === 'update' ? `Updated ${packageName}${ejectMsg}` : `Synced ${packageName} → ${relDir}${ejectMsg}`)
+
+  suggestPrepareHook(cwd)
 }
 
 // ── Citty command definitions (lazy-loaded by cli.ts) ──

@@ -30,6 +30,7 @@ skilld list --json    # List as JSON
 skilld info           # Show config, agents, features, per-package detail
 skilld config         # Change settings
 skilld install        # Restore references from lockfile
+skilld prepare        # Hook for package.json "prepare" (restore refs, sync shipped, report outdated)
 skilld uninstall      # Remove skilld data
 skilld search "query" # Search indexed docs
 skilld search "query" -p nuxt  # Search filtered by package

@@ -439,6 +439,32 @@ export async function pickModel<T extends { provider: string, providerName: stri
   return p.isCancel(modelChoice) ? null : modelChoice as string
 }
 
+/**
+ * Suggest adding `skilld prepare` to package.json "prepare" script.
+ * Returns true if the suggestion was shown (i.e. hook is missing).
+ */
+export function suggestPrepareHook(cwd: string = process.cwd()): boolean {
+  const pkgJsonPath = join(cwd, 'package.json')
+  if (!existsSync(pkgJsonPath))
+    return false
+
+  const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+  if (pkgJson.scripts?.prepare?.includes('skilld'))
+    return false
+
+  const prepareCmd = pkgJson.scripts?.prepare
+    ? `${pkgJson.scripts.prepare} && skilld prepare`
+    : 'skilld prepare'
+
+  p.log.info(
+    `\x1B[90mAdd to package.json scripts:\n`
+    + `  \x1B[36m"prepare": "${prepareCmd}"\x1B[0m\n`
+    + `  \x1B[90mRestores references and shipped skills on install. Notifies when updates are available.\n`
+    + `  Commit skilld-lock.yaml so teammates can run \`skilld install\`.\x1B[0m`,
+  )
+  return true
+}
+
 export function getRepoHint(name: string, cwd: string): string | undefined {
   const pkgJsonPath = join(cwd, 'node_modules', name, 'package.json')
   if (!existsSync(pkgJsonPath))
