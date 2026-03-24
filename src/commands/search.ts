@@ -323,7 +323,7 @@ export const searchCommandDef = defineCommand({
   },
   async run({ args }) {
     if (args.guide) {
-      p.log.message(generateSearchGuide(args.package || undefined))
+      process.stdout.write(`${generateSearchGuide(args.package || undefined)}\n`)
       return
     }
 
