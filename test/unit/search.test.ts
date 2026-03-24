@@ -112,6 +112,26 @@ describe('parseJsonFilter', () => {
   it('returns null for JSON null', () => {
     expect(parseJsonFilter('null')).toBeNull()
   })
+
+  it('returns null for unknown operator', () => {
+    expect(parseJsonFilter('{"type":{"$unknown":"value"}}')).toBeNull()
+  })
+
+  it('returns null for multi-key operator object', () => {
+    expect(parseJsonFilter('{"type":{"$eq":"doc","$ne":"issue"}}')).toBeNull()
+  })
+
+  it('returns null for null value', () => {
+    expect(parseJsonFilter('{"type":null}')).toBeNull()
+  })
+
+  it('returns null for nested non-operator object', () => {
+    expect(parseJsonFilter('{"type":{"nested":{"deep":"value"}}}')).toBeNull()
+  })
+
+  it('accepts boolean values', () => {
+    expect(parseJsonFilter('{"active":true}')).toEqual({ active: true })
+  })
 })
 
 describe('generateSearchGuide', () => {

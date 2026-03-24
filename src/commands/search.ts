@@ -8,7 +8,7 @@ import { agents, detectTargetAgent } from '../agent/index.ts'
 import { getPackageDbPath, REFERENCES_DIR } from '../cache/index.ts'
 import { isInteractive } from '../cli-helpers.ts'
 import { formatSnippet, normalizeScores, readLock, sanitizeMarkdown } from '../core/index.ts'
-import { getSharedSkillsDir } from '../core/shared.ts'
+import { getSharedSkillsDir, resolveSkilldCommand } from '../core/shared.ts'
 import { SearchDepsUnavailableError, searchSnippets } from '../retriv/index.ts'
 
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
@@ -139,16 +139,35 @@ export function parseFilterPrefix(rawQuery: string): { query: string, filter?: S
 }
 
 /** Parse JSON filter string, returning null on invalid JSON */
+const VALID_OPERATORS = new Set(['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$prefix', '$exists'])
+
+/** Parse and validate a JSON filter string against the SearchFilter schema */
 export function parseJsonFilter(raw: string): SearchFilter | null {
+  let parsed: unknown
   try {
-    const parsed = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
-      return null
-    return parsed as SearchFilter
+    parsed = JSON.parse(raw)
   }
   catch {
     return null
   }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return null
+  // Validate each value is a valid FilterValue (primitive or single-operator object)
+  for (const val of Object.values(parsed as Record<string, unknown>)) {
+    if (val === null)
+      return null
+    const t = typeof val
+    if (t === 'string' || t === 'number' || t === 'boolean')
+      continue
+    if (t === 'object' && !Array.isArray(val)) {
+      const keys = Object.keys(val as Record<string, unknown>)
+      if (keys.length !== 1 || !VALID_OPERATORS.has(keys[0]!))
+        return null
+      continue
+    }
+    return null
+  }
+  return parsed as SearchFilter
 }
 
 /** Merge prefix filter and --filter JSON (--filter takes precedence on key conflicts) */
@@ -248,7 +267,7 @@ export async function searchCommand(rawQuery: string, opts: SearchCommandOptions
 /** Generate search guide text, optionally tailored to a package */
 export function generateSearchGuide(packageName?: string): string {
   const pkg = packageName || '<package>'
-  const cmd = 'skilld'
+  const cmd = resolveSkilldCommand()
   return `${packageName ? `Search guide for ${packageName}` : 'skilld search guide'}
 
 Usage:
@@ -338,14 +357,22 @@ export const searchCommandDef = defineCommand({
       filter = parsed
     }
 
-    const limit = args.limit ? Number.parseInt(args.limit, 10) : undefined
-    if (limit !== undefined && (Number.isNaN(limit) || limit < 1)) {
-      p.log.error(`Invalid limit: ${args.limit}`)
-      return
+    let limit: number | undefined
+    if (args.limit !== undefined) {
+      const parsed = Number(args.limit)
+      if (!Number.isInteger(parsed) || parsed < 1) {
+        p.log.error(`Invalid limit: ${args.limit}`)
+        return
+      }
+      limit = parsed
     }
 
     if (args.query)
       return searchCommand(args.query, { packageFilter, filter, limit })
+
+    if (filter || limit)
+      p.log.warn('--filter and --limit are ignored in interactive mode. Provide a query to use them.')
+
     if (!isInteractive()) {
       console.error('Error: `skilld search` requires a query in non-interactive mode.\n  Usage: skilld search "query"')
       process.exit(1)

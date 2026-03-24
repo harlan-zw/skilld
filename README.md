@@ -182,7 +182,7 @@ skilld config
 | `skilld` | Interactive wizard (first run) or status menu (existing skills) |
 | `skilld add <pkg...>` | Add skills for package(s), space or comma-separated |
 | `skilld update [pkg]` | Update outdated skills (all or specific) |
-| `skilld search <query>` | Search indexed docs (`-p` package, `--filter` JSON, `--limit`, `--guide`) |
+| `skilld search [query]` | Search indexed docs (`-p` package, `--filter` JSON, `--limit`, `--guide`) |
 | `skilld list`           | List installed skills (`--json` for machine-readable output) |
 | `skilld info`           | Show skill info and config |
 | `skilld config`         | Configure agent, model, preferences |
