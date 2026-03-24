@@ -112,7 +112,7 @@ export const prepareCommandDef = defineCommand({
 
     if (freshState.outdated.length > 0) {
       const n = freshState.outdated.length
-      p.log.warn(`${n} package${n > 1 ? 's' : ''} ha${n > 1 ? 've' : 's'} new features and/or breaking changes. Run \`skilld update\` to sync.`)
+      p.log.info(`${n} package${n > 1 ? 's' : ''} ha${n > 1 ? 've' : 's'} new features and/or breaking changes. Run \`skilld update\` to sync.`)
     }
   },
 })
