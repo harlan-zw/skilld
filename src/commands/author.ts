@@ -102,6 +102,25 @@ export function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
     if (!existsSync(scanDir))
       continue
 
+    const directResult = readPackageJsonSafe(join(scanDir, 'package.json'))
+    if (directResult) {
+      const directPkg = directResult.parsed as Record<string, any>
+      if (!directPkg.private && directPkg.name) {
+        const repoUrl = typeof directPkg.repository === 'string'
+          ? directPkg.repository
+          : directPkg.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
+
+        packages.push({
+          name: directPkg.name,
+          version: directPkg.version || '0.0.0',
+          description: directPkg.description,
+          repoUrl,
+          dir: scanDir,
+        })
+        continue
+      }
+    }
+
     for (const entry of readdirSync(scanDir, { withFileTypes: true })) {
       if (!entry.isDirectory())
         continue
