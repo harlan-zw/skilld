@@ -1452,7 +1452,10 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
-    llmLog.error(`Enhancement failed${error ? `: ${error}` : ''}`)
+    if (error && /\b429\b|rate.?limit|exhausted.*capacity|quota.*reset/i.test(error))
+      llmLog.error(`Rate limited by LLM provider. Try again shortly or use a different model via \`skilld config\``)
+    else
+      llmLog.error(`Enhancement failed${error ? `: ${error}` : ''}`)
   }
 }
 

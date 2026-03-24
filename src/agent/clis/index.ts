@@ -715,10 +715,21 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     }
   }
 
-  // Retry failed sections once (sequential to avoid rate limits)
-  for (const { section, prompt } of retryQueue) {
-    onProgress?.({ chunk: `[${section}: retrying...]`, type: 'reasoning', text: '', reasoning: '', section })
-    await delay(STAGGER_MS)
+  // Retry failed sections (sequential, with rate-limit aware backoff)
+  for (const { index, section, prompt } of retryQueue) {
+    const prevError = getRetryError(spawnResults[index]!)
+    const rateLimitDelay = parseRateLimitDelay(prevError)
+
+    if (rateLimitDelay != null) {
+      const waitSec = Math.max(rateLimitDelay, 5)
+      onProgress?.({ chunk: `[${section}] Rate limited, waiting ${waitSec}s...`, type: 'reasoning', text: '', reasoning: '', section })
+      await delay(waitSec * 1000)
+    }
+    else {
+      onProgress?.({ chunk: `[${section}: retrying...]`, type: 'reasoning', text: '', reasoning: '', section })
+      await delay(STAGGER_MS)
+    }
+
     const result = await optimizeSection({
       section,
       prompt,
@@ -791,6 +802,31 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
+
+/** Check if an error string indicates a rate limit (429) */
+function isRateLimitError(error: string | undefined): boolean {
+  if (!error)
+    return false
+  return /\b429\b/.test(error)
+    || /rate.?limit/i.test(error)
+    || /exhausted.*capacity/i.test(error)
+    || /quota.*reset/i.test(error)
+}
+
+/** Parse delay hint from rate limit error (e.g. "reset after 5s" → 5). Returns undefined if not a rate limit. */
+function parseRateLimitDelay(error: string | undefined): number | undefined {
+  if (!error || !isRateLimitError(error))
+    return undefined
+  const match = error.match(/reset\s+after\s+(\d+)s/i)
+  return match ? Number(match[1]) : 10 // default 10s if no hint
+}
+
+/** Extract error string from a PromiseSettledResult */
+function getRetryError(result: PromiseSettledResult<SectionResult>): string | undefined {
+  if (result.status === 'rejected')
+    return String(result.reason)
+  return result.value.error
+}
 
 /** Shorten absolute paths for display: /home/user/project/.claude/skills/vue/SKILL.md → .claude/.../SKILL.md */
 function shortenPath(p: string): string {
