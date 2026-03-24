@@ -7,7 +7,7 @@ import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
 import { agents, detectImportedPackages, detectInstalledAgents } from './agent/index.ts'
-import { formatStatus, getRepoHint, guard, isInteractive, isRunningInsideAgent, menuLoop, promptForAgent, relativeTime, resolveAgent, sharedArgs } from './cli-helpers.ts'
+import { formatStatus, getRepoHint, guard, isInteractive, isRunningInsideAgent, menuLoop, promptForAgent, relativeTime, resolveAgent, sharedArgs, suggestPrepareHook } from './cli-helpers.ts'
 import { configCommand, configCommandDef } from './commands/config.ts'
 import { removeCommand, removeCommandDef } from './commands/remove.ts'
 import { infoCommandDef, statusCommand } from './commands/status.ts'
@@ -150,7 +150,7 @@ async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> 
 
 // ── Subcommands (lazy-loaded) ──
 
-const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate', 'assemble', 'setup']
+const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate', 'assemble', 'setup', 'prepare']
 
 // ── Main command ──
 
@@ -172,6 +172,7 @@ const main = defineCommand({
     config: () => configCommandDef,
     remove: () => removeCommandDef,
     install: () => import('./commands/install.ts').then(m => m.installCommandDef),
+    prepare: () => import('./commands/prepare.ts').then(m => m.prepareCommandDef),
     uninstall: () => import('./commands/uninstall.ts').then(m => m.uninstallCommandDef),
     search: () => import('./commands/search.ts').then(m => m.searchCommandDef),
     cache: () => import('./commands/cache.ts').then(m => m.cacheCommandDef),
@@ -303,15 +304,26 @@ const main = defineCommand({
         p.log.warn('No package.json found - enter npm package names manually.\n  For best results, run skilld inside a JS/TS project directory.')
       }
 
+      if (state.shipped.length > 0) {
+        const totalShipped = state.shipped.reduce((sum, s) => sum + s.skills.length, 0)
+        const names = state.shipped.map(s => s.packageName).join(', ')
+        p.log.info(`\x1B[36m${totalShipped} ready-to-use skill${totalShipped > 1 ? 's' : ''}\x1B[0m shipped by your dependencies: ${names}`)
+      }
+
       p.log.info('Tip: Add skills for packages with complex APIs or frequent breaking changes - not every dependency needs one.')
 
       // Initial setup loop — allow user to go back
       let setupComplete = false
       while (!setupComplete) {
+        const shippedOption = state.shipped.length > 0
+          ? [{ label: 'Install shipped skills', value: 'shipped' as const, hint: `\x1B[36m${state.shipped.reduce((sum, s) => sum + s.skills.length, 0)} ready to use\x1B[0m` }]
+          : []
+
         const source = hasPkgJson
           ? await p.select({
               message: 'How should I find packages?',
               options: [
+                ...shippedOption,
                 { label: 'Scan source files', value: 'imports', hint: 'find actually used imports' },
                 { label: 'Use package.json', value: 'deps', hint: `all ${state.deps.size} dependencies` },
                 { label: 'Enter manually', value: 'manual' },
@@ -328,6 +340,18 @@ const main = defineCommand({
         if (source === 'skip') {
           p.log.info('Run \x1B[36mskilld add <pkg>\x1B[0m or \x1B[36mskilld\x1B[0m anytime to add skills.')
           return
+        }
+
+        if (source === 'shipped') {
+          const { handleShippedSkills: installShipped } = await import('./commands/sync-shared.ts')
+          for (const pkg of state.shipped) {
+            const version = state.deps.get(pkg.packageName)?.replace(/^[\^~>=<]+/, '') || '0.0.0'
+            installShipped(pkg.packageName, version, cwd, agent, false)
+            for (const sk of pkg.skills)
+              p.log.success(`Installed shipped skill: ${sk.skillName}`)
+          }
+          state = await getProjectState(cwd)
+          continue
         }
 
         // Get packages based on source
@@ -488,27 +512,19 @@ const main = defineCommand({
       )
 
       // Team advice: suggest prepare hook + lockfile
-      if (hasPkgJson) {
-        const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
-        const hasHook = pkgJson.scripts?.prepare?.includes('skilld')
-        if (!hasHook) {
-          const prepareCmd = pkgJson.scripts?.prepare
-            ? `${pkgJson.scripts.prepare} && skilld update -b`
-            : 'skilld update -b'
-          p.log.info(
-            `\x1B[90mKeep skills fresh by adding to package.json scripts:\n`
-            + `  \x1B[36m"prepare": "${prepareCmd}"\x1B[0m\n`
-            + `  \x1B[90mRefreshes docs on install. Run \`skilld update\` to regenerate LLM enhancements.\n`
-            + `  Commit skilld-lock.yaml so teammates can run \`skilld install\`.\x1B[0m`,
-          )
-        }
-      }
+      suggestPrepareHook(cwd)
       return
     }
 
     // Has skills - show status + interactive menu
     const status = formatStatus(state.synced.length, state.outdated.length)
     p.log.info(status)
+
+    if (state.shipped.length > 0) {
+      const totalSkills = state.shipped.reduce((sum, s) => sum + s.skills.length, 0)
+      const names = state.shipped.map(s => s.packageName).join(', ')
+      p.log.info(`\x1B[36m${totalSkills} ready-to-use skill${totalSkills > 1 ? 's' : ''}\x1B[0m shipped by your dependencies: ${names}`)
+    }
 
     const refreshState = async () => {
       state = await getProjectState(cwd)
@@ -519,6 +535,10 @@ const main = defineCommand({
       message: 'What would you like to do?',
       options: () => {
         const opts: Array<{ label: string, value: string, hint?: string }> = []
+        if (state.shipped.length > 0) {
+          const total = state.shipped.reduce((sum, s) => sum + s.skills.length, 0)
+          opts.push({ label: 'Install shipped skills', value: 'shipped', hint: `\x1B[36m${total} available\x1B[0m` })
+        }
         opts.push({ label: 'Add new skills', value: 'install' })
         if (state.outdated.length > 0) {
           opts.push({ label: 'Update skills', value: 'update', hint: `\x1B[33m${state.outdated.length} outdated\x1B[0m` })
@@ -533,6 +553,32 @@ const main = defineCommand({
       },
       onSelect: async (action) => {
         switch (action) {
+          case 'shipped': {
+            const allShipped = state.shipped.flatMap(s => s.skills.map(sk => ({ packageName: s.packageName, ...sk })))
+            const selected = guard(await p.multiselect({
+              message: 'Select shipped skills to install',
+              options: allShipped.map(s => ({
+                label: s.skillName,
+                value: s,
+                hint: s.packageName,
+              })),
+              initialValues: allShipped,
+            }))
+            if (selected.length === 0)
+              return
+            const { handleShippedSkills: installShipped } = await import('./commands/sync-shared.ts')
+            const seen = new Set<string>()
+            for (const s of selected) {
+              if (seen.has(s.packageName))
+                continue
+              seen.add(s.packageName)
+              const version = state.deps.get(s.packageName)?.replace(/^[\^~>=<]+/, '') || '0.0.0'
+              installShipped(s.packageName, version, cwd, agent, false)
+            }
+            p.log.success(`Installed ${selected.length} shipped skill${selected.length > 1 ? 's' : ''}`)
+            await refreshState()
+            return true
+          }
           case 'install': {
             const installedNames = new Set([
               ...state.synced.map(s => s.packageName),

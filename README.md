@@ -99,15 +99,17 @@ pnpm add -D skilld
 
 ### Automatic Updates
 
-Add to `package.json` to keep skills fresh on install:
+Add to `package.json` to restore references and sync shipped skills on install:
 
 ```json
 {
   "scripts": {
-    "prepare": "skilld update -b"
+    "prepare": "skilld prepare"
   }
 }
 ```
+
+This restores symlinks, auto-installs shipped skills from your deps, and notifies you when packages have new features or breaking changes. Run `skilld update` to regenerate LLM enhancements.
 
 ## FAQ
 
@@ -133,7 +135,7 @@ However, always be cautious when using skills from untrusted sources.
 
 ### Do skills update when my deps update?
 
-Yes. Run `skilld update` to regenerate outdated skills, or add `skilld update -b` to your prepare script and they regenerate in the background whenever you install packages.
+Yes. Add `skilld prepare` to your prepare script. It restores references, auto-installs shipped skills, and tells you when packages are outdated. Run `skilld update` to regenerate LLM enhancements.
 
 ## CLI Usage
 

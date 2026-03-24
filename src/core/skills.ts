@@ -1,8 +1,10 @@
 import type { AgentType } from '../agent/index.ts'
+import type { ShippedSkill } from '../cache/storage.ts'
 import type { SkillInfo } from './lockfile.ts'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'pathe'
 import { agents } from '../agent/index.ts'
+import { getShippedSkills } from '../cache/storage.ts'
 import { readLocalDependencies } from '../sources/index.ts'
 import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile.ts'
 import { getSharedSkillsDir, semverGt, semverValid } from './shared.ts'
@@ -19,6 +21,12 @@ export interface SkillEntry {
   latestVersion?: string
 }
 
+export interface AvailableShippedSkill {
+  /** npm package that ships the skill */
+  packageName: string
+  skills: ShippedSkill[]
+}
+
 export interface ProjectState {
   skills: SkillEntry[]
   deps: Map<string, string>
@@ -27,6 +35,8 @@ export interface ProjectState {
   synced: SkillEntry[]
   /** Skills in lockfile but not matched to any local dep */
   unmatched: SkillEntry[]
+  /** Dependencies that ship skills not yet installed */
+  shipped: AvailableShippedSkill[]
 }
 
 export interface IterateSkillsOptions {
@@ -172,7 +182,17 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
   // Skills in lockfile but not matched to any local dep
   const unmatched = skills.filter(s => !matchedSkillNames.has(s.name))
 
-  return { skills, deps, missing, outdated, synced, unmatched }
+  // Discover dependencies that ship skills not yet installed
+  const installedSkillNames = new Set(skills.map(s => s.name))
+  const shipped: AvailableShippedSkill[] = []
+  for (const pkgName of deps.keys()) {
+    const pkgShipped = getShippedSkills(pkgName, cwd)
+    const uninstalled = pkgShipped.filter(s => !installedSkillNames.has(s.skillName))
+    if (uninstalled.length > 0)
+      shipped.push({ packageName: pkgName, skills: uninstalled })
+  }
+
+  return { skills, deps, missing, outdated, synced, unmatched, shipped }
 }
 
 export function getSkillsDir(agent: AgentType, scope: 'local' | 'global', cwd: string = process.cwd()): string {
