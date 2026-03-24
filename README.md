@@ -238,6 +238,52 @@ Share via `skilld add owner/repo` - consumers get fully functional skills with n
 | `--from`       |      |                | Collect releases/issues/discussions from this date (YYYY-MM-DD, eject only) |
 | `--debug`      |      | `false`        | Save raw LLM output to logs/ for each section |
 
+## For Maintainers
+
+Ship skills with your npm package so consumers get them automatically. No LLM needed on their end.
+
+### Generate a skill
+
+From your package root (or monorepo root):
+
+```bash
+npx skilld author
+```
+
+In a monorepo, skilld auto-detects workspaces and prompts which packages to generate for. Docs are resolved from: package `docs/`, monorepo `docs/content/`, `llms.txt`, or `README.md`.
+
+This creates a `skills/<your-package>/` directory with a `SKILL.md` and ejected reference files. It also adds `"skills"` to your `package.json` `files` array.
+
+### How consumers get it
+
+Once published, consumers run:
+
+```bash
+npx skilld prepare
+```
+
+Or add it to their `package.json` so it runs on every install:
+
+```json
+{
+  "scripts": {
+    "prepare": "skilld prepare"
+  }
+}
+```
+
+`skilld prepare` auto-detects shipped skills in `node_modules` and symlinks them into the agent's skill directory. Compatible with [skills-npm](https://github.com/antfu/skills-npm).
+
+### Options
+
+| Flag      | Alias | Default | Description |
+|:----------|:-----:|:-------:|:------------|
+| `--model` | `-m`  |         | LLM model for enhancement |
+| `--out`   | `-o`  |         | Output directory (single package only) |
+| `--force` | `-f`  | `false` | Clear cache and regenerate |
+| `--yes`   | `-y`  | `false` | Skip prompts, use defaults |
+| `--debug` |       | `false` | Save raw LLM output to logs/ |
+
 ## The Landscape
 
 Several approaches exist for steering agent knowledge. Each fills a different niche:

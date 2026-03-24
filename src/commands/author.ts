@@ -44,7 +44,7 @@ const QUOTE_SUFFIX_RE = /['"]$/
 
 // ── Monorepo detection ──
 
-interface MonorepoPackage {
+export interface MonorepoPackage {
   name: string
   version: string
   description?: string
@@ -52,7 +52,7 @@ interface MonorepoPackage {
   dir: string
 }
 
-function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
+export function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
   const pkgPath = join(cwd, 'package.json')
   if (!existsSync(pkgPath))
     return null
@@ -308,7 +308,7 @@ async function fetchRemoteSupplements(opts: {
 
 // ── package.json patching ──
 
-function patchPackageJsonFiles(packageDir: string): void {
+export function patchPackageJsonFiles(packageDir: string): void {
   const pkgPath = join(packageDir, 'package.json')
   if (!existsSync(pkgPath))
     return
