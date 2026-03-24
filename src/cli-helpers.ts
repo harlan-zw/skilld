@@ -476,19 +476,18 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
   if (p.isCancel(confirmed) || !confirmed)
     return false
 
-  // Ensure "scripts" object exists in the JSON
-  const tree = parseTree(raw)
-  const hasScripts = tree?.children?.some(c =>
-    c.type === 'property' && c.children?.[0]?.value === 'scripts',
-  )
+  patchPackageJson(pkgJsonPath, (content) => {
+    const tree = parseTree(content)
+    const hasScripts = tree?.children?.some(c =>
+      c.type === 'property' && c.children?.[0]?.value === 'scripts',
+    )
 
-  let patched = raw
-  if (!hasScripts)
-    patched = editJsonProperty(patched, ['scripts'], {})
+    let patched = content
+    if (!hasScripts)
+      patched = editJsonProperty(patched, ['scripts'], {})
 
-  patched = editJsonProperty(patched, ['scripts', 'prepare'], prepareCmd)
-
-  patchPackageJson(pkgJsonPath, () => patched)
+    return editJsonProperty(patched, ['scripts', 'prepare'], prepareCmd)
+  })
   p.log.success('Added \x1B[36mskilld prepare\x1B[0m to package.json')
   return true
 }
@@ -496,7 +495,7 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
 /**
  * Build the full prepare script value, safely appending to any existing command.
  */
-function buildPrepareScript(existing: string | undefined): string {
+export function buildPrepareScript(existing: string | undefined): string {
   if (!existing || !existing.trim())
     return 'skilld prepare'
 

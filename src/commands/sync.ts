@@ -715,7 +715,10 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const relDir = relative(cwd, skillDir)
   p.outro(config.mode === 'update' ? `Updated ${packageName}${ejectMsg}` : `Synced ${packageName} → ${relDir}${ejectMsg}`)
 
-  await suggestPrepareHook(cwd)
+  try {
+    await suggestPrepareHook(cwd)
+  }
+  catch {}
 }
 
 // ── Citty command definitions (lazy-loaded by cli.ts) ──

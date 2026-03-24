@@ -1,21 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { buildPrepareScript } from '../../src/cli-helpers.ts'
 import { editJsonProperty } from '../../src/core/package-json.ts'
 
-/**
- * Tests the prepare script construction logic.
- * buildPrepareScript is private, so we test the same edge cases
- * through the integration: given raw package.json content,
- * does the resulting prepare script look correct?
- */
 describe('prepare hook script building', () => {
-  function buildPrepare(existing: string | undefined): string {
-    if (!existing || !existing.trim())
-      return 'skilld prepare'
-    const cleaned = existing.trim().replace(/[&|;]+\s*$/, '').trim()
-    if (!cleaned)
-      return 'skilld prepare'
-    return `${cleaned} && skilld prepare`
-  }
+  const buildPrepare = buildPrepareScript
 
   it('returns standalone when no existing script', () => {
     expect(buildPrepare(undefined)).toBe('skilld prepare')

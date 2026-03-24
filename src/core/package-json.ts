@@ -71,13 +71,16 @@ export function appendToJsonArray(raw: string, path: string[], value: string, op
   if (node.type !== 'array' || !node.children)
     return editJsonProperty(raw, path, [value], opts)
 
-  // Find sorted insertion index
-  const items = node.children.map(c => c.value as string)
-  let idx = items.length
-  for (let i = 0; i < items.length; i++) {
-    if (value.localeCompare(items[i]) < 0) {
-      idx = i
-      break
+  // Find sorted insertion index (only for string-only arrays)
+  const allStrings = node.children.every(c => typeof c.value === 'string')
+  let idx = node.children.length
+  if (allStrings) {
+    const items = node.children.map(c => c.value as string)
+    for (let i = 0; i < items.length; i++) {
+      if (value.localeCompare(items[i]) < 0) {
+        idx = i
+        break
+      }
     }
   }
 
