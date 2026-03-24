@@ -39,6 +39,8 @@ export interface SectionContext {
   enabledSectionCount?: number
   /** Number of release files — used for adaptive API changes budget */
   releaseCount?: number
+  /** Lines consumed by frontmatter + header + search + footer */
+  overheadLines?: number
 }
 
 export interface CustomPrompt {

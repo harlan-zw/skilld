@@ -130,6 +130,8 @@ interface BaseSkillData {
   /** Whether the existing SKILL.md had LLM-generated content */
   wasEnhanced?: boolean
   usedCache: boolean
+  /** Lines consumed by SKILL.md overhead */
+  overheadLines?: number
 }
 
 export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<void> {
@@ -260,7 +262,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
           name: resolvedName,
           version: data.version,
           releasedAt: data.resolved.releasedAt,
-          dependencies: data.resolved.dependencies,
+
           distTags: data.resolved.distTags,
           body: cachedBody,
           relatedSkills: data.relatedSkills,
@@ -350,6 +352,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
           sections: llmConfig.sections,
           customPrompt: llmConfig.customPrompt,
           features: data.features,
+          overheadLines: data.overheadLines,
         })
       }
     }
@@ -567,7 +570,7 @@ async function syncBaseSkill(
     version,
     releasedAt: resolved.releasedAt,
     description: resolved.description,
-    dependencies: resolved.dependencies,
+
     distTags: resolved.distTags,
     relatedSkills,
     hasIssues: resources.hasIssues,
@@ -583,6 +586,7 @@ async function syncBaseSkill(
     features,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
+  const overheadLines = skillMd.split('\n').length
 
   // Link shared dir to per-agent dirs
   const shared = !config.global && getSharedSkillsDir(cwd)
@@ -614,6 +618,7 @@ async function syncBaseSkill(
     oldVersion: preLock?.version,
     oldSyncedAt: preLock?.syncedAt,
     wasEnhanced: preEnhanced,
+    overheadLines,
   }
 }
 
@@ -652,6 +657,7 @@ async function enhanceWithLLM(
     customPrompt,
     features: data.features,
     pkgFiles: data.pkgFiles,
+    overheadLines: data.overheadLines,
     onProgress: (progress) => {
       const isReasoning = progress.type === 'reasoning'
       const status = isReasoning ? 'exploring' : 'generating'
@@ -671,7 +677,6 @@ async function enhanceWithLLM(
       name: packageName,
       version: data.version,
       releasedAt: data.resolved.releasedAt,
-      dependencies: data.resolved.dependencies,
       distTags: data.resolved.distTags,
       body: optimized,
       relatedSkills: data.relatedSkills,
