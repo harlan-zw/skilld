@@ -9,6 +9,7 @@
 
 import type { SkillInfo } from '../core/lockfile.ts'
 import { existsSync, mkdirSync, symlinkSync } from 'node:fs'
+import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { agents, linkSkillToAgents } from '../agent/index.ts'
@@ -101,7 +102,7 @@ export const prepareCommandDef = defineCommand({
       }
 
       if (shippedCount > 0)
-        console.warn(`skilld: installed ${shippedCount} shipped skill${shippedCount > 1 ? 's' : ''}`)
+        p.log.success(`Installed ${shippedCount} shipped skill${shippedCount > 1 ? 's' : ''}`)
     }
 
     // ── 3. Report outdated skills ──
@@ -111,7 +112,7 @@ export const prepareCommandDef = defineCommand({
 
     if (freshState.outdated.length > 0) {
       const n = freshState.outdated.length
-      console.warn(`skilld: ${n} package${n > 1 ? 's' : ''} ha${n > 1 ? 've' : 's'} new features and/or breaking changes. Run \`skilld update\` to sync.`)
+      p.log.warn(`${n} package${n > 1 ? 's' : ''} ha${n > 1 ? 've' : 's'} new features and/or breaking changes. Run \`skilld update\` to sync.`)
     }
   },
 })
