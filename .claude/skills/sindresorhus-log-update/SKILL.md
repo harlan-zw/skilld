@@ -1,76 +1,62 @@
 ---
 name: sindresorhus-log-update
-description: "ALWAYS use when writing code importing \"log-update\". Consult for debugging, best practices, or modifying log-update, log update."
+description: "Log by overwriting the previous output in the terminal. Useful for rendering progress bars, animations, etc. ALWAYS use when writing code importing \"log-update\". Consult for debugging, best practices, or modifying log-update, log update."
 metadata:
-  version: 7.1.0
+  version: 7.2.0
+  generated_by: cached
+  generated_at: 2026-03-24
 ---
 
 # sindresorhus/log-update `log-update`
 
-**Version:** 7.1.0 (1 week ago)
-**Deps:** ansi-escapes@^7.1.0, cli-cursor@^5.0.0, slice-ansi@^7.1.2, strip-ansi@^7.1.2, wrap-ansi@^9.0.2
-**Tags:** latest: 7.1.0 (1 week ago)
+> Log by overwriting the previous output in the terminal. Useful for rendering progress bars, animations, etc.
 
-**References:** [package.json](./.skilld/pkg/package.json) • [GitHub Issues](./.skilld/issues/_INDEX.md) • [Releases](./.skilld/releases/_INDEX.md)
+**Version:** 7.2.0
+**Deps:** ansi-escapes@^7.3.0, cli-cursor@^5.0.0, slice-ansi@^8.0.0, strip-ansi@^7.2.0, wrap-ansi@^10.0.0
+**Tags:** latest: 7.2.0
+
+**References:** [package.json](./.skilld/pkg/package.json) — exports, entry points • [GitHub Issues](./.skilld/issues/_INDEX.md) — bugs, workarounds, edge cases • [Releases](./.skilld/releases/_INDEX.md) — changelog, breaking changes, new APIs
 
 ## Search
 
-Use `npx -y skilld search` instead of grepping `.skilld/` directories — hybrid semantic + keyword search across all indexed docs, issues, and releases.
+Use `skilld search "query" -p log-update` instead of grepping `.skilld/` directories. Run `skilld search --guide -p log-update` for full syntax, filters, and operators.
 
-```bash
-npx -y skilld search "query" -p log-update
-npx -y skilld search "issues:error handling" -p log-update
-npx -y skilld search "releases:deprecated" -p log-update
-```
-
-Filters: `docs:`, `issues:`, `releases:` prefix narrows by source type.
-
+<!-- skilld:api-changes -->
 ## API Changes
 
-✨ `.persist(...text)` — new in v7.0, writes text that stays in scrollback (like `console.log`) without clearing the update area [source](./.skilld/releases/v7.0.0.md)
+This section documents version-specific API changes — prioritize recent major/minor releases.
 
-✨ `defaultWidth` / `defaultHeight` options — new in v7.0 for `createLogUpdate()`, controls fallback dimensions when stream lacks `columns`/`rows` (default: 80×24) [source](./.skilld/releases/v7.0.0.md)
+- BREAKING: Node.js requirement updated from 18 to 20 in v7.0.0 — code targeting earlier Node.js versions will fail at runtime [source](./.skilld/releases/v7.0.0.md#breaking)
 
-✨ Partial diff rendering — v7.0 only redraws changed lines instead of erasing all, reduces flicker [source](./.skilld/releases/v7.0.0.md)
+- NEW: `persist(...text)` method added in v7.0.0 — writes output that persists in terminal scrollback, unlike the main `logUpdate()` which updates in place [source](./.skilld/releases/v7.0.0.md#improvements)
 
-✨ Synchronized output (`?2026h`/`?2026l`) — v7.1 wraps writes in DEC synchronized output sequences on TTYs, eliminates tearing [source](./.skilld/releases/v7.1.0.md)
+- NEW: `defaultWidth` option added in v7.0.0 — allows specifying terminal width (default: 80) when the stream doesn't provide `columns` property, useful for piped or redirected output [source](./.skilld/releases/v7.0.0.md#improvements)
 
-⚠️ Node.js 20+ required — v7.0 dropped Node 18 support [source](./.skilld/releases/v7.0.0.md)
+- NEW: `defaultHeight` option added in v7.0.0 — allows specifying terminal height (default: 24) when the stream doesn't provide `rows` property, useful for piped or redirected output [source](./.skilld/releases/v7.0.0.md#improvements)
 
-⚠️ `logUpdate.create()` removed in v5 — use named export `createLogUpdate` instead [source](./.skilld/releases/v5.0.0.md)
+**Also changed:** Partial update rendering optimization v7.0.0 · Trailing newline handling fixes v7.0.1–v7.0.2
+<!-- /skilld:api-changes -->
 
-⚠️ `logUpdate.stderr` removed in v5 — use named export `logUpdateStderr` instead [source](./.skilld/releases/v5.0.0.md)
-
-⚠️ Pure ESM since v5 — no `require()`, use `import logUpdate from 'log-update'` [source](./.skilld/releases/v5.0.0.md)
-
+<!-- skilld:best-practices -->
 ## Best Practices
 
-✅ Use `.persist()` for permanent output between updating sections — it writes to scrollback history then resets the update region, unlike `.done()` which just freezes the current frame [source](./.skilld/pkg/readme.md)
+- Use `.persist()` for permanent terminal output that should remain in scrollback history — it writes like `console.log()` instead of updating in-place, ideal for results or status messages that users need to scroll back to review [source](./.skilld/pkg/index.d.ts:L45:66)
 
-```ts
-logUpdate('Downloading...')
-logUpdate.persist('✓ Download complete')  // stays in scrollback
-logUpdate('Installing...')                 // new update region starts
+- Call `.done()` before starting a new log session to persist the current output and prepare for fresh updates below — prevents scrollback contamination [source](./.skilld/pkg/readme.md#logUpdateDone)
 
-```
-✅ Call `.done()` when finished to restore the cursor — the default export hides the cursor on first call and only restores it on `.done()` [source](./.skilld/pkg/index.js)
+- Enable `showCursor: true` when your CLI accepts user input or displays a prompt — otherwise the hidden cursor creates a poor UX for interactive interfaces [source](./.skilld/pkg/readme.md#showCursor)
 
-✅ Set `showCursor: true` via `createLogUpdate` when your CLI also accepts user input — the default singleton hides the cursor which breaks interactive prompts [source](./.skilld/pkg/readme.md)
+- Set `defaultWidth` and `defaultHeight` options when output is piped, redirected, or running in non-TTY environments — without this, the library assumes 80x24 which causes incorrect line wrapping and erasure [source](./.skilld/releases/v7.0.0.md#improvements)
 
-```ts
-const log = createLogUpdate(process.stdout, { showCursor: true })
-```
+- Create separate `logUpdate` instances via `createLogUpdate(stream)` for each independent update context instead of reusing the default export — prevents one instance's updates from clobbering another's [source](./.skilld/pkg/index.d.ts:L74:87)
 
-✅ Set `defaultWidth`/`defaultHeight` when output may be piped or redirected — `stream.columns`/`stream.rows` are undefined in non-TTY contexts, defaults are 80×24 [source](./.skilld/pkg/readme.md)
+- Understand that log-update can only erase and rewrite lines currently visible in the terminal viewport — content already in scrollback cannot be manipulated, so extremely long outputs will overflow and "leak" [source](./.skilld/issues/issue-10.md)
 
-✅ Output is automatically clipped to terminal height (bottom lines kept, top removed) — cannot be disabled, design your output with the most important info at the bottom [source](./.skilld/issues/issue-51.md)
+- Account for ANSI escape sequences in output width calculations — the library properly handles colorized text with tools like chalk/yoctocolors and accounts for their escape codes when calculating line wrapping [source](./.skilld/issues/issue-12.md)
 
-✅ Content exceeding terminal width is hard-wrapped per-character (not word-wrapped) — ANSI-colored strings are handled correctly but long unbroken lines will split mid-word [source](./.skilld/pkg/index.js)
+- Use `logUpdateStderr` for error messages and warnings instead of `logUpdate` — maintains separation between stdout and stderr streams [source](./.skilld/pkg/index.d.ts:L69:81)
 
-✅ Multiple string arguments are joined with spaces, not newlines — `logUpdate('a', 'b')` produces `"a b"`, use template literals or `\n` for multiline [source](./.skilld/pkg/index.js)
+- Leverage partial/synchronized rendering in v7.1.0+ for reduced flicker when updating large outputs — the library now intelligently redraws only changed lines instead of erasing everything [source](./.skilld/releases/v7.1.0.md)
 
-✅ Use `createLogUpdate` for multiple independent update regions — the default export is a singleton; two modules sharing it will clobber each other's output. Each `createLogUpdate` call tracks its own state [source](./.skilld/issues/issue-48.md)
-
-✅ v7.1.0 uses synchronized output (`\x1b[?2026h/l`) on TTYs to eliminate flicker — no action needed, but be aware this wraps every write in DEC private mode sequences that some non-standard terminals may not support [source](./.skilld/releases/v7.1.0.md)
-
-✅ Identical consecutive frames are skipped (no-op) — safe to call `logUpdate()` at high frequency without performance concern, the library diffs and only writes changed lines [source](./.skilld/pkg/index.js)
+- Be aware that multiple consecutive blank lines at the end of output may collapse to a single blank line during rendering optimization — design output that doesn't rely on exact blank line preservation [source](./.skilld/issues/issue-62.md)
+<!-- /skilld:best-practices -->

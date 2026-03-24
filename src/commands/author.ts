@@ -18,6 +18,7 @@ import {
 import { guard } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
+import { appendToJsonArray, patchPackageJson } from '../core/package-json.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import {
   fetchGitHubDiscussions,
@@ -314,38 +315,20 @@ export function patchPackageJsonFiles(packageDir: string): void {
   if (!existsSync(pkgPath))
     return
 
-  const raw = readFileSync(pkgPath, 'utf-8')
-  const pkg = JSON.parse(raw)
+  const wrote = patchPackageJson(pkgPath, (raw, pkg) => {
+    if (!Array.isArray(pkg.files)) {
+      p.log.warn('No `files` array in package.json. Add `"skills"` to your files array manually.')
+      return null
+    }
 
-  if (!Array.isArray(pkg.files)) {
-    p.log.warn('No `files` array in package.json. Add `"skills"` to your files array manually.')
-    return
-  }
+    if ((pkg.files as string[]).some((f: string) => f === 'skills' || f === 'skills/' || f === 'skills/**'))
+      return null
 
-  if (pkg.files.some((f: string) => f === 'skills' || f === 'skills/' || f === 'skills/**'))
-    return
+    return appendToJsonArray(raw, ['files'], 'skills')
+  })
 
-  // Targeted insertion: find the closing bracket of the files array and insert before it
-  // This preserves the original formatting (indentation, trailing newlines, etc.)
-  const filesMatch = raw.match(/"files"\s*:\s*\[([^\]]*)\]/)
-  if (!filesMatch) {
-    // Fallback: full rewrite
-    pkg.files.push('skills')
-    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
+  if (wrote)
     p.log.success('Added `"skills"` to package.json files array')
-    return
-  }
-
-  const inner = filesMatch[1]
-  const trimmed = inner.trimEnd()
-  // Detect indentation from existing entries
-  const entryMatch = inner.match(/\n(\s+)"/)
-  const indent = entryMatch ? entryMatch[1] : '    '
-  const needsComma = trimmed.length > 0 && !trimmed.endsWith(',')
-  const insertion = `${needsComma ? ',' : ''}\n${indent}"skills"`
-  const patched = raw.replace(filesMatch[0], `"files": [${trimmed}${insertion}\n${indent.slice(2) || '  '}]`)
-  writeFileSync(pkgPath, patched)
-  p.log.success('Added `"skills"` to package.json files array')
 }
 
 // ── Core author flow for a single package ──
