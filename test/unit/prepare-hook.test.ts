@@ -4,40 +4,41 @@ import { editJsonProperty } from '../../src/core/package-json.ts'
 
 describe('prepare hook script building', () => {
   const buildPrepare = buildPrepareScript
+  const standalone = 'skilld prepare || true'
 
   it('returns standalone when no existing script', () => {
-    expect(buildPrepare(undefined)).toBe('skilld prepare')
+    expect(buildPrepare(undefined)).toBe(standalone)
   })
 
   it('returns standalone when existing script is empty', () => {
-    expect(buildPrepare('')).toBe('skilld prepare')
-    expect(buildPrepare('   ')).toBe('skilld prepare')
+    expect(buildPrepare('')).toBe(standalone)
+    expect(buildPrepare('   ')).toBe(standalone)
   })
 
-  it('appends with && to existing script', () => {
-    expect(buildPrepare('husky')).toBe('husky && skilld prepare')
+  it('appends with && and parens to existing script', () => {
+    expect(buildPrepare('husky')).toBe('husky && (skilld prepare || true)')
   })
 
   it('handles existing script with multiple commands', () => {
-    expect(buildPrepare('husky && lint-staged')).toBe('husky && lint-staged && skilld prepare')
+    expect(buildPrepare('husky && lint-staged')).toBe('husky && lint-staged && (skilld prepare || true)')
   })
 
   it('strips trailing && from existing script', () => {
-    expect(buildPrepare('husky &&')).toBe('husky && skilld prepare')
-    expect(buildPrepare('husky && ')).toBe('husky && skilld prepare')
+    expect(buildPrepare('husky &&')).toBe('husky && (skilld prepare || true)')
+    expect(buildPrepare('husky && ')).toBe('husky && (skilld prepare || true)')
   })
 
   it('strips trailing ; from existing script', () => {
-    expect(buildPrepare('husky;')).toBe('husky && skilld prepare')
+    expect(buildPrepare('husky;')).toBe('husky && (skilld prepare || true)')
   })
 
   it('strips trailing || from existing script', () => {
-    expect(buildPrepare('husky ||')).toBe('husky && skilld prepare')
+    expect(buildPrepare('husky ||')).toBe('husky && (skilld prepare || true)')
   })
 
   it('handles only operators as existing script', () => {
-    expect(buildPrepare('&&')).toBe('skilld prepare')
-    expect(buildPrepare(';')).toBe('skilld prepare')
+    expect(buildPrepare('&&')).toBe(standalone)
+    expect(buildPrepare(';')).toBe(standalone)
   })
 
   describe('surgical package.json editing', () => {
@@ -49,8 +50,8 @@ describe('prepare hook script building', () => {
   }
 }
 `
-      const result = editJsonProperty(raw, ['scripts', 'prepare'], 'skilld prepare')
-      expect(result).toContain('"prepare": "skilld prepare"')
+      const result = editJsonProperty(raw, ['scripts', 'prepare'], standalone)
+      expect(result).toContain(`"prepare": "${standalone}"`)
       expect(result).toContain('"build": "tsc"')
     })
 
@@ -60,9 +61,9 @@ describe('prepare hook script building', () => {
 }
 `
       let result = editJsonProperty(raw, ['scripts'], {})
-      result = editJsonProperty(result, ['scripts', 'prepare'], 'skilld prepare')
+      result = editJsonProperty(result, ['scripts', 'prepare'], standalone)
       expect(result).toContain('"scripts"')
-      expect(result).toContain('"prepare": "skilld prepare"')
+      expect(result).toContain(`"prepare": "${standalone}"`)
       expect(result).toContain('"name": "my-pkg"')
     })
 
@@ -75,8 +76,8 @@ describe('prepare hook script building', () => {
   }
 }
 `
-      const result = editJsonProperty(raw, ['scripts', 'prepare'], 'husky && skilld prepare')
-      expect(result).toContain('"prepare": "husky && skilld prepare"')
+      const result = editJsonProperty(raw, ['scripts', 'prepare'], 'husky && (skilld prepare || true)')
+      expect(result).toContain('"prepare": "husky && (skilld prepare || true)"')
       expect(result).toContain('"build": "tsc"')
       expect(result).toContain('"name": "my-pkg"')
     })

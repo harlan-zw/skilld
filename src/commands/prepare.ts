@@ -7,15 +7,14 @@
  * 3. Report outdated skills count and suggest `skilld update`
  */
 
-import type { SkillInfo } from '../core/lockfile.ts'
-import { existsSync, mkdirSync, symlinkSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { agents, linkSkillToAgents } from '../agent/index.ts'
-import { getShippedSkills, linkShippedSkill, resolvePkgDir } from '../cache/index.ts'
 import { resolveAgent } from '../cli-helpers.ts'
-import { mergeLocks, readLock, writeLock } from '../core/lockfile.ts'
+import { readLock, writeLock } from '../core/lockfile.ts'
+import { getShippedSkills, linkShippedSkill, restorePkgSymlink } from '../core/prepare.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 import { getProjectState } from '../core/skills.ts'
 
@@ -40,40 +39,42 @@ export const prepareCommandDef = defineCommand({
     const shared = getSharedSkillsDir(cwd)
     const skillsDir = shared || join(cwd, agentConfig.skillsDir)
 
-    // ── 1. Restore broken symlinks from lockfile ──
+    // ── Fast path: read primary lockfile, check all skills intact ──
 
-    const allSkillsDirs = shared
-      ? [shared]
-      : Object.values(agents).map(t => join(cwd, t.skillsDir))
-    const allLocks = allSkillsDirs
-      .map(dir => readLock(dir))
-      .filter((l): l is NonNullable<typeof l> => !!l && Object.keys(l.skills).length > 0)
-
-    if (allLocks.length > 0) {
-      const lock = mergeLocks(allLocks)
+    const lock = readLock(skillsDir)
+    if (lock && Object.keys(lock.skills).length > 0) {
+      let allIntact = true
 
       for (const [name, info] of Object.entries(lock.skills)) {
         if (!info.version)
           continue
 
-        if (info.source === 'shipped') {
-          const skillDir = join(skillsDir, name)
-          if (!existsSync(skillDir)) {
-            const pkgName = info.packageName || name
-            const shipped = getShippedSkills(pkgName, cwd, info.version)
-            const match = shipped.find(s => s.skillName === name)
-            if (match)
-              linkShippedSkill(skillsDir, name, match.skillDir)
-          }
+        const skillDir = join(skillsDir, name)
+        if (existsSync(skillDir)) {
+          // Skill dir exists; for non-shipped, also check .skilld/pkg symlink
+          if (info.source !== 'shipped')
+            restorePkgSymlink(skillsDir, name, info, cwd)
           continue
         }
 
-        // Non-shipped: restore .skilld/pkg symlink if broken
-        restorePkgSymlink(skillsDir, name, info, cwd)
+        // Skill dir missing, needs restore
+        allIntact = false
+
+        if (info.source === 'shipped') {
+          const pkgName = info.packageName || name
+          const shipped = getShippedSkills(pkgName, cwd, info.version)
+          const match = shipped.find(s => s.skillName === name)
+          if (match)
+            linkShippedSkill(skillsDir, name, match.skillDir)
+        }
       }
+
+      // If all skills intact, skip expensive getProjectState entirely
+      if (allIntact)
+        return
     }
 
-    // ── 2. Auto-install shipped skills from deps ──
+    // ── Slow path: discover new shipped skills + report outdated ──
 
     const state = await getProjectState(cwd)
     let shippedCount = 0
@@ -105,35 +106,9 @@ export const prepareCommandDef = defineCommand({
         p.log.success(`Installed ${shippedCount} shipped skill${shippedCount > 1 ? 's' : ''}`)
     }
 
-    // ── 3. Report outdated skills ──
-
-    // Re-read state after shipped installs so they don't show as missing
-    const freshState = shippedCount > 0 ? await getProjectState(cwd) : state
-
-    if (freshState.outdated.length > 0) {
-      const n = freshState.outdated.length
+    if (state.outdated.length > 0) {
+      const n = state.outdated.length
       p.log.info(`${n} package${n > 1 ? 's' : ''} ha${n > 1 ? 've' : 's'} new features and/or breaking changes. Run \`skilld update\` to sync.`)
     }
   },
 })
-
-/** Restore .skilld/pkg symlink to node_modules if broken */
-function restorePkgSymlink(skillsDir: string, name: string, info: SkillInfo, cwd: string): void {
-  const refsDir = join(skillsDir, name, '.skilld')
-  const pkgLink = join(refsDir, 'pkg')
-
-  // Only fix if the skill dir exists but the pkg symlink is broken
-  if (!existsSync(join(skillsDir, name)))
-    return
-
-  if (existsSync(pkgLink))
-    return
-
-  const pkgName = info.packageName || name
-  const pkgDir = resolvePkgDir(pkgName, cwd, info.version)
-  if (!pkgDir)
-    return
-
-  mkdirSync(refsDir, { recursive: true })
-  symlinkSync(pkgDir, pkgLink)
-}

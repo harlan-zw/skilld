@@ -497,17 +497,18 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
  * Build the full prepare script value, safely appending to any existing command.
  */
 export function buildPrepareScript(existing: string | undefined): string {
+  const cmd = 'skilld prepare || true'
   if (!existing || !existing.trim())
-    return 'skilld prepare'
+    return cmd
 
   const trimmed = existing.trim()
 
   // Strip trailing && or ; that would leave a dangling operator
   const cleaned = trimmed.replace(/[&|;]+\s*$/, '').trim()
   if (!cleaned)
-    return 'skilld prepare'
+    return cmd
 
-  return `${cleaned} && skilld prepare`
+  return `${cleaned} && (${cmd})`
 }
 
 export function getRepoHint(name: string, cwd: string): string | undefined {

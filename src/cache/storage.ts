@@ -5,6 +5,7 @@
 import type { CachedDoc, CachedPackage } from './types.ts'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'pathe'
+import { resolvePkgDir } from '../core/prepare.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getRepoCacheDir, REFERENCES_DIR, REPOS_DIR } from './config.ts'
 import { getCacheDir } from './version.ts'
@@ -122,20 +123,9 @@ export function linkCachedDir(skillDir: string, name: string, version: string, s
  * Resolve the package directory: node_modules first, then cached dist fallback.
  * Returns the path if found, null otherwise.
  */
-export function resolvePkgDir(name: string, cwd: string, version?: string): string | null {
-  const nodeModulesPath = join(cwd, 'node_modules', name)
-  if (existsSync(nodeModulesPath))
-    return nodeModulesPath
-
-  // Fallback: check cached npm dist
-  if (version) {
-    const cachedPkgDir = join(getCacheDir(name, version), 'pkg')
-    if (existsSync(join(cachedPkgDir, 'package.json')))
-      return cachedPkgDir
-  }
-
-  return null
-}
+export { resolvePkgDir } from '../core/prepare.ts'
+export { getShippedSkills, linkShippedSkill } from '../core/prepare.ts'
+export type { ShippedSkill } from '../core/prepare.ts'
 
 /**
  * Create symlink from .skilld dir to package directory
@@ -224,31 +214,6 @@ export function getPkgKeyFiles(name: string, cwd: string, version?: string): str
 }
 
 /**
- * Check if package ships its own docs folder
- */
-export interface ShippedSkill {
-  skillName: string
-  skillDir: string
-}
-
-/**
- * Check if package ships a skills/ directory with SKILL.md or _SKILL.md subdirs
- */
-export function getShippedSkills(name: string, cwd: string, version?: string): ShippedSkill[] {
-  const pkgPath = resolvePkgDir(name, cwd, version)
-  if (!pkgPath)
-    return []
-
-  const skillsPath = join(pkgPath, 'skills')
-  if (!existsSync(skillsPath))
-    return []
-
-  return readdirSync(skillsPath, { withFileTypes: true })
-    .filter(d => d.isDirectory() && (existsSync(join(skillsPath, d.name, 'SKILL.md')) || existsSync(join(skillsPath, d.name, '_SKILL.md'))))
-    .map(d => ({ skillName: d.name, skillDir: join(skillsPath, d.name) }))
-}
-
-/**
  * Write LLM-generated section outputs to global cache for cross-project reuse
  *
  * Structure:
@@ -271,20 +236,6 @@ export function readCachedSection(name: string, version: string, file: string): 
   if (!existsSync(path))
     return null
   return readFileSync(path, 'utf-8')
-}
-
-/**
- * Create symlink from skills dir to shipped skill dir
- */
-export function linkShippedSkill(baseDir: string, skillName: string, targetDir: string): void {
-  const linkPath = join(baseDir, skillName)
-  if (existsSync(linkPath)) {
-    const stat = lstatSync(linkPath)
-    if (stat.isSymbolicLink())
-      unlinkSync(linkPath)
-    else rmSync(linkPath, { recursive: true, force: true })
-  }
-  symlinkSync(targetDir, linkPath)
 }
 
 export function hasShippedDocs(name: string, cwd: string, version?: string): boolean {
