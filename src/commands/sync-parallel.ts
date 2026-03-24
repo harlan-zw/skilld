@@ -260,7 +260,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
           name: resolvedName,
           version: data.version,
           releasedAt: data.resolved.releasedAt,
-
+          dependencies: data.resolved.dependencies,
           distTags: data.resolved.distTags,
           body: cachedBody,
           relatedSkills: data.relatedSkills,
@@ -554,7 +554,7 @@ async function syncBaseSkill(
     version,
     releasedAt: resolved.releasedAt,
     description: resolved.description,
-
+    dependencies: resolved.dependencies,
     distTags: resolved.distTags,
     relatedSkills,
     hasIssues: resources.hasIssues,
@@ -658,6 +658,7 @@ async function enhanceWithLLM(
       name: packageName,
       version: data.version,
       releasedAt: data.resolved.releasedAt,
+      dependencies: data.resolved.dependencies,
       distTags: data.resolved.distTags,
       body: optimized,
       relatedSkills: data.relatedSkills,

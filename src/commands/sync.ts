@@ -544,7 +544,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     version,
     releasedAt: resolved.releasedAt,
     description: resolved.description,
-
+    dependencies: resolved.dependencies,
     distTags: resolved.distTags,
     relatedSkills,
     hasIssues: resources.hasIssues,
@@ -588,7 +588,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       version,
       releasedAt: resolved.releasedAt,
       description: resolved.description,
-
+      dependencies: resolved.dependencies,
       distTags: resolved.distTags,
       body: cachedBody,
       relatedSkills,
@@ -1069,7 +1069,7 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
     version,
     releasedAt: resolved.releasedAt,
     description: resolved.description,
-
+    dependencies: resolved.dependencies,
     distTags: resolved.distTags,
     relatedSkills,
     hasIssues: resources.hasIssues,
