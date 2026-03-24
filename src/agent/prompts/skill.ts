@@ -13,8 +13,6 @@ export interface SkillOptions {
   name: string
   version?: string
   releasedAt?: string
-  /** Production dependencies with version specifiers */
-  dependencies?: Record<string, string>
   /** npm dist-tags with version and release date */
   distTags?: Record<string, { version: string, releasedAt?: string }>
   globs?: string[]
@@ -70,7 +68,7 @@ function formatShortDate(isoDate: string): string {
   return `${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`
 }
 
-function generatePackageHeader({ name, description, version, releasedAt, dependencies, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, docsType, pkgFiles, packages, eject }: SkillOptions): string {
+function generatePackageHeader({ name, description, version, releasedAt, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, docsType, pkgFiles, packages, eject }: SkillOptions): string {
   let title = `# ${name}`
   if (repoUrl) {
     const url = repoUrl.startsWith('http') ? repoUrl : `https://github.com/${repoUrl}`
@@ -89,15 +87,10 @@ function generatePackageHeader({ name, description, version, releasedAt, depende
     lines.push('', `**Version:** ${versionStr}`)
   }
 
-  if (dependencies && Object.keys(dependencies).length > 0) {
-    const deps = Object.entries(dependencies)
-      .map(([n, v]) => `${n}@${v}`)
-      .join(', ')
-    lines.push(`**Deps:** ${deps}`)
-  }
-
   if (distTags && Object.keys(distTags).length > 0) {
     const tags = Object.entries(distTags)
+      .sort(([, a], [, b]) => (b.releasedAt ?? '').localeCompare(a.releasedAt ?? ''))
+      .slice(0, 3)
       .map(([tag, info]) => {
         const relDate = info.releasedAt ? ` (${formatShortDate(info.releasedAt)})` : ''
         return `${tag}: ${info.version}${relDate}`

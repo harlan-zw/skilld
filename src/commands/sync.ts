@@ -558,7 +558,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     version,
     releasedAt: resolved.releasedAt,
     description: resolved.description,
-    dependencies: resolved.dependencies,
+
     distTags: resolved.distTags,
     relatedSkills,
     hasIssues: resources.hasIssues,
@@ -575,6 +575,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     eject: isEject,
   })
   writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
+  const overheadLines = baseSkillMd.split('\n').length
 
   p.log.success(config.mode === 'update' ? `Updated skill: ${relative(cwd, skillDir)}` : `Created base skill: ${relative(cwd, skillDir)}`)
 
@@ -602,7 +603,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       version,
       releasedAt: resolved.releasedAt,
       description: resolved.description,
-      dependencies: resolved.dependencies,
+
       distTags: resolved.distTags,
       body: cachedBody,
       relatedSkills,
@@ -652,6 +653,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
         sections: llmConfig.sections,
         customPrompt: llmConfig.customPrompt,
         features,
+        overheadLines,
       })
     }
     else if (llmConfig) {
@@ -678,6 +680,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
         packages: allPackages.length > 1 ? allPackages : undefined,
         features,
         eject: isEject,
+        overheadLines,
       })
     }
   }
@@ -1083,7 +1086,7 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
     version,
     releasedAt: resolved.releasedAt,
     description: resolved.description,
-    dependencies: resolved.dependencies,
+
     distTags: resolved.distTags,
     relatedSkills,
     hasIssues: resources.hasIssues,

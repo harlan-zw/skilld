@@ -82,6 +82,8 @@ export interface OptimizeDocsOptions {
   features?: FeaturesConfig
   /** Key files from the package (e.g., dist/pkg.d.ts) */
   pkgFiles?: string[]
+  /** Lines consumed by SKILL.md overhead (frontmatter + header + search + footer) */
+  overheadLines?: number
 }
 
 export interface OptimizeResult {

@@ -1,15 +1,26 @@
 /**
  * Dynamic budget allocation for skill sections.
  *
- * Total SKILL.md body should stay under ~300 lines (≈5,000 words per Agent Skills guide).
- * When more sections are enabled, each gets proportionally less space.
- * When a package has many releases, API changes budget scales up to capture more churn.
+ * Total SKILL.md target is ~500 lines. Overhead (frontmatter, header, search, footer)
+ * is subtracted to get the available body budget, which is divided among enabled sections.
+ * When a package has many releases, budgets scale up.
  */
 
-/** Scale max lines based on enabled section count. Solo sections get full budget, 4 sections ~60%. */
-export function maxLines(min: number, max: number, sectionCount?: number): number {
+const TOTAL_TARGET = 500
+const DEFAULT_OVERHEAD = 30
+
+/** Available body lines after overhead is subtracted */
+function remainingLines(overheadLines?: number): number {
+  return TOTAL_TARGET - (overheadLines ?? DEFAULT_OVERHEAD)
+}
+
+/** Scale max lines based on enabled section count and available remaining space. */
+export function maxLines(min: number, max: number, sectionCount?: number, overheadLines?: number): number {
+  const remaining = remainingLines(overheadLines)
+  const sections = Math.max(1, sectionCount ?? 1)
+  const perSection = Math.floor(remaining / sections)
   const scale = budgetScale(sectionCount)
-  return Math.max(min, Math.round(max * scale))
+  return Math.max(min, Math.min(Math.round(max * scale), perSection))
 }
 
 /** Scale item count based on enabled section count. */

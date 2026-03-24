@@ -3,7 +3,7 @@ import { resolveSkilldCommand } from '../../../core/shared.ts'
 import { maxItems, maxLines, releaseBoost } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 
-export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles, features, enabledSectionCount, releaseCount, version }: SectionContext): PromptSection {
+export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles, features, enabledSectionCount, releaseCount, version, overheadLines }: SectionContext): PromptSection {
   const [,, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
   // Dampened boost — best practices are less directly tied to releases than API changes
   const rawBoost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
@@ -35,7 +35,7 @@ export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, h
     referenceWeights.push({ name: 'Changelog', path: `./.skilld/${hasChangelog}`, score: 3, useFor: 'Only for new patterns introduced in recent versions' })
   }
 
-  const bpMaxLines = maxLines(80, Math.round(150 * boost), enabledSectionCount)
+  const bpMaxLines = maxLines(100, Math.round(250 * boost), enabledSectionCount, overheadLines)
 
   return {
     referenceWeights,
@@ -86,7 +86,7 @@ const client = createX({ retryDelay: attempt => Math.min(1000 * 2 ** attempt, 30
 Each item: markdown list item (-) + ${packageName}-specific pattern + why it's preferred + \`[source](./.skilld/...#section)\` link. **Prefer concise descriptions over inline code** — the source link points the agent to full examples in the docs. Only add a code block when the pattern genuinely cannot be understood from the description alone (e.g., non-obvious syntax, multi-step wiring). Most items should be description + source link only. All source links MUST use \`./.skilld/\` prefix and include a **section anchor** (\`#heading-slug\`) or **line reference** (\`:L<line>\` or \`:L<start>:<end>\`) to pinpoint the exact location. Do NOT use emoji — use plain text markers only.`,
 
     rules: [
-      `- **${maxItems(4, Math.round(10 * boost), enabledSectionCount)} best practice items**`,
+      `- **${maxItems(6, Math.round(15 * boost), enabledSectionCount)} best practice items**`,
       `- **MAX ${bpMaxLines} lines** for best practices section`,
       '- **Every item MUST have a `[source](./.skilld/...#section)` link** with a section anchor (`#heading-slug`) or line reference (`:L<line>` or `:L<start>:<end>`). If you cannot cite a specific location in a reference file, do NOT include the item — unsourced items risk hallucination and will be rejected',
       '- **Minimize inline code.** Most items should be description + source link only. The source file contains full examples the agent can read. Only add a code block when the pattern is unintuitable from the description (non-obvious syntax, surprising argument order, multi-step wiring). Aim for at most 1 in 4 items having a code block',

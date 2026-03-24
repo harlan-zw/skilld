@@ -1376,10 +1376,11 @@ export interface EnhanceOptions {
   packages?: Array<{ name: string }>
   features?: FeaturesConfig
   eject?: boolean
+  overheadLines?: number
 }
 
 export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
-  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject } = opts
+  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject, overheadLines } = opts
 
   const effectiveFeatures = features
 
@@ -1403,6 +1404,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
     customPrompt,
     features: effectiveFeatures,
     pkgFiles,
+    overheadLines,
     onProgress: createToolProgress(llmLog),
   })
 
@@ -1428,7 +1430,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
       name: packageName,
       version,
       releasedAt: resolved.releasedAt,
-      dependencies: resolved.dependencies,
+
       distTags: resolved.distTags,
       body: optimized,
       relatedSkills,
@@ -1467,6 +1469,7 @@ export interface WritePromptFilesOptions {
   sections: SkillSection[]
   customPrompt?: CustomPrompt
   features?: FeaturesConfig
+  overheadLines?: number
 }
 
 /**
@@ -1490,6 +1493,7 @@ export function writePromptFiles(opts: WritePromptFilesOptions): SkillSection[] 
     pkgFiles: opts.pkgFiles,
     customPrompt,
     features,
+    overheadLines: opts.overheadLines,
     sections,
   })
 
