@@ -401,7 +401,7 @@ async function syncBaseSkill(
   const localDeps = await readLocalDependencies(cwd).catch(() => [])
   const localVersion = localDeps.find(d => d.name === packageName)?.version
 
-  const { package: resolvedPkg, attempts } = await resolvePackageDocsWithAttempts(requestedTag ? packageSpec : packageName, {
+  const { package: resolvedPkg, attempts, registryVersion } = await resolvePackageDocsWithAttempts(requestedTag ? packageSpec : packageName, {
     version: localVersion,
     cwd,
     onProgress: step => update(packageName, 'resolving', RESOLVE_STEP_LABELS[step]),
@@ -414,6 +414,19 @@ async function syncBaseSkill(
   }
 
   if (!resolved) {
+    // Even without docs, the package may ship its own skills (skills-npm convention)
+    const shippedVersion = localVersion || registryVersion || 'latest'
+    const earlyShipped = handleShippedSkills(packageName, shippedVersion, cwd, config.agent, config.global)
+    if (earlyShipped) {
+      const shared = !config.global && getSharedSkillsDir(cwd)
+      if (shared) {
+        for (const shipped of earlyShipped.shipped)
+          linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
+      }
+      update(packageName, 'done', 'Published SKILL.md', getVersionKey(shippedVersion))
+      return 'shipped'
+    }
+
     const npmAttempt = attempts.find(a => a.source === 'npm')
     let reason: string
     if (npmAttempt?.status === 'not-found') {
