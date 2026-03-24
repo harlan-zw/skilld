@@ -195,6 +195,42 @@ describe('author', () => {
       expect(result![0].name).toBe('lib-a')
     })
 
+    it('detects workspace entries that point to a package directory directly', async () => {
+      const { existsSync, readFileSync, readdirSync } = await import('node:fs')
+
+      vi.mocked(existsSync).mockImplementation((p: any) => {
+        const s = String(p)
+        if (s === '/project/package.json')
+          return true
+        if (s === '/project/packages/foo')
+          return true
+        if (s === '/project/packages/foo/package.json')
+          return true
+        return false
+      })
+
+      vi.mocked(readFileSync).mockImplementation((p: any) => {
+        const s = String(p)
+        if (s === '/project/package.json')
+          return JSON.stringify({ private: true, workspaces: ['packages/foo'] })
+        if (s === '/project/packages/foo/package.json')
+          return JSON.stringify({ name: 'foo', version: '1.2.3' })
+        return ''
+      })
+
+      vi.mocked(readdirSync).mockReturnValue([])
+
+      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const result = detectMonorepoPackages('/project')
+
+      expect(result).toHaveLength(1)
+      expect(result![0]).toMatchObject({
+        name: 'foo',
+        version: '1.2.3',
+        dir: '/project/packages/foo',
+      })
+    })
+
     it('resolves repository URL from object form', async () => {
       const { existsSync, readFileSync, readdirSync } = await import('node:fs')
 
