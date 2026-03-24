@@ -561,7 +561,7 @@ function optimizeSection(opts: OptimizeSectionOptions): Promise<SectionResult> {
 // ── Main orchestrator ────────────────────────────────────────────────
 
 export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeResult> {
-  const { packageName, skillDir, model = 'sonnet', version, hasGithub, hasReleases, hasChangelog, docFiles, docsType, hasShippedDocs, onProgress, timeout = 180000, debug, noCache, sections, customPrompt, features, pkgFiles } = opts
+  const { packageName, skillDir, model = 'sonnet', version, hasGithub, hasReleases, hasChangelog, docFiles, docsType, hasShippedDocs, onProgress, timeout = 180000, debug, noCache, sections, customPrompt, features, pkgFiles, overheadLines } = opts
 
   const selectedSections = sections ?? ['api-changes', 'best-practices'] as SkillSection[]
 
@@ -580,6 +580,7 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
     customPrompt,
     features,
     pkgFiles,
+    overheadLines,
     sections: selectedSections,
   })
 

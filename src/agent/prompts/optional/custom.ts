@@ -2,8 +2,8 @@ import type { CustomPrompt, PromptSection, SectionValidationWarning } from './ty
 import { maxLines } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 
-export function customSection({ heading, body }: CustomPrompt, enabledSectionCount?: number): PromptSection {
-  const customMaxLines = maxLines(50, 80, enabledSectionCount)
+export function customSection({ heading, body }: CustomPrompt, enabledSectionCount?: number, overheadLines?: number): PromptSection {
+  const customMaxLines = maxLines(50, 80, enabledSectionCount, overheadLines)
 
   return {
     validate(content: string): SectionValidationWarning[] {

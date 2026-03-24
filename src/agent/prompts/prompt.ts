@@ -68,6 +68,8 @@ export interface BuildSkillPromptOptions {
   enabledSectionCount?: number
   /** Key files from the package (e.g., dist/pkg.d.ts) — surfaced in prompt for tool hints */
   pkgFiles?: string[]
+  /** Lines consumed by SKILL.md overhead (frontmatter + header + search + footer) */
+  overheadLines?: number
 }
 
 /**
@@ -171,7 +173,7 @@ function getSectionDef(section: SkillSection, ctx: SectionContext, customPrompt?
   switch (section) {
     case 'api-changes': return apiChangesSection(ctx)
     case 'best-practices': return bestPracticesSection(ctx)
-    case 'custom': return customPrompt ? customSection(customPrompt, ctx.enabledSectionCount) : null
+    case 'custom': return customPrompt ? customSection(customPrompt, ctx.enabledSectionCount, ctx.overheadLines) : null
   }
 }
 
@@ -204,7 +206,7 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
     const m = f.match(/v\d+\.(\d+)\.(\d+)\.md$/)
     return m && (m[1] === '0' || m[2] === '0') // major (x.0.y) or minor (x.y.0)
   }).length
-  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles: opts.pkgFiles, features: opts.features, enabledSectionCount: opts.enabledSectionCount, releaseCount }
+  const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles: opts.pkgFiles, features: opts.features, enabledSectionCount: opts.enabledSectionCount, releaseCount, overheadLines: opts.overheadLines }
   const sectionDef = getSectionDef(section, ctx, customPrompt)
   if (!sectionDef)
     return ''

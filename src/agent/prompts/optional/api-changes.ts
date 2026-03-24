@@ -3,7 +3,7 @@ import { resolveSkilldCommand } from '../../../core/shared.ts'
 import { maxItems, maxLines, releaseBoost } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 
-export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasDocs, hasIssues, hasDiscussions, pkgFiles, features, enabledSectionCount, releaseCount }: SectionContext): PromptSection {
+export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasDocs, hasIssues, hasDiscussions, pkgFiles, features, enabledSectionCount, releaseCount, overheadLines }: SectionContext): PromptSection {
   const [, major, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
   const boost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
 
@@ -69,7 +69,7 @@ export function apiChangesSection({ packageName, version, hasReleases, hasChange
 The "Older" column means ≤ v${Number(major) - 2}.x — these changes are NOT useful because anyone on v${major}.x already migrated past them.`
     : ''
 
-  const apiChangesMaxLines = maxLines(50, Math.round(80 * boost), enabledSectionCount)
+  const apiChangesMaxLines = maxLines(60, Math.round(130 * boost), enabledSectionCount, overheadLines)
 
   return {
     referenceWeights,
@@ -123,7 +123,7 @@ Each item: BREAKING/DEPRECATED/NEW label + API name + what changed + source link
 **Tiered format:** Top-scoring items get full detailed entries. Remaining relevant items go in a compact "**Also changed:**" line at the end — API name + brief label, separated by \` · \`. This surfaces more changes without bloating the section.`,
 
     rules: [
-      `- **API Changes:** ${maxItems(6, Math.round(12 * boost), enabledSectionCount)} detailed items + compact "Also changed" line for remaining, MAX ${apiChangesMaxLines} lines`,
+      `- **API Changes:** ${maxItems(8, Math.round(18 * boost), enabledSectionCount)} detailed items + compact "Also changed" line for remaining, MAX ${apiChangesMaxLines} lines`,
       '- **Every detailed item MUST have a `[source](./.skilld/...#section)` link** with a section anchor (`#heading-slug`) or line reference (`:L<line>` or `:L<start>:<end>`). If you cannot cite a specific location in a release, changelog entry, or migration doc, do NOT include the item',
       '- **Recency:** Only include changes from the current major version and the previous→current migration. Exclude changes from older major versions entirely — users already migrated past them',
       '- Focus on APIs that CHANGED, not general conventions or gotchas',
