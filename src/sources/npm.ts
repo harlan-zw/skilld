@@ -375,10 +375,10 @@ export async function resolvePackageDocsWithAttempts(packageName: string, option
 
   // Must have at least one source
   if (!result.docsUrl && !result.llmsUrl && !result.readmeUrl && !result.gitDocsUrl) {
-    return { package: null, attempts }
+    return { package: null, attempts, registryVersion: pkg.version }
   }
 
-  return { package: result, attempts }
+  return { package: result, attempts, registryVersion: pkg.version }
 }
 
 /**

@@ -291,7 +291,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
   if (!resolved) {
     // Even without docs, the package may ship its own skills (skills-npm convention)
-    const shippedVersion = localVersion || resolveResult.attempts.find(a => a.source === 'npm' && a.status === 'success')?.message?.match(/@(.+)$/)?.[1] || 'latest'
+    const shippedVersion = localVersion || resolveResult.registryVersion || 'latest'
     const earlyShipped = handleShippedSkills(packageName, shippedVersion, cwd, config.agent, config.global)
     if (earlyShipped) {
       const shared = !config.global && getSharedSkillsDir(cwd)
