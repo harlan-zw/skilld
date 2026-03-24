@@ -1,5 +1,4 @@
 catalogMode: prefer
-
 shellEmulator: true
 
 trustPolicy: no-downgrade
@@ -13,6 +12,7 @@ catalog:
   '@types/semver': ^7.7.1
   bumpp: ^11.0.1
   giget: ^3.1.2
+  jsonc-parser: ^3.3.1
   mdream: ^1.0.3
   ofetch: ^1.5.1
   pathe: ^2.0.3

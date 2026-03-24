@@ -514,7 +514,12 @@ const main = defineCommand({
       )
 
       // Team advice: suggest prepare hook + lockfile
-      suggestPrepareHook(cwd)
+      try {
+        await suggestPrepareHook(cwd)
+      }
+      catch (err) {
+        p.log.warn(`Failed to suggest prepare hook: ${err instanceof Error ? err.message : String(err)}`)
+      }
       return
     }
 

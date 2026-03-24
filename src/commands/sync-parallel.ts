@@ -386,7 +386,12 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
   p.outro(`${pastVerb} ${successfulPkgs.length}/${packages.length} packages`)
 
   const { suggestPrepareHook } = await import('../cli-helpers.ts')
-  suggestPrepareHook(cwd)
+  try {
+    await suggestPrepareHook(cwd)
+  }
+  catch (err) {
+    p.log.warn(`Failed to suggest prepare hook: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: string) => void

@@ -715,7 +715,12 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const relDir = relative(cwd, skillDir)
   p.outro(config.mode === 'update' ? `Updated ${packageName}${ejectMsg}` : `Synced ${packageName} → ${relDir}${ejectMsg}`)
 
-  suggestPrepareHook(cwd)
+  try {
+    await suggestPrepareHook(cwd)
+  }
+  catch (err) {
+    p.log.warn(`Failed to suggest prepare hook: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 // ── Citty command definitions (lazy-loaded by cli.ts) ──

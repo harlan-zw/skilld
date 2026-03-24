@@ -1,10 +1,11 @@
 skills:
   sindresorhus-log-update:
     packageName: log-update
-    version: 7.1.0
+    version: 7.2.0
+    packages: "log-update@7.2.0"
     repo: sindresorhus/log-update
-    source: "https://raw.githubusercontent.com/sindresorhus/log-update/main/readme.md"
-    syncedAt: 2026-02-13
+    source: "ungh://sindresorhus/log-update"
+    syncedAt: 2026-03-24
     generator: skilld
   microsoft-typescript:
     packageName: typescript

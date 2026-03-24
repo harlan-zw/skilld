@@ -63,6 +63,7 @@
     "citty": "catalog:deps",
     "consola": "catalog:deps",
     "giget": "catalog:",
+    "jsonc-parser": "catalog:",
     "log-update": "catalog:deps",
     "mdast-util-from-markdown": "catalog:deps",
     "mdast-util-frontmatter": "catalog:deps",

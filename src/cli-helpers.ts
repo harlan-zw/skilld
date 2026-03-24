@@ -7,10 +7,12 @@ import type { AgentType, OptimizeModel } from './agent/index.ts'
 import type { ProjectState } from './core/skills.ts'
 import { existsSync, readFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
+import { parseTree } from 'jsonc-parser'
 import { join } from 'pathe'
 import { detectCurrentAgent } from 'unagent/env'
 import { agents, detectInstalledAgents, detectProjectAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent/index.ts'
 import { readConfig, updateConfig } from './core/config.ts'
+import { editJsonProperty, patchPackageJson } from './core/package-json.ts'
 import { version } from './version.ts'
 
 export type { AgentType, OptimizeModel }
@@ -440,29 +442,72 @@ export async function pickModel<T extends { provider: string, providerName: stri
 }
 
 /**
- * Suggest adding `skilld prepare` to package.json "prepare" script.
- * Returns true if the suggestion was shown (i.e. hook is missing).
+ * Prompt to add `skilld prepare` to package.json "prepare" script.
+ * In non-interactive environments, falls back to an info log.
+ * Returns true if the hook was added or already present.
  */
-export function suggestPrepareHook(cwd: string = process.cwd()): boolean {
+export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<boolean> {
   const pkgJsonPath = join(cwd, 'package.json')
   if (!existsSync(pkgJsonPath))
     return false
 
-  const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
-  if (pkgJson.scripts?.prepare?.includes('skilld'))
+  const raw = readFileSync(pkgJsonPath, 'utf-8')
+  const pkgJson = JSON.parse(raw)
+  const rawExisting = pkgJson.scripts?.prepare
+  const existing: string | undefined = typeof rawExisting === 'string' ? rawExisting : undefined
+
+  if (existing?.includes('skilld'))
+    return true
+
+  const prepareCmd = buildPrepareScript(existing)
+
+  if (!isInteractive()) {
+    p.log.info(
+      `\x1B[90mAdd to package.json scripts:\n`
+      + `  \x1B[36m"prepare": "${prepareCmd}"\x1B[0m\n`
+      + `  \x1B[90mRestores references and shipped skills on install.\x1B[0m`,
+    )
+    return false
+  }
+
+  const confirmed = await p.confirm({
+    message: `Add \x1B[36m"prepare": "${prepareCmd}"\x1B[0m to package.json?`,
+    initialValue: true,
+  })
+  if (p.isCancel(confirmed) || !confirmed)
     return false
 
-  const prepareCmd = pkgJson.scripts?.prepare
-    ? `${pkgJson.scripts.prepare} && skilld prepare`
-    : 'skilld prepare'
+  patchPackageJson(pkgJsonPath, (content) => {
+    const tree = parseTree(content)
+    const hasScripts = tree?.children?.some(c =>
+      c.type === 'property' && c.children?.[0]?.value === 'scripts',
+    )
 
-  p.log.info(
-    `\x1B[90mAdd to package.json scripts:\n`
-    + `  \x1B[36m"prepare": "${prepareCmd}"\x1B[0m\n`
-    + `  \x1B[90mRestores references and shipped skills on install. Notifies when updates are available.\n`
-    + `  Commit skilld-lock.yaml so teammates can run \`skilld install\`.\x1B[0m`,
-  )
+    let patched = content
+    if (!hasScripts)
+      patched = editJsonProperty(patched, ['scripts'], {})
+
+    return editJsonProperty(patched, ['scripts', 'prepare'], prepareCmd)
+  })
+  p.log.success('Added \x1B[36mskilld prepare\x1B[0m to package.json')
   return true
+}
+
+/**
+ * Build the full prepare script value, safely appending to any existing command.
+ */
+export function buildPrepareScript(existing: string | undefined): string {
+  if (!existing || !existing.trim())
+    return 'skilld prepare'
+
+  const trimmed = existing.trim()
+
+  // Strip trailing && or ; that would leave a dangling operator
+  const cleaned = trimmed.replace(/[&|;]+\s*$/, '').trim()
+  if (!cleaned)
+    return 'skilld prepare'
+
+  return `${cleaned} && skilld prepare`
 }
 
 export function getRepoHint(name: string, cwd: string): string | undefined {
