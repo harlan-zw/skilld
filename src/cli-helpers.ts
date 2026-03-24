@@ -506,7 +506,7 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
  * Build the full prepare script value, safely appending to any existing command.
  */
 export function buildPrepareScript(existing: string | undefined, cwd: string = process.cwd()): string {
-  const bin = isSkilldInstalled(cwd) ? 'skilld' : 'npx skilld'
+  const bin = isNpxExecution() && !isSkilldDep(cwd) ? 'npx skilld' : 'skilld'
   const cmd = `${bin} prepare || true`
   if (!existing || !existing.trim())
     return cmd
@@ -522,9 +522,21 @@ export function buildPrepareScript(existing: string | undefined, cwd: string = p
 }
 
 /**
+ * Detect if the current process was launched via npx, pnpm dlx, or similar one-shot runners.
+ */
+function isNpxExecution(): boolean {
+  // npm/pnpm set npm_command=exec when running via npx/dlx
+  if (process.env.npm_command === 'exec')
+    return true
+  // Fallback: check if the resolved binary path contains npx or dlx cache dirs
+  const execPath = process.env._ || ''
+  return /npx|\.store|dlx/.test(execPath)
+}
+
+/**
  * Check if skilld is listed as a dependency (dev or regular) in the project's package.json.
  */
-function isSkilldInstalled(cwd: string): boolean {
+function isSkilldDep(cwd: string): boolean {
   const pkg = readPackageJsonSafe(join(cwd, 'package.json'))
   if (!pkg)
     return false

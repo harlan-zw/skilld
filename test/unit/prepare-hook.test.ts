@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { buildPrepareScript } from '../../src/cli-helpers.ts'
 import { editJsonProperty } from '../../src/core/package-json.ts'
 
@@ -14,18 +14,35 @@ function makeTempCwd(hasSkilld: boolean): string {
   return dir
 }
 
+function simulateNpx() {
+  process.env.npm_command = 'exec'
+}
+
+function clearNpxEnv() {
+  delete process.env.npm_command
+}
+
 describe('prepare hook script building', () => {
   const cwdWithSkilld = makeTempCwd(true)
   const cwdWithout = makeTempCwd(false)
   const standalone = 'skilld prepare || true'
   const npxStandalone = 'npx skilld prepare || true'
 
-  it('uses skilld when installed as dependency', () => {
+  afterEach(() => clearNpxEnv())
+
+  it('uses skilld when installed as dependency (even via npx)', () => {
+    simulateNpx()
     expect(buildPrepareScript(undefined, cwdWithSkilld)).toBe(standalone)
   })
 
-  it('uses npx skilld when not installed as dependency', () => {
+  it('uses npx skilld when run via npx and not a dependency', () => {
+    simulateNpx()
     expect(buildPrepareScript(undefined, cwdWithout)).toBe(npxStandalone)
+  })
+
+  it('uses skilld when installed globally (not npx, not a dep)', () => {
+    clearNpxEnv()
+    expect(buildPrepareScript(undefined, cwdWithout)).toBe(standalone)
   })
 
   it('returns standalone when existing script is empty', () => {
@@ -59,7 +76,8 @@ describe('prepare hook script building', () => {
     expect(buildPrepareScript(';', cwdWithSkilld)).toBe(standalone)
   })
 
-  it('appends npx variant to existing script when not installed', () => {
+  it('appends npx variant to existing script when npx + not a dep', () => {
+    simulateNpx()
     expect(buildPrepareScript('husky', cwdWithout)).toBe('husky && (npx skilld prepare || true)')
   })
 
