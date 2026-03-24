@@ -152,6 +152,8 @@ skilld update tailwindcss
 
 # Search docs across installed skills
 skilld search "useFetch options" -p nuxt
+skilld search "error" -p nuxt --filter '{"type":"issue"}'
+skilld search --guide -p nuxt
 
 # Target a specific agent
 skilld add react --agent cursor
@@ -180,7 +182,7 @@ skilld config
 | `skilld` | Interactive wizard (first run) or status menu (existing skills) |
 | `skilld add <pkg...>` | Add skills for package(s), space or comma-separated |
 | `skilld update [pkg]` | Update outdated skills (all or specific) |
-| `skilld search <query>` | Search indexed docs (`-p` to filter by package) |
+| `skilld search <query>` | Search indexed docs (`-p` package, `--filter` JSON, `--limit`, `--guide`) |
 | `skilld list`           | List installed skills (`--json` for machine-readable output) |
 | `skilld info`           | Show skill info and config |
 | `skilld config`         | Configure agent, model, preferences |
