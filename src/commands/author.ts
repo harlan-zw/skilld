@@ -38,6 +38,9 @@ import {
   writePromptFiles,
 } from './sync-shared.ts'
 
+const QUOTE_PREFIX_RE = /^['"]/
+const QUOTE_SUFFIX_RE = /['"]$/
+
 // ── Monorepo detection ──
 
 interface MonorepoPackage {
@@ -72,11 +75,14 @@ function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
   if (patterns.length === 0) {
     const pnpmWs = join(cwd, 'pnpm-workspace.yaml')
     if (existsSync(pnpmWs)) {
-      const content = readFileSync(pnpmWs, 'utf-8')
-      // Simple extraction: lines matching "  - packages/*" or similar
-      const matches = content.match(/^\s*-\s+['"]?([^'"#\n]+)['"]?\s*$/gm)
-      if (matches) {
-        patterns = matches.map(m => m.replace(/^\s*-\s+['"]?/, '').replace(/['"]?\s*$/, ''))
+      const lines = readFileSync(pnpmWs, 'utf-8').split('\n')
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed.startsWith('-'))
+          continue
+        const value = trimmed.slice(1).trim().replace(QUOTE_PREFIX_RE, '').replace(QUOTE_SUFFIX_RE, '')
+        if (value)
+          patterns.push(value)
       }
     }
   }
