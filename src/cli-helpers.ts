@@ -453,7 +453,8 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
 
   const raw = readFileSync(pkgJsonPath, 'utf-8')
   const pkgJson = JSON.parse(raw)
-  const existing: string | undefined = pkgJson.scripts?.prepare
+  const rawExisting = pkgJson.scripts?.prepare
+  const existing: string | undefined = typeof rawExisting === 'string' ? rawExisting : undefined
 
   if (existing?.includes('skilld'))
     return true
