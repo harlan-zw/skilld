@@ -39,6 +39,7 @@ import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile.ts'
+import { readPackageJsonSafe } from '../core/package-json.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 import { createIndex, SearchDepsUnavailableError } from '../retriv/index.ts'
@@ -578,9 +579,9 @@ async function enhanceRegenerated(
     let description: string | undefined
     if (pkgPath) {
       const pkgJsonPath = join(pkgPath, 'package.json')
-      if (existsSync(pkgJsonPath)) {
-        const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
-        description = pkg.description
+      const pkgJsonResult = readPackageJsonSafe(pkgJsonPath)
+      if (pkgJsonResult) {
+        description = pkgJsonResult.parsed.description as string | undefined
       }
     }
 

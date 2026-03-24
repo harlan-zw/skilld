@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { applyEdits, modify, parseTree } from 'jsonc-parser'
 
 export interface EditOptions {
@@ -8,6 +8,50 @@ export interface EditOptions {
 }
 
 const defaultEditOptions: EditOptions = { tabSize: 2, insertSpaces: true }
+
+// ── Cached reader ──────────────────────────────────────────────
+
+const cache = new Map<string, { raw: string, parsed: Record<string, unknown> }>()
+
+/**
+ * Read and parse a package.json, returning cached result on repeat calls.
+ * Throws if the file does not exist.
+ */
+export function readPackageJson(pkgPath: string): { raw: string, parsed: Record<string, unknown> } {
+  const hit = cache.get(pkgPath)
+  if (hit)
+    return hit
+  const raw = readFileSync(pkgPath, 'utf-8')
+  const parsed = JSON.parse(raw) as Record<string, unknown>
+  const entry = { raw, parsed }
+  cache.set(pkgPath, entry)
+  return entry
+}
+
+/**
+ * Same as readPackageJson but returns null when the file is missing.
+ */
+export function readPackageJsonSafe(pkgPath: string): { raw: string, parsed: Record<string, unknown> } | null {
+  if (!existsSync(pkgPath))
+    return null
+  return readPackageJson(pkgPath)
+}
+
+/**
+ * Drop any cached entry so the next read hits disk.
+ */
+export function invalidatePackageJson(pkgPath: string): void {
+  cache.delete(pkgPath)
+}
+
+/**
+ * Clear all cached entries. Useful in tests.
+ */
+export function clearPackageJsonCache(): void {
+  cache.clear()
+}
+
+// ── JSON editing helpers ───────────────────────────────────────
 
 /**
  * Set a value at a JSON path, preserving all surrounding formatting.
@@ -30,7 +74,7 @@ export function removeJsonProperty(raw: string, path: (string | number)[]): stri
 }
 
 /**
- * Read a package.json, apply an edit function, and write it back.
+ * Read a package.json, apply an edit function, write it back, and invalidate the cache.
  * The edit function receives the raw text and parsed object,
  * and returns the new raw text (or null to skip writing).
  */
@@ -38,12 +82,12 @@ export function patchPackageJson(
   pkgPath: string,
   editFn: (raw: string, pkg: Record<string, unknown>) => string | null,
 ): boolean {
-  const raw = readFileSync(pkgPath, 'utf-8')
-  const pkg = JSON.parse(raw)
-  const result = editFn(raw, pkg)
+  const { raw, parsed } = readPackageJson(pkgPath)
+  const result = editFn(raw, parsed)
   if (result === null)
     return false
   writeFileSync(pkgPath, result)
+  invalidatePackageJson(pkgPath)
   return true
 }
 

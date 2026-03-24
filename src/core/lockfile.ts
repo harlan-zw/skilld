@@ -62,7 +62,19 @@ export function parseSkillFrontmatter(skillPath: string): SkillInfo | null {
   return info
 }
 
+const lockCache = new Map<string, SkilldLock>()
+
+export function invalidateLockCache(skillsDir?: string): void {
+  if (skillsDir)
+    lockCache.delete(skillsDir)
+  else
+    lockCache.clear()
+}
+
 export function readLock(skillsDir: string): SkilldLock | null {
+  const cached = lockCache.get(skillsDir)
+  if (cached)
+    return cached
   const lockPath = join(skillsDir, 'skilld-lock.yaml')
   if (!existsSync(lockPath))
     return null
@@ -84,7 +96,9 @@ export function readLock(skillsDir: string): SkilldLock | null {
         skills[currentSkill]![kv[0]] = kv[1]
     }
   }
-  return { skills }
+  const lock = { skills }
+  lockCache.set(skillsDir, lock)
+  return lock
 }
 
 function serializeLock(lock: SkilldLock): string {
@@ -137,6 +151,7 @@ export function writeLock(skillsDir: string, skillName: string, info: SkillInfo)
 
   lock.skills[skillName] = info
   writeFileSync(lockPath, serializeLock(lock))
+  invalidateLockCache(skillsDir)
 }
 
 /**
@@ -169,6 +184,7 @@ export function syncLockfilesToDirs(sourceLock: SkilldLock, dirs: string[]): voi
     // Merge source into existing
     const merged = mergeLocks([existing, sourceLock])
     writeFileSync(lockPath, serializeLock(merged))
+    invalidateLockCache(dir)
   }
 }
 
@@ -182,8 +198,10 @@ export function removeLockEntry(skillsDir: string, skillName: string): void {
 
   if (Object.keys(lock.skills).length === 0) {
     unlinkSync(lockPath)
+    invalidateLockCache(skillsDir)
     return
   }
 
   writeFileSync(lockPath, serializeLock(lock))
+  invalidateLockCache(skillsDir)
 }

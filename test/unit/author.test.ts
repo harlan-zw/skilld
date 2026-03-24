@@ -18,8 +18,10 @@ vi.mock('@clack/prompts', () => ({
 }))
 
 describe('author', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks()
+    const { clearPackageJsonCache } = await import('../../src/core/package-json')
+    clearPackageJsonCache()
   })
 
   describe('detectMonorepoPackages', () => {

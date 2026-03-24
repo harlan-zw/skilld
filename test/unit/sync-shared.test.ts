@@ -119,10 +119,12 @@ const {
   resolveBaseDir,
   ejectReferences,
 } = await import('../../src/commands/sync-shared')
+const { clearPackageJsonCache } = await import('../../src/core/package-json')
 
 describe('sync-shared', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    clearPackageJsonCache()
     // Restore defaults after reset
     vi.mocked(getCacheDir).mockReturnValue('/mock-cache/references/test-pkg@1.0.0')
     vi.mocked(getPackageDbPath).mockReturnValue('/mock-cache/references/test-pkg@1.0.0/db')
@@ -867,6 +869,7 @@ describe('sync-shared', () => {
   describe('ejectReferences', () => {
     beforeEach(() => {
       vi.resetAllMocks()
+      clearPackageJsonCache()
       vi.mocked(getCacheDir).mockReturnValue('/mock-cache/references/vue@3.4.0')
     })
 

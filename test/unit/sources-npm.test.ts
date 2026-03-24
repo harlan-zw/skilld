@@ -63,8 +63,13 @@ vi.mock('node:child_process', async () => {
 
 // Must import after vi.mock
 const { fetchNpmPackage, fetchPkgDist, getInstalledSkillVersion, readLocalDependencies, resolveInstalledVersion, resolvePackageDocs } = await import('../../src/sources/npm')
+const { clearPackageJsonCache } = await import('../../src/core/package-json')
 
 describe('sources/npm', () => {
+  beforeEach(() => {
+    clearPackageJsonCache()
+  })
+
   describe('readLocalDependencies', () => {
     beforeEach(() => {
       vi.resetAllMocks()
@@ -207,9 +212,10 @@ describe('sources/npm', () => {
     })
 
     it('resolves version from installed package.json', async () => {
-      const { readFileSync } = await import('node:fs')
+      const { existsSync, readFileSync } = await import('node:fs')
       const { resolvePathSync } = await import('mlly')
       vi.mocked(resolvePathSync).mockReturnValue('/project/node_modules/vue/package.json')
+      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: '3.4.21' }))
 
       expect(resolveInstalledVersion('vue', '/project')).toBe('3.4.21')

@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { resolvePathSync } from 'mlly'
 import { basename, dirname, join, resolve } from 'pathe'
 import { getCacheDir } from '../cache/version.ts'
+import { readPackageJsonSafe } from '../core/package-json.ts'
 import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo, validateGitDocsWithLlms } from './github.ts'
 import { fetchLlmsTxt, fetchLlmsUrl } from './llms.ts'
 import { getCrawlUrl } from './package-registry.ts'
@@ -392,12 +393,11 @@ export function parseVersionSpecifier(
   // link: - resolve local package.json
   if (version.startsWith('link:')) {
     const linkPath = resolve(cwd, version.slice(5))
-    const linkedPkgPath = join(linkPath, 'package.json')
-    if (existsSync(linkedPkgPath)) {
-      const linkedPkg = JSON.parse(readFileSync(linkedPkgPath, 'utf-8'))
+    const linkedPkg = readPackageJsonSafe(join(linkPath, 'package.json'))
+    if (linkedPkg) {
       return {
-        name: linkedPkg.name || name,
-        version: linkedPkg.version || '0.0.0',
+        name: (linkedPkg.parsed.name as string) || name,
+        version: (linkedPkg.parsed.version as string) || '0.0.0',
       }
     }
     return null // linked package doesn't exist
@@ -443,8 +443,7 @@ export function parseVersionSpecifier(
 export function resolveInstalledVersion(name: string, cwd: string): string | null {
   try {
     const resolved = resolvePathSync(`${name}/package.json`, { url: cwd })
-    const pkg = JSON.parse(readFileSync(resolved, 'utf-8'))
-    return pkg.version || null
+    return (readPackageJsonSafe(resolved)?.parsed.version as string) || null
   }
   catch {
     // Packages with `exports` that don't expose ./package.json
@@ -453,11 +452,9 @@ export function resolveInstalledVersion(name: string, cwd: string): string | nul
       const entry = resolvePathSync(name, { url: cwd })
       let dir = dirname(entry)
       while (dir && basename(dir) !== 'node_modules') {
-        const pkgPath = join(dir, 'package.json')
-        if (existsSync(pkgPath)) {
-          const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-          return pkg.version || null
-        }
+        const pkg = readPackageJsonSafe(join(dir, 'package.json'))
+        if (pkg)
+          return (pkg.parsed.version as string) || null
         const parent = dirname(dir)
         if (parent === dir)
           break
@@ -474,14 +471,15 @@ export function resolveInstalledVersion(name: string, cwd: string): string | nul
  */
 export async function readLocalDependencies(cwd: string): Promise<LocalDependency[]> {
   const pkgPath = join(cwd, 'package.json')
-  if (!existsSync(pkgPath)) {
+  const result = readPackageJsonSafe(pkgPath)
+  if (!result) {
     throw new Error('No package.json found in current directory')
   }
 
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+  const pkg = result.parsed
   const deps: Record<string, string> = {
-    ...pkg.dependencies,
-    ...pkg.devDependencies,
+    ...pkg.dependencies as Record<string, string>,
+    ...pkg.devDependencies as Record<string, string>,
   }
 
   const results: LocalDependency[] = []
@@ -508,11 +506,11 @@ export interface LocalPackageInfo {
  * Read package info from a local path (for link: deps)
  */
 export function readLocalPackageInfo(localPath: string): LocalPackageInfo | null {
-  const pkgPath = join(localPath, 'package.json')
-  if (!existsSync(pkgPath))
+  const result = readPackageJsonSafe(join(localPath, 'package.json'))
+  if (!result)
     return null
 
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+  const pkg = result.parsed as Record<string, any>
 
   let repoUrl: string | undefined
   if (pkg.repository?.url) {
