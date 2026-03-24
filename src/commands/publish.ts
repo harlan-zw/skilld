@@ -1,6 +1,6 @@
 import type { OptimizeModel } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative } from 'pathe'
