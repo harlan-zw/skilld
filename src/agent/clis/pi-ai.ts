@@ -12,9 +12,10 @@
 import type { AssistantMessage, Message, ToolCall } from '@mariozechner/pi-ai'
 import type { SkillSection } from '../prompts/index.ts'
 import type { StreamProgress } from './types.ts'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import { getEnvApiKey, getModel, getModels, getProviders, streamSimple } from '@mariozechner/pi-ai'
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from '@mariozechner/pi-ai/oauth'
 import { Type } from '@sinclair/typebox'
@@ -315,27 +316,88 @@ const TOOLS = [
 ]
 
 const MAX_TOOL_TURNS = 30
-const ALLOWED_CMD_RE = /^(?:skilld\s|ls\s|cat\s|find\s)/
+const SAFE_COMMANDS = new Set(['skilld', 'ls', 'cat', 'find'])
+const SHELL_META_RE = /[;&|`$()<>]/
+
+/** Resolve a path safely within skilldDir, blocking traversal */
+function resolveSandboxedPath(p: string, skilldDir: string): string {
+  const cleaned = String(p).replace(/^\.\/\.skilld\//, './').replace(/^\.skilld\//, './').replace(/^\.\//, '')
+  const resolved = resolve(skilldDir, cleaned)
+  if (!resolved.startsWith(`${skilldDir}/`) && resolved !== skilldDir)
+    throw new Error(`Path traversal blocked: ${p}`)
+  return resolved
+}
+
+/** Match a file path against a glob pattern using simple segment matching (no regex from user input) */
+function globMatch(filePath: string, pattern: string): boolean {
+  const segments = pattern.split('**')
+  if (segments.length === 1) {
+    // No **, simple wildcard match: split on * and check containment in order
+    const parts = pattern.split('*')
+    if (parts.length === 1)
+      return filePath === pattern
+    let pos = 0
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]!
+      if (!part)
+        continue
+      const idx = filePath.indexOf(part, pos)
+      if (idx === -1)
+        return false
+      if (i === 0 && idx !== 0)
+        return false // first segment must match from start
+      pos = idx + part.length
+    }
+    if (parts.at(-1) !== '')
+      return pos === filePath.length // last segment must match to end
+    return true
+  }
+  // ** present: match any depth between segments
+  let remaining = filePath
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!
+    if (!seg)
+      continue
+    // Replace single * within each segment for matching
+    const segParts = seg.split('*')
+    let pos = 0
+    let matched = false
+    for (let attempt = remaining.indexOf(segParts[0]!, 0); attempt !== -1; attempt = remaining.indexOf(segParts[0]!, attempt + 1)) {
+      pos = attempt
+      matched = true
+      for (const sp of segParts) {
+        if (!sp)
+          continue
+        const idx = remaining.indexOf(sp, pos)
+        if (idx === -1) {
+          matched = false
+          break
+        }
+        pos = idx + sp.length
+      }
+      if (matched)
+        break
+    }
+    if (!matched)
+      return false
+    remaining = remaining.slice(pos)
+  }
+  return true
+}
 
 /** Execute a tool call against the .skilld/ directory */
 function executeTool(toolCall: ToolCall, skilldDir: string): string {
   const args = toolCall.arguments as Record<string, unknown>
-  const resolvePath = (p: string) => {
-    // Resolve relative paths against skilldDir
-    const cleaned = String(p).replace(/^\.\/\.skilld\//, './').replace(/^\.skilld\//, './').replace(/^\.\//, '')
-    return join(skilldDir, cleaned)
-  }
 
   switch (toolCall.name) {
     case 'Read': {
-      const filePath = resolvePath(args.path as string)
+      const filePath = resolveSandboxedPath(args.path as string, skilldDir)
       if (!existsSync(filePath))
         return `Error: file not found: ${args.path}`
       return sanitizeMarkdown(readFileSync(filePath, 'utf-8'))
     }
     case 'Glob': {
       const pattern = String(args.pattern).replace(/^\.\/\.skilld\//, './').replace(/^\.skilld\//, './').replace(/^\.\//, '')
-      // Simple glob: list directory recursively and filter
       const results: string[] = []
       const walkDir = (dir: string, prefix: string) => {
         if (!existsSync(dir))
@@ -347,25 +409,24 @@ function executeTool(toolCall: ToolCall, skilldDir: string): string {
           else results.push(`./.skilld/${relPath}`)
         }
       }
-      // Match against the base directory from the pattern
       const baseDir = pattern.split('*')[0]?.replace(/\/$/, '') ?? ''
       walkDir(join(skilldDir, baseDir), baseDir)
-      const globRe = new RegExp(`^${pattern.replace(/\./g, '\\.').replace(/\*\*/g, '.*').replace(/(?<!\.)(\*)/g, '[^/]*')}$`)
-      const matched = results.filter(r => globRe.test(r.replace(/^\.\/\.skilld\//, '')))
+      const matched = results.filter(r => globMatch(r.replace(/^\.\/\.skilld\//, ''), pattern))
       return matched.length > 0 ? matched.join('\n') : `No files matching: ${args.pattern}`
     }
     case 'Write': {
-      const filePath = resolvePath(args.path as string)
-      writeFileSync(filePath, String(args.content))
+      const filePath = resolveSandboxedPath(args.path as string, skilldDir)
+      writeFileSync(filePath, sanitizeMarkdown(String(args.content)))
       return 'File written successfully.'
     }
     case 'Bash': {
-      const cmd = String(args.command)
-      // Only allow safe commands
-      if (!ALLOWED_CMD_RE.test(cmd))
+      const cmd = String(args.command).trim()
+      const parts = cmd.split(/\s+/)
+      const bin = parts[0] ?? ''
+      if (!SAFE_COMMANDS.has(bin) || SHELL_META_RE.test(cmd))
         return `Error: command not allowed. Only skilld, ls, cat, find commands are permitted.`
       try {
-        return execSync(cmd, { cwd: skilldDir, timeout: 15_000, encoding: 'utf-8', maxBuffer: 512 * 1024 }).trim()
+        return execFileSync(bin, parts.slice(1), { cwd: skilldDir, timeout: 15_000, encoding: 'utf-8', maxBuffer: 512 * 1024 }).trim()
       }
       catch (err) {
         return `Error: ${(err as Error).message}`
@@ -417,6 +478,7 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
   }]
 
   let text = ''
+  let completed = false
   let totalUsage: { input: number, output: number } | undefined
   let totalCost: number | undefined
   let lastWriteContent = ''
@@ -436,6 +498,7 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
     })
 
     let assistantMessage: AssistantMessage | undefined
+    let turnText = ''
 
     for await (const event of eventStream) {
       if (opts.signal?.aborted)
@@ -443,8 +506,8 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
 
       switch (event.type) {
         case 'text_delta':
-          text += event.delta
-          opts.onProgress?.({ chunk: event.delta, type: 'text', text, reasoning: '', section: opts.section })
+          turnText += event.delta
+          opts.onProgress?.({ chunk: event.delta, type: 'text', text: turnText, reasoning: '', section: opts.section })
           break
         case 'toolcall_end': {
           const tc = event.toolCall
@@ -484,8 +547,11 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
 
     // Check if there are tool calls to execute
     const toolCalls = assistantMessage.content.filter((c): c is ToolCall => c.type === 'toolCall')
-    if (toolCalls.length === 0)
-      break // Model is done, final text response
+    if (toolCalls.length === 0) {
+      text = turnText
+      completed = true
+      break
+    }
 
     // Execute tool calls and add results
     for (const tc of toolCalls) {
@@ -503,6 +569,9 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
       })
     }
   }
+
+  if (!completed)
+    throw new Error(`pi-ai exceeded ${MAX_TOOL_TURNS} tool turns without completing`)
 
   // Prefer text output, fall back to last Write content
   const finalText = text || lastWriteContent
