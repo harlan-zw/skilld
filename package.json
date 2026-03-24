@@ -34,7 +34,7 @@
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "bin": {
-    "skilld": "./dist/cli.mjs"
+    "skilld": "./dist/cli-entry.mjs"
   },
   "files": [
     "dist",
@@ -53,7 +53,7 @@
     "test:run": "vitest run",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
-    "prepare": "skilld prepare"
+    "prepare": "test -z \"$CI\" && skilld prepare || true"
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",
