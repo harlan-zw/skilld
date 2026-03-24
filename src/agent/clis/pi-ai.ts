@@ -15,7 +15,7 @@ import type { StreamProgress } from './types.ts'
 import { execSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { getEnvApiKey, getModel, getModels, getProviders, stream as piStream } from '@mariozechner/pi-ai'
+import { getEnvApiKey, getModel, getModels, getProviders, streamSimple } from '@mariozechner/pi-ai'
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from '@mariozechner/pi-ai/oauth'
 import { Type } from '@sinclair/typebox'
 import { join } from 'pathe'
@@ -425,11 +425,12 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
     if (opts.signal?.aborted)
       throw new Error('pi-ai request timed out')
 
-    const eventStream = piStream(model, {
+    const eventStream = streamSimple(model, {
       systemPrompt: 'You are a technical documentation expert generating SKILL.md sections for AI agent skills. Follow the format instructions exactly. Use the provided tools to explore reference files in ./.skilld/ before writing your output.',
       messages,
       tools: TOOLS,
     }, {
+      reasoning: turn === 0 ? 'medium' : undefined,
       maxTokens: 16_384,
       ...(apiKey ? { apiKey } : {}),
     })
