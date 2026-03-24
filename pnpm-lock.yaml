@@ -21,6 +21,9 @@ catalogs:
     giget:
       specifier: ^3.1.2
       version: 3.1.2
+    jsonc-parser:
+      specifier: ^3.3.1
+      version: 3.3.1
     mdream:
       specifier: ^1.0.3
       version: 1.0.3
@@ -144,6 +147,9 @@ importers:
       giget:
         specifier: 'catalog:'
         version: 3.1.2
+      jsonc-parser:
+        specifier: 'catalog:'
+        version: 3.3.1
       log-update:
         specifier: catalog:deps
         version: 7.2.0
