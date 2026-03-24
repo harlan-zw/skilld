@@ -36,7 +36,7 @@ import {
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs, suggestPrepareHook } from '../cli-helpers.ts'
 import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
-import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
+import { parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { getProjectState } from '../core/skills.ts'
@@ -546,6 +546,21 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       syncedAt: new Date().toISOString().split('T')[0],
       generator: 'skilld',
     })
+
+    // Clean up duplicate lockfile entries for the same package (e.g. renamed skill dirs)
+    const lock = readLock(baseDir)
+    if (lock) {
+      for (const [name, info] of Object.entries(lock.skills)) {
+        if (name === skillDirName)
+          continue
+        if (info.packageName === packageName || parsePackages(info.packages).some(p => p.name === packageName)) {
+          removeLockEntry(baseDir, name)
+          const staleDir = join(baseDir, name)
+          if (existsSync(staleDir))
+            rmSync(staleDir, { recursive: true })
+        }
+      }
+    }
   }
 
   // Read back merged packages from lockfile for SKILL.md generation
@@ -886,11 +901,11 @@ export const updateCommandDef = defineCommand({
     if (args.background) {
       const { spawn } = await import('node:child_process')
       const updateArgs = ['update', ...(args.package ? [args.package] : []), ...(args.agent ? ['--agent', args.agent] : []), ...(args.model ? ['--model', args.model as string] : [])]
-      const child = spawn(process.execPath, [process.argv[1], ...updateArgs], {
+      const child = spawn(process.execPath, [process.argv[1]!, ...updateArgs], {
         cwd,
         detached: true,
         stdio: 'ignore',
-      })
+      }) as import('node:child_process').ChildProcess
       child.unref()
       return
     }

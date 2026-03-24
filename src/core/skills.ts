@@ -142,18 +142,28 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
   const localDeps = await readLocalDependencies(cwd).catch(() => [])
   const deps = new Map(localDeps.map(d => [d.name, d.version]))
 
-  // Build skill name -> entry map (for lookup by package name)
-  const skillByName = new Map(skills.map(s => [s.name, s]))
-
-  // Secondary lookup: packageName from lockfile (shipped skills have different names)
-  // Also includes all packages from multi-package skills
+  // Build unified lookup: packageName -> best skill entry
+  // When multiple skills claim the same package, prefer the one with the newer version
   const skillByPkgName = new Map<string, SkillEntry>()
+  const setBestSkill = (key: string, s: SkillEntry) => {
+    const existing = skillByPkgName.get(key)
+    if (!existing) {
+      skillByPkgName.set(key, s)
+      return
+    }
+    // Prefer the skill with the newer version (more recently synced)
+    if (s.info?.version && existing.info?.version && semverValid(s.info.version) && semverValid(existing.info.version) && semverGt(s.info.version, existing.info.version))
+      skillByPkgName.set(key, s)
+  }
   for (const s of skills) {
     if (s.info?.packageName)
-      skillByPkgName.set(s.info.packageName, s)
+      setBestSkill(s.info.packageName, s)
     for (const pkg of parsePackages(s.info?.packages))
-      skillByPkgName.set(pkg.name, s)
+      setBestSkill(pkg.name, s)
   }
+
+  // Also build name-based lookups, but defer to pkgName map for conflicts
+  const skillByName = new Map(skills.map(s => [s.name, s]))
 
   const missing: string[] = []
   const outdated: SkillEntry[] = []
@@ -163,7 +173,8 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
   for (const [pkgName, version] of deps) {
     // Normalize package name (e.g., @scope/pkg -> scope-pkg)
     const normalizedName = pkgName.replace(/^@/, '').replace(/\//g, '-')
-    const skill = skillByName.get(`${normalizedName}-skilld`) || skillByName.get(normalizedName) || skillByName.get(pkgName) || skillByPkgName.get(pkgName)
+    // Prefer packageName-based lookup (handles duplicates correctly), fall back to name-based
+    const skill = skillByPkgName.get(pkgName) || skillByName.get(`${normalizedName}-skilld`) || skillByName.get(normalizedName) || skillByName.get(pkgName)
 
     if (!skill) {
       missing.push(pkgName)
