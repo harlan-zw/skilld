@@ -255,10 +255,14 @@ function fetchIssuesByState(
   }
   else if (state === 'closed') {
     if (releasedAt) {
-      // For older versions, include issues closed up to 6 months after release
-      const date = new Date(releasedAt)
-      date.setMonth(date.getMonth() + 6)
-      datePart = `+closed:<=${isoDate(date.toISOString())}`
+      // Lower bound: skip issues already fixed before this release
+      datePart = `+closed:>=${isoDate(releasedAt)}`
+      // Upper cap for old versions so we don't pull hundreds of issues
+      const cap = new Date(releasedAt)
+      cap.setMonth(cap.getMonth() + 6)
+      if (cap < new Date()) {
+        datePart += `+closed:<=${isoDate(cap.toISOString())}`
+      }
     }
     else {
       datePart = `+closed:>${oneYearAgo()}`
