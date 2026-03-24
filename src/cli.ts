@@ -512,7 +512,7 @@ const main = defineCommand({
       )
 
       // Team advice: suggest prepare hook + lockfile
-      suggestPrepareHook(cwd)
+      await suggestPrepareHook(cwd)
       return
     }
 
