@@ -9,15 +9,18 @@
  * Reference content is inlined into the prompt via portabilizePrompt().
  */
 
+import type { AssistantMessage, Message, ToolCall } from '@mariozechner/pi-ai'
 import type { SkillSection } from '../prompts/index.ts'
 import type { StreamProgress } from './types.ts'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { resolve } from 'node:path'
 import { getEnvApiKey, getModel, getModels, getProviders, streamSimple } from '@mariozechner/pi-ai'
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from '@mariozechner/pi-ai/oauth'
+import { Type } from '@sinclair/typebox'
 import { join } from 'pathe'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
-import { portabilizePrompt } from '../prompts/index.ts'
 
 export function isPiAiModel(model: string): boolean {
   return model.startsWith('pi:')
@@ -281,93 +284,157 @@ export function getAvailablePiAiModels(): PiAiModelInfo[] {
   return available
 }
 
-// ── Reference inlining ───────────────────────────────────────────────
+// ── Tool definitions for agentic mode ────────────────────────────────
 
-const REFERENCE_SUBDIRS = ['docs', 'issues', 'discussions', 'releases']
-const MAX_REFERENCE_CHARS = 150_000 // ~37k tokens
+const TOOLS = [
+  {
+    name: 'Read',
+    description: 'Read a file. Path is relative to the working directory (e.g. "./.skilld/docs/api.md").',
+    parameters: Type.Object({ path: Type.String({ description: 'File path to read' }) }),
+  },
+  {
+    name: 'Glob',
+    description: 'List files matching a glob pattern (e.g. "./.skilld/docs/*.md"). Returns newline-separated paths.',
+    parameters: Type.Object({
+      pattern: Type.String({ description: 'Glob pattern' }),
+      no_ignore: Type.Optional(Type.Boolean({ description: 'Include gitignored files' })),
+    }),
+  },
+  {
+    name: 'Write',
+    description: 'Write content to a file.',
+    parameters: Type.Object({
+      path: Type.String({ description: 'File path to write' }),
+      content: Type.String({ description: 'File content' }),
+    }),
+  },
+  {
+    name: 'Bash',
+    description: 'Run a shell command. Use for `skilld search`, `skilld validate`, etc.',
+    parameters: Type.Object({ command: Type.String({ description: 'Shell command to run' }) }),
+  },
+]
 
-/** Read reference files from .skilld/ and format as inline context */
-function collectReferenceContent(skillDir: string): string {
-  const skilldDir = join(skillDir, '.skilld')
-  if (!existsSync(skilldDir))
-    return ''
+const MAX_TOOL_TURNS = 30
+const SAFE_COMMANDS = new Set(['skilld', 'ls', 'cat', 'find'])
+const SHELL_META_RE = /[;&|`$()<>]/
 
-  const files: Array<{ path: string, content: string }> = []
-  let totalChars = 0
+/** Resolve a path safely within skilldDir, blocking traversal */
+function resolveSandboxedPath(p: string, skilldDir: string): string {
+  const cleaned = String(p).replace(/^\.\/\.skilld\//, './').replace(/^\.skilld\//, './').replace(/^\.\//, '')
+  const resolved = resolve(skilldDir, cleaned)
+  if (!resolved.startsWith(`${skilldDir}/`) && resolved !== skilldDir)
+    throw new Error(`Path traversal blocked: ${p}`)
+  return resolved
+}
 
-  for (const subdir of REFERENCE_SUBDIRS) {
-    const dirPath = join(skilldDir, subdir)
-    if (!existsSync(dirPath))
+/** Match a file path against a glob pattern using simple segment matching (no regex from user input) */
+function globMatch(filePath: string, pattern: string): boolean {
+  const segments = pattern.split('**')
+  if (segments.length === 1) {
+    // No **, simple wildcard match: split on * and check containment in order
+    const parts = pattern.split('*')
+    if (parts.length === 1)
+      return filePath === pattern
+    let pos = 0
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]!
+      if (!part)
+        continue
+      const idx = filePath.indexOf(part, pos)
+      if (idx === -1)
+        return false
+      if (i === 0 && idx !== 0)
+        return false // first segment must match from start
+      pos = idx + part.length
+    }
+    if (parts.at(-1) !== '')
+      return pos === filePath.length // last segment must match to end
+    return true
+  }
+  // ** present: match any depth between segments
+  let remaining = filePath
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]!
+    if (!seg)
       continue
-
-    const indexPath = join(dirPath, '_INDEX.md')
-    if (existsSync(indexPath) && totalChars < MAX_REFERENCE_CHARS) {
-      const content = sanitizeMarkdown(readFileSync(indexPath, 'utf-8'))
-      if (totalChars + content.length <= MAX_REFERENCE_CHARS) {
-        files.push({ path: `references/${subdir}/_INDEX.md`, content })
-        totalChars += content.length
-      }
-    }
-
-    const entries = readdirSync(dirPath, { recursive: true })
-    for (const entry of entries) {
-      if (totalChars >= MAX_REFERENCE_CHARS)
-        break
-      const entryStr = String(entry)
-      if (!entryStr.endsWith('.md') || entryStr === '_INDEX.md')
-        continue
-      const fullPath = join(dirPath, entryStr)
-      if (!existsSync(fullPath))
-        continue
-      try {
-        const content = sanitizeMarkdown(readFileSync(fullPath, 'utf-8'))
-        if (totalChars + content.length > MAX_REFERENCE_CHARS)
+    // Replace single * within each segment for matching
+    const segParts = seg.split('*')
+    let pos = 0
+    let matched = false
+    for (let attempt = remaining.indexOf(segParts[0]!, 0); attempt !== -1; attempt = remaining.indexOf(segParts[0]!, attempt + 1)) {
+      pos = attempt
+      matched = true
+      for (const sp of segParts) {
+        if (!sp)
           continue
-        files.push({ path: `references/${subdir}/${entryStr}`, content })
-        totalChars += content.length
-      }
-      catch {}
-    }
-  }
-
-  // Read pkg/README.md if available and within budget
-  const readmePath = join(skilldDir, 'pkg', 'README.md')
-  if (existsSync(readmePath) && totalChars < MAX_REFERENCE_CHARS) {
-    const content = sanitizeMarkdown(readFileSync(readmePath, 'utf-8'))
-    if (totalChars + content.length <= MAX_REFERENCE_CHARS) {
-      files.push({ path: 'references/pkg/README.md', content })
-      totalChars += content.length
-    }
-  }
-
-  // Read type definitions if present
-  const pkgDir = join(skilldDir, 'pkg')
-  if (existsSync(pkgDir) && totalChars < MAX_REFERENCE_CHARS) {
-    try {
-      const pkgEntries = readdirSync(pkgDir, { recursive: true })
-      for (const entry of pkgEntries) {
-        const entryStr = String(entry)
-        if (!entryStr.endsWith('.d.ts'))
-          continue
-        const fullPath = join(pkgDir, entryStr)
-        if (!existsSync(fullPath))
-          continue
-        const content = sanitizeMarkdown(readFileSync(fullPath, 'utf-8'))
-        if (totalChars + content.length <= MAX_REFERENCE_CHARS) {
-          files.push({ path: `references/pkg/${entryStr}`, content })
-          totalChars += content.length
+        const idx = remaining.indexOf(sp, pos)
+        if (idx === -1) {
+          matched = false
+          break
         }
-        break // only first .d.ts
+        pos = idx + sp.length
+      }
+      if (matched)
+        break
+    }
+    if (!matched)
+      return false
+    remaining = remaining.slice(pos)
+  }
+  return true
+}
+
+/** Execute a tool call against the .skilld/ directory */
+function executeTool(toolCall: ToolCall, skilldDir: string): string {
+  const args = toolCall.arguments as Record<string, unknown>
+
+  switch (toolCall.name) {
+    case 'Read': {
+      const filePath = resolveSandboxedPath(args.path as string, skilldDir)
+      if (!existsSync(filePath))
+        return `Error: file not found: ${args.path}`
+      return sanitizeMarkdown(readFileSync(filePath, 'utf-8'))
+    }
+    case 'Glob': {
+      const pattern = String(args.pattern).replace(/^\.\/\.skilld\//, './').replace(/^\.skilld\//, './').replace(/^\.\//, '')
+      const results: string[] = []
+      const walkDir = (dir: string, prefix: string) => {
+        if (!existsSync(dir))
+          return
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const relPath = prefix ? `${prefix}/${entry.name}` : entry.name
+          if (entry.isDirectory())
+            walkDir(join(dir, entry.name), relPath)
+          else results.push(`./.skilld/${relPath}`)
+        }
+      }
+      const baseDir = pattern.split('*')[0]?.replace(/\/$/, '') ?? ''
+      walkDir(join(skilldDir, baseDir), baseDir)
+      const matched = results.filter(r => globMatch(r.replace(/^\.\/\.skilld\//, ''), pattern))
+      return matched.length > 0 ? matched.join('\n') : `No files matching: ${args.pattern}`
+    }
+    case 'Write': {
+      const filePath = resolveSandboxedPath(args.path as string, skilldDir)
+      writeFileSync(filePath, sanitizeMarkdown(String(args.content)))
+      return 'File written successfully.'
+    }
+    case 'Bash': {
+      const cmd = String(args.command).trim()
+      const parts = cmd.split(/\s+/)
+      const bin = parts[0] ?? ''
+      if (!SAFE_COMMANDS.has(bin) || SHELL_META_RE.test(cmd))
+        return `Error: command not allowed. Only skilld, ls, cat, find commands are permitted.`
+      try {
+        return execFileSync(bin, parts.slice(1), { cwd: skilldDir, timeout: 15_000, encoding: 'utf-8', maxBuffer: 512 * 1024 }).trim()
+      }
+      catch (err) {
+        return `Error: ${(err as Error).message}`
       }
     }
-    catch {}
+    default:
+      return `Unknown tool: ${toolCall.name}`
   }
-
-  if (files.length === 0)
-    return ''
-
-  const blocks = files.map(f => `<file path="${f.path}">\n${f.content.replaceAll('</file>', '&lt;/file&gt;').replaceAll('</reference-files>', '&lt;/reference-files&gt;')}\n</file>`)
-  return `<reference-files>\n${blocks.join('\n')}\n</reference-files>`
 }
 
 // ── Section optimization ─────────────────────────────────────────────
@@ -383,11 +450,13 @@ export interface PiAiSectionOptions {
 
 export interface PiAiSectionResult {
   text: string
+  /** The raw prompt sent to the model */
+  fullPrompt: string
   usage?: { input: number, output: number }
   cost?: number
 }
 
-/** Optimize a single section using pi-ai direct API */
+/** Optimize a single section using pi-ai agentic API with tool use */
 export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiAiSectionResult> {
   const parsed = parsePiAiModelId(opts.model)
   if (!parsed)
@@ -395,51 +464,117 @@ export async function optimizeSectionPiAi(opts: PiAiSectionOptions): Promise<PiA
 
   const model = getModel(parsed.provider as any, parsed.modelId as any)
   const apiKey = await resolveApiKey(parsed.provider)
+  const skilldDir = join(opts.skillDir, '.skilld')
 
-  // Build non-agentic prompt with inlined references
-  const portablePrompt = portabilizePrompt(opts.prompt, opts.section)
-  const references = collectReferenceContent(opts.skillDir)
-  const fullPrompt = references
-    ? `${portablePrompt}\n\n## Reference Content\n\nThe following files are provided inline for your reference:\n\n${references}`
-    : portablePrompt
+  // Use the raw prompt (references tool names like Read, Glob, Write, Bash)
+  const fullPrompt = opts.prompt
 
   opts.onProgress?.({ chunk: '[starting...]', type: 'reasoning', text: '', reasoning: '', section: opts.section })
 
-  const stream = streamSimple(model, {
-    systemPrompt: 'You are a technical documentation expert generating SKILL.md sections for AI agent skills. Output clean, structured markdown following the format instructions exactly.',
-    messages: [{
-      role: 'user' as const,
-      content: [{ type: 'text' as const, text: fullPrompt }],
-      timestamp: Date.now(),
-    }],
-  }, {
-    reasoning: 'medium',
-    maxTokens: 16_384,
-    ...(apiKey ? { apiKey } : {}),
-  })
+  const messages: Message[] = [{
+    role: 'user' as const,
+    content: [{ type: 'text' as const, text: fullPrompt }],
+    timestamp: Date.now(),
+  }]
 
   let text = ''
-  let usage: { input: number, output: number } | undefined
-  let cost: number | undefined
+  let completed = false
+  let totalUsage: { input: number, output: number } | undefined
+  let totalCost: number | undefined
+  let lastWriteContent = ''
 
-  for await (const event of stream) {
+  for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
     if (opts.signal?.aborted)
       throw new Error('pi-ai request timed out')
-    switch (event.type) {
-      case 'text_delta':
-        text += event.delta
-        opts.onProgress?.({ chunk: event.delta, type: 'text', text, reasoning: '', section: opts.section })
-        break
-      case 'done':
-        if (event.message?.usage) {
-          usage = { input: event.message.usage.input, output: event.message.usage.output }
-          cost = event.message.usage.cost?.total
+
+    const eventStream = streamSimple(model, {
+      systemPrompt: 'You are a technical documentation expert generating SKILL.md sections for AI agent skills. Follow the format instructions exactly. Use the provided tools to explore reference files in ./.skilld/ before writing your output.',
+      messages,
+      tools: TOOLS,
+    }, {
+      reasoning: turn === 0 ? 'medium' : undefined,
+      maxTokens: 16_384,
+      ...(apiKey ? { apiKey } : {}),
+    })
+
+    let assistantMessage: AssistantMessage | undefined
+    let turnText = ''
+
+    for await (const event of eventStream) {
+      if (opts.signal?.aborted)
+        throw new Error('pi-ai request timed out')
+
+      switch (event.type) {
+        case 'text_delta':
+          turnText += event.delta
+          opts.onProgress?.({ chunk: event.delta, type: 'text', text: turnText, reasoning: '', section: opts.section })
+          break
+        case 'toolcall_end': {
+          const tc = event.toolCall
+          const hint = tc.name === 'Read' || tc.name === 'Write'
+            ? `[${tc.name}: ${tc.arguments.path}]`
+            : tc.name === 'Bash'
+              ? `[${tc.name}: ${tc.arguments.command}]`
+              : `[${tc.name}: ${tc.arguments.pattern}]`
+          opts.onProgress?.({ chunk: hint, type: 'reasoning', text: '', reasoning: hint, section: opts.section })
+          break
         }
-        break
-      case 'error':
-        throw new Error(event.error?.errorMessage ?? 'pi-ai stream error')
+        case 'done':
+          assistantMessage = event.message
+          break
+        case 'error':
+          throw new Error(event.error?.errorMessage ?? 'pi-ai stream error')
+      }
+    }
+
+    if (!assistantMessage)
+      throw new Error('pi-ai stream ended without a message')
+
+    // Accumulate usage across turns
+    if (assistantMessage.usage) {
+      if (totalUsage) {
+        totalUsage.input += assistantMessage.usage.input
+        totalUsage.output += assistantMessage.usage.output
+      }
+      else {
+        totalUsage = { input: assistantMessage.usage.input, output: assistantMessage.usage.output }
+      }
+      totalCost = (totalCost ?? 0) + (assistantMessage.usage.cost?.total ?? 0)
+    }
+
+    // Add assistant message to conversation
+    messages.push(assistantMessage)
+
+    // Check if there are tool calls to execute
+    const toolCalls = assistantMessage.content.filter((c): c is ToolCall => c.type === 'toolCall')
+    if (toolCalls.length === 0) {
+      text = turnText
+      completed = true
+      break
+    }
+
+    // Execute tool calls and add results
+    for (const tc of toolCalls) {
+      const result = executeTool(tc, skilldDir)
+      // Track Write tool content for output fallback
+      if (tc.name === 'Write')
+        lastWriteContent = String(tc.arguments.content)
+      messages.push({
+        role: 'toolResult' as const,
+        toolCallId: tc.id,
+        toolName: tc.name,
+        content: [{ type: 'text' as const, text: result }],
+        isError: result.startsWith('Error:'),
+        timestamp: Date.now(),
+      })
     }
   }
 
-  return { text, usage, cost }
+  if (!completed)
+    throw new Error(`pi-ai exceeded ${MAX_TOOL_TURNS} tool turns without completing`)
+
+  // Prefer text output, fall back to last Write content
+  const finalText = text || lastWriteContent
+
+  return { text: finalText, fullPrompt, usage: totalUsage, cost: totalCost }
 }

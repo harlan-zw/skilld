@@ -70,7 +70,7 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
     }
   }
 
-  return ({ type, chunk, section }) => {
+  return ({ type, chunk, text, section }) => {
     if (type === 'text') {
       const key = section ?? ''
       const now = Date.now()
@@ -78,11 +78,21 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       if (now - last < TEXT_THROTTLE_MS)
         return
       lastTextEmit.set(key, now)
-      emit(`${section ? `\x1B[90m[${section}]\x1B[0m ` : ''}Writing...`)
+      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+      // Count bullet items in accumulated text for meaningful progress
+      const items = text ? (text.match(/^- (?:BREAKING|DEPRECATED|NEW|CHANGED|REMOVED|Use |Do |Set |Add |Avoid |Always |Never |Prefer |Check |Ensure )/gm)?.length ?? 0) : 0
+      emit(items > 0 ? `${prefix}Writing... \x1B[90m(${items} items)\x1B[0m` : `${prefix}Writing...`)
       return
     }
     if (type !== 'reasoning' || !chunk.startsWith('['))
       return
+
+    // Handle status messages like [starting...], [retrying...], [cached]
+    if (/^\[(?:starting|retrying|cached)/.test(chunk)) {
+      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+      emit(`${prefix}${chunk.slice(1, -1)}`)
+      return
+    }
 
     // Parse individual tool names and hints from "[Read: path]" or "[Read, Glob: path1, path2]"
     const match = chunk.match(/^\[([^:[\]]+)(?::\s(.+))?\]$/)
@@ -322,6 +332,12 @@ async function optimizeSectionViaPiAi(opts: {
   const { section, prompt, outputFile, skillDir, model, onProgress, timeout, debug } = opts
   const skilldDir = join(skillDir, '.skilld')
   const outputPath = join(skilldDir, outputFile)
+  const logsDir = join(skilldDir, 'logs')
+  const logName = section.toUpperCase().replace(/-/g, '_')
+
+  // Remove stale output so we don't read a leftover from a previous run
+  if (existsSync(outputPath))
+    unlinkSync(outputPath)
 
   // Write prompt for debugging (same as CLI path)
   writeFileSync(join(skilldDir, `PROMPT_${section}.md`), prompt)
@@ -334,11 +350,10 @@ async function optimizeSectionViaPiAi(opts: {
 
     const raw = result.text.trim()
 
-    // Debug logging
+    // Debug logging — match CLI path: actual prompt sent + raw output
     if (debug) {
-      const logsDir = join(skilldDir, 'logs')
-      const logName = section.toUpperCase().replace(/-/g, '_')
       mkdirSync(logsDir, { recursive: true })
+      writeFileSync(join(skilldDir, `PROMPT_${section}.md`), result.fullPrompt)
       if (raw)
         writeFileSync(join(logsDir, `${logName}.md`), raw)
     }
@@ -349,6 +364,7 @@ async function optimizeSectionViaPiAi(opts: {
 
     const content = cleanSectionOutput(raw)
 
+    // Always write cleaned content to output file (matches CLI path)
     if (content)
       writeFileSync(outputPath, content)
 
@@ -366,7 +382,13 @@ async function optimizeSectionViaPiAi(opts: {
     }
   }
   catch (err) {
-    return { section, content: '', wasOptimized: false, error: (err as Error).message }
+    // Write error to logs on failure (matches CLI stderr logging)
+    const errMsg = (err as Error).message
+    if (debug || errMsg) {
+      mkdirSync(logsDir, { recursive: true })
+      writeFileSync(join(logsDir, `${logName}.stderr.log`), errMsg)
+    }
+    return { section, content: '', wasOptimized: false, error: errMsg }
   }
 }
 
@@ -822,15 +844,11 @@ export function cleanSectionOutput(content: string): string {
     }
   }
 
-  // Strip raw code preamble before first section marker (defense against LLMs dumping source)
+  // Strip preamble before first section marker (LLM reasoning, fake tool calls, code dumps)
   // Section markers: ## heading, BREAKING/DEPRECATED/NEW labels
   const firstMarker = cleaned.match(/^(##\s|- (?:BREAKING|DEPRECATED|NEW): )/m)
   if (firstMarker?.index && firstMarker.index > 0) {
-    const preamble = cleaned.slice(0, firstMarker.index)
-    // Only strip if preamble looks like code (contains function/const/export/return patterns)
-    if (/\b(?:function|const |let |var |export |return |import |async |class )\b/.test(preamble)) {
-      cleaned = cleaned.slice(firstMarker.index).trim()
-    }
+    cleaned = cleaned.slice(firstMarker.index).trim()
   }
 
   // Strip duplicate section headings (LLM echoing the format example before real content)

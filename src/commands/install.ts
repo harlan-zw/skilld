@@ -546,7 +546,7 @@ async function enhanceRegenerated(
   customPrompt?: CustomPrompt,
   packages?: string,
 ): Promise<void> {
-  const llmLog = p.taskLog({ title: `Agent exploring ${pkgName}` })
+  const llmLog = p.taskLog({ title: `Agent exploring ${pkgName}`, limit: 3 })
 
   const docFiles = listReferenceFiles(skillDir)
   const globalCachePath = getCacheDir(pkgName, version)
