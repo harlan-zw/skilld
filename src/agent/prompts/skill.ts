@@ -46,7 +46,7 @@ export interface SkillOptions {
 
 export function generateSkillMd(opts: SkillOptions): string {
   const header = generatePackageHeader(opts)
-  const search = !opts.eject && opts.features?.search !== false ? generateSearchBlock(opts.name, opts.hasIssues, opts.hasReleases) : ''
+  const search = !opts.eject && opts.features?.search !== false ? generateSearchBlock(opts.name) : ''
   // Eject mode: rewrite .skilld/ paths to ./references/ in LLM-generated body
   // Then strip [source](./references/pkg/...) links since pkg/ is not ejected
   let body = opts.body
@@ -245,26 +245,12 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
   return lines.join('\n')
 }
 
-function generateSearchBlock(name: string, hasIssues?: boolean, hasReleases?: boolean): string {
+function generateSearchBlock(name: string): string {
   const cmd = resolveSkilldCommand()
-  const fallbackCmd = cmd === 'skilld' ? 'npx -y skilld' : 'skilld'
-  const examples = [
-    `${cmd} search "query" -p ${name}`,
-  ]
-  if (hasIssues)
-    examples.push(`${cmd} search "issues:error handling" -p ${name}`)
-  if (hasReleases)
-    examples.push(`${cmd} search "releases:deprecated" -p ${name}`)
 
   return `## Search
 
-Use \`${cmd} search\` instead of grepping \`.skilld/\` directories — hybrid semantic + keyword search across all indexed docs, issues, and releases. If \`${cmd}\` is unavailable, use \`${fallbackCmd} search\`.
-
-\`\`\`bash
-${examples.join('\n')}
-\`\`\`
-
-Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.`
+Use \`${cmd} search "query" -p ${name}\` instead of grepping \`.skilld/\` directories. Run \`${cmd} search --guide -p ${name}\` for full syntax, filters, and operators.`
 }
 
 function generateFooter(relatedSkills: string[]): string {

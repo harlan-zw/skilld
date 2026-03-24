@@ -133,17 +133,10 @@ function generateImportantBlock({ packageName, hasIssues, hasDiscussions, hasRel
   ].join('\n')
 
   const cmd = resolveSkilldCommand()
-  const fallbackCmd = cmd === 'skilld' ? 'npx -y skilld' : 'skilld'
   const searchBlock = features?.search !== false
     ? `\n\n## Search
 
-Use \`${cmd} search\` as your primary research tool — search before manually reading files. If \`${cmd}\` is unavailable, use \`${fallbackCmd} search\`.
-
-\`\`\`bash
-${cmd} search "<query>" -p ${packageName}
-${hasIssues ? `${cmd} search "issues:<query>" -p ${packageName}\n` : ''}${hasReleases ? `${cmd} search "releases:<query>" -p ${packageName}\n` : ''}\`\`\`
-
-Filters: \`docs:\`, \`issues:\`, \`releases:\` prefix narrows by source type.`
+Use \`${cmd} search "query" -p ${packageName}\` as your primary research tool — search before manually reading files. Run \`${cmd} search --guide -p ${packageName}\` for full syntax.`
     : ''
 
   return `**IMPORTANT:** Use these references${searchBlock}
