@@ -101,16 +101,28 @@ const DOCS_LABELS = new Set([
   'typo',
 ])
 
-/**
- * Check if a label contains any keyword from a set.
- * Handles emoji-prefixed labels like ":sparkles: feature request" or ":lady_beetle: bug".
- */
-function labelMatchesAny(label: string, keywords: Set<string>): boolean {
-  for (const keyword of keywords) {
-    if (label === keyword || label.includes(keyword))
-      return true
+/** Cache compiled word-boundary regexes per keyword set */
+const labelRegexCache = new WeakMap<Set<string>, RegExp>()
+
+function getLabelRegex(keywords: Set<string>): RegExp {
+  let re = labelRegexCache.get(keywords)
+  if (!re) {
+    const escaped = Array.from(keywords, k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    re = new RegExp(`\\b(?:${escaped.join('|')})\\b`)
+    labelRegexCache.set(keywords, re)
   }
-  return false
+  return re
+}
+
+/**
+ * Check if a label matches any keyword from a set using word boundaries.
+ * Handles emoji-prefixed labels like ":sparkles: feature request" or ":lady_beetle: bug"
+ * without false positives on substrings (e.g. "debug" should not match "bug").
+ */
+export function labelMatchesAny(label: string, keywords: Set<string>): boolean {
+  if (keywords.has(label))
+    return true
+  return getLabelRegex(keywords).test(label)
 }
 
 /**
