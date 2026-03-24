@@ -1428,7 +1428,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
       name: packageName,
       version,
       releasedAt: resolved.releasedAt,
-      dependencies: resolved.dependencies,
+
       distTags: resolved.distTags,
       body: optimized,
       relatedSkills,
