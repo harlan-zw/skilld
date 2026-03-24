@@ -576,13 +576,11 @@ async function enhanceRegenerated(
     const cwd = process.cwd()
     const pkgPath = resolvePkgDir(pkgName, cwd, version)
     let description: string | undefined
-    let dependencies: Record<string, string> | undefined
     if (pkgPath) {
       const pkgJsonPath = join(pkgPath, 'package.json')
       if (existsSync(pkgJsonPath)) {
         const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
         description = pkg.description
-        dependencies = pkg.dependencies
       }
     }
 
@@ -600,7 +598,6 @@ async function enhanceRegenerated(
       name: pkgName,
       version,
       description,
-      dependencies,
       body: optimized,
       relatedSkills: [],
       hasIssues,
@@ -659,13 +656,11 @@ function regenerateBaseSkillMd(
   // Read description + deps from local package.json
   const pkgPath = resolvePkgDir(pkgName, cwd, version)
   let description: string | undefined
-  let dependencies: Record<string, string> | undefined
   if (pkgPath) {
     const pkgJsonPath = join(pkgPath, 'package.json')
     if (existsSync(pkgJsonPath)) {
       const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
       description = pkg.description
-      dependencies = pkg.dependencies
     }
   }
 
@@ -696,7 +691,6 @@ function regenerateBaseSkillMd(
     name: pkgName,
     version,
     description,
-    dependencies,
     relatedSkills,
     hasIssues,
     hasDiscussions,
