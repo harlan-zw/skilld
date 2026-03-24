@@ -98,7 +98,7 @@ export function readLock(skillsDir: string): SkilldLock | null {
   }
   const lock = { skills }
   lockCache.set(skillsDir, lock)
-  return lock
+  return { skills: { ...lock.skills } }
 }
 
 function serializeLock(lock: SkilldLock): string {

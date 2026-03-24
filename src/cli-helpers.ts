@@ -441,11 +441,6 @@ export async function pickModel<T extends { provider: string, providerName: stri
 }
 
 /**
- * Prompt to add `skilld prepare` to package.json "prepare" script.
- * In non-interactive environments, falls back to an info log.
- * Returns true if the hook was added or already present.
- */
-/**
  * Check if the prepare hook is already installed in package.json.
  */
 export function hasPrepareHook(cwd: string = process.cwd()): boolean {
@@ -456,6 +451,11 @@ export function hasPrepareHook(cwd: string = process.cwd()): boolean {
   return typeof existing === 'string' && existing.includes('skilld')
 }
 
+/**
+ * Prompt to add `skilld prepare` to package.json "prepare" script.
+ * In non-interactive environments, falls back to an info log.
+ * Returns true if the hook was added or already present.
+ */
 export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<boolean> {
   const pkgJsonPath = join(cwd, 'package.json')
   const pkg = readPackageJsonSafe(pkgJsonPath)

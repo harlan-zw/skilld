@@ -44,8 +44,13 @@ export function hasCompletedWizard(): boolean {
 }
 
 export function readConfig(): SkilldConfig {
-  if (configCache)
-    return configCache
+  if (configCache) {
+    return {
+      ...configCache,
+      features: configCache.features ? { ...configCache.features } : undefined,
+      projects: configCache.projects ? [...configCache.projects] : undefined,
+    }
+  }
   if (!existsSync(CONFIG_PATH))
     return {}
 

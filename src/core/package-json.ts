@@ -29,12 +29,19 @@ export function readPackageJson(pkgPath: string): { raw: string, parsed: Record<
 }
 
 /**
- * Same as readPackageJson but returns null when the file is missing.
+ * Same as readPackageJson but returns null when the file is missing or unparseable.
  */
 export function readPackageJsonSafe(pkgPath: string): { raw: string, parsed: Record<string, unknown> } | null {
+  if (cache.has(pkgPath))
+    return cache.get(pkgPath)!
   if (!existsSync(pkgPath))
     return null
-  return readPackageJson(pkgPath)
+  try {
+    return readPackageJson(pkgPath)
+  }
+  catch {
+    return null
+  }
 }
 
 /**
