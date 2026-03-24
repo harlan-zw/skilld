@@ -40,6 +40,9 @@ skilld eject vue                    # Eject skill (portable, no symlinks)
 skilld eject vue --name vue         # Eject with custom skill dir name
 skilld eject vue --out ./dir/       # Eject to custom path
 skilld eject vue --from 2025-07-01  # Only releases/issues since date
+skilld author                       # Generate skill for npm publishing (monorepo-aware)
+skilld author -m haiku              # Author with specific LLM model
+skilld author -o ./custom/          # Author to custom output directory
 ```
 
 ## Architecture

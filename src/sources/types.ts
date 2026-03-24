@@ -74,4 +74,6 @@ export interface ResolveAttempt {
 export interface ResolveResult {
   package: ResolvedPackage | null
   attempts: ResolveAttempt[]
+  /** npm registry version, available even when doc resolution fails */
+  registryVersion?: string
 }
