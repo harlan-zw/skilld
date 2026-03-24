@@ -9,6 +9,12 @@
     "email": "harlan@harlanzw.com",
     "url": "https://harlanzw.com/"
   },
+  "contributors": [
+    {
+      "name": "Ori",
+      "url": "https://github.com/oritwoen"
+    }
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
