@@ -1,5 +1,6 @@
 import type { OptimizeModel } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
+import type { LlmConfig } from './sync-shared.ts'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
@@ -165,6 +166,8 @@ function resolveLocalDocs(
 ): { docsType: 'docs' | 'llms.txt' | 'readme', docSource: string } {
   const cachedDocs: Array<{ path: string, content: string }> = []
 
+  const cacheChangelog = () => cacheLocalChangelog(packageDir, packageName, version, monorepoRoot)
+
   // 1. Package-level docs/
   const docsDir = join(packageDir, 'docs')
   if (existsSync(docsDir)) {
@@ -173,7 +176,7 @@ function resolveLocalDocs(
       for (const f of mdFiles)
         cachedDocs.push({ path: `docs/${f.path}`, content: f.content })
       writeToCache(packageName, version, cachedDocs)
-      cacheLocalChangelog(packageDir, packageName, version)
+      cacheChangelog()
       return { docsType: 'docs', docSource: `local docs/ (${mdFiles.length} files)` }
     }
   }
@@ -188,43 +191,50 @@ function resolveLocalDocs(
           for (const f of mdFiles)
             cachedDocs.push({ path: `docs/${f.path}`, content: f.content })
           writeToCache(packageName, version, cachedDocs)
-          cacheLocalChangelog(packageDir, packageName, version)
+          cacheChangelog()
           return { docsType: 'docs', docSource: `monorepo ${candidate}/ (${mdFiles.length} files)` }
         }
       }
     }
   }
 
-  // 3. llms.txt
-  const llmsPath = join(packageDir, 'llms.txt')
-  if (existsSync(llmsPath)) {
-    const content = readFileSync(llmsPath, 'utf-8')
-    cachedDocs.push({ path: 'llms.txt', content })
-    writeToCache(packageName, version, cachedDocs)
-    cacheLocalChangelog(packageDir, packageName, version)
-    return { docsType: 'llms.txt', docSource: 'local llms.txt' }
+  // 3. llms.txt (package dir, then monorepo root)
+  for (const dir of [packageDir, monorepoRoot].filter(Boolean) as string[]) {
+    const llmsPath = join(dir, 'llms.txt')
+    if (existsSync(llmsPath)) {
+      cachedDocs.push({ path: 'llms.txt', content: readFileSync(llmsPath, 'utf-8') })
+      writeToCache(packageName, version, cachedDocs)
+      cacheChangelog()
+      const source = dir === packageDir ? 'local llms.txt' : 'monorepo llms.txt'
+      return { docsType: 'llms.txt', docSource: source }
+    }
   }
 
-  // 4. README.md
-  const readmeFile = readdirSync(packageDir).find(f => /^readme\.md$/i.test(f))
-  if (readmeFile) {
-    const content = readFileSync(join(packageDir, readmeFile), 'utf-8')
-    cachedDocs.push({ path: 'docs/README.md', content })
-    writeToCache(packageName, version, cachedDocs)
-    cacheLocalChangelog(packageDir, packageName, version)
-    return { docsType: 'readme', docSource: 'local README.md' }
+  // 4. README.md (package dir, then monorepo root)
+  for (const dir of [packageDir, monorepoRoot].filter(Boolean) as string[]) {
+    const readmeFile = readdirSync(dir).find(f => /^readme\.md$/i.test(f))
+    if (readmeFile) {
+      cachedDocs.push({ path: 'docs/README.md', content: readFileSync(join(dir, readmeFile), 'utf-8') })
+      writeToCache(packageName, version, cachedDocs)
+      cacheChangelog()
+      const source = dir === packageDir ? 'local README.md' : 'monorepo README.md'
+      return { docsType: 'readme', docSource: source }
+    }
   }
 
-  cacheLocalChangelog(packageDir, packageName, version)
+  cacheChangelog()
   return { docsType: 'readme', docSource: 'none' }
 }
 
-function cacheLocalChangelog(dir: string, packageName: string, version: string): void {
-  const changelogFile = ['CHANGELOG.md', 'changelog.md'].find(f => existsSync(join(dir, f)))
-  if (changelogFile) {
+function cacheLocalChangelog(dir: string, packageName: string, version: string, monorepoRoot?: string): void {
+  const candidates = ['CHANGELOG.md', 'changelog.md']
+  const changelogFile = candidates.find(f => existsSync(join(dir, f)))
+    || (monorepoRoot ? candidates.find(f => existsSync(join(monorepoRoot, f))) : undefined)
+  const changelogDir = changelogFile && existsSync(join(dir, changelogFile)) ? dir : monorepoRoot
+  if (changelogFile && changelogDir) {
     writeToCache(packageName, version, [{
       path: `releases/${changelogFile}`,
-      content: readFileSync(join(dir, changelogFile), 'utf-8'),
+      content: readFileSync(join(changelogDir, changelogFile), 'utf-8'),
     }])
   }
 }
@@ -307,18 +317,33 @@ function patchPackageJsonFiles(packageDir: string): void {
   const pkg = JSON.parse(raw)
 
   if (!Array.isArray(pkg.files)) {
-    // Create files array with common defaults
-    pkg.files = ['dist', 'skills']
-    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
-    p.log.success('Created `files` array in package.json with `["dist", "skills"]`. Verify this matches your package.')
+    p.log.warn('No `files` array in package.json. Add `"skills"` to your files array manually.')
     return
   }
 
   if (pkg.files.some((f: string) => f === 'skills' || f === 'skills/' || f === 'skills/**'))
     return
 
-  pkg.files.push('skills')
-  writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
+  // Targeted insertion: find the closing bracket of the files array and insert before it
+  // This preserves the original formatting (indentation, trailing newlines, etc.)
+  const filesMatch = raw.match(/"files"\s*:\s*\[([^\]]*)\]/)
+  if (!filesMatch) {
+    // Fallback: full rewrite
+    pkg.files.push('skills')
+    writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`)
+    p.log.success('Added `"skills"` to package.json files array')
+    return
+  }
+
+  const inner = filesMatch[1]
+  const trimmed = inner.trimEnd()
+  // Detect indentation from existing entries
+  const entryMatch = inner.match(/\n(\s+)"/)
+  const indent = entryMatch ? entryMatch[1] : '    '
+  const needsComma = trimmed.length > 0 && !trimmed.endsWith(',')
+  const insertion = `${needsComma ? ',' : ''}\n${indent}"skills"`
+  const patched = raw.replace(filesMatch[0], `"files": [${trimmed}${insertion}\n${indent.slice(2) || '  '}]`)
+  writeFileSync(pkgPath, patched)
   p.log.success('Added `"skills"` to package.json files array')
 }
 
@@ -332,8 +357,7 @@ async function authorSinglePackage(opts: {
   repoUrl?: string
   monorepoRoot?: string
   out?: string
-  model?: OptimizeModel
-  yes?: boolean
+  llmConfig?: LlmConfig | null
   force?: boolean
   debug?: boolean
 }): Promise<string | null> {
@@ -405,52 +429,49 @@ async function authorSinglePackage(opts: {
   writeFileSync(join(outDir, 'SKILL.md'), baseSkillMd)
   p.log.success(`Created base skill: ${relative(packageDir, outDir)}`)
 
-  // LLM enhancement
-  const globalConfig = readConfig()
-  if (!globalConfig.skipLlm && (!opts.yes || opts.model)) {
-    const llmConfig = await selectLlmConfig(opts.model)
-    if (llmConfig?.promptOnly) {
-      writePromptFiles({
-        packageName,
-        skillDir: outDir,
-        version,
-        hasIssues,
-        hasDiscussions,
-        hasReleases,
-        hasChangelog,
-        docsType,
-        hasShippedDocs: false,
-        pkgFiles: [],
-        sections: llmConfig.sections,
-        customPrompt: llmConfig.customPrompt,
-        features,
-      })
-    }
-    else if (llmConfig) {
-      p.log.step(getModelLabel(llmConfig.model))
-      await enhanceSkillWithLLM({
-        packageName,
-        version,
-        skillDir: outDir,
-        dirName: sanitizedName,
-        model: llmConfig.model,
-        resolved: { repoUrl: opts.repoUrl },
-        relatedSkills: [],
-        hasIssues,
-        hasDiscussions,
-        hasReleases,
-        hasChangelog,
-        docsType,
-        hasShippedDocs: false,
-        pkgFiles: [],
-        force: opts.force,
-        debug: opts.debug,
-        sections: llmConfig.sections,
-        customPrompt: llmConfig.customPrompt,
-        features,
-        eject: true,
-      })
-    }
+  // LLM enhancement (config resolved by caller)
+  const llmConfig = opts.llmConfig
+  if (llmConfig?.promptOnly) {
+    writePromptFiles({
+      packageName,
+      skillDir: outDir,
+      version,
+      hasIssues,
+      hasDiscussions,
+      hasReleases,
+      hasChangelog,
+      docsType,
+      hasShippedDocs: false,
+      pkgFiles: [],
+      sections: llmConfig.sections,
+      customPrompt: llmConfig.customPrompt,
+      features,
+    })
+  }
+  else if (llmConfig) {
+    p.log.step(getModelLabel(llmConfig.model))
+    await enhanceSkillWithLLM({
+      packageName,
+      version,
+      skillDir: outDir,
+      dirName: sanitizedName,
+      model: llmConfig.model,
+      resolved: { repoUrl: opts.repoUrl },
+      relatedSkills: [],
+      hasIssues,
+      hasDiscussions,
+      hasReleases,
+      hasChangelog,
+      docsType,
+      hasShippedDocs: false,
+      pkgFiles: [],
+      force: opts.force,
+      debug: opts.debug,
+      sections: llmConfig.sections,
+      customPrompt: llmConfig.customPrompt,
+      features,
+      eject: true,
+    })
   }
 
   // Clean up .skilld/ symlinks → eject references as real files
@@ -468,6 +489,13 @@ async function authorSinglePackage(opts: {
 
 // ── Main command ──
 
+async function resolveLlmConfig(model?: OptimizeModel, yes?: boolean): Promise<LlmConfig | null | undefined> {
+  const globalConfig = readConfig()
+  if (globalConfig.skipLlm || (yes && !model))
+    return undefined
+  return selectLlmConfig(model)
+}
+
 async function authorCommand(opts: {
   out?: string
   model?: OptimizeModel
@@ -483,6 +511,11 @@ async function authorCommand(opts: {
   if (monoPackages && monoPackages.length > 0) {
     p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m author \x1B[90m(monorepo: ${monoPackages.length} packages)\x1B[0m`)
 
+    if (opts.out) {
+      p.log.error('--out is not supported in monorepo mode (each package gets its own skills/ directory)')
+      return
+    }
+
     const selected = guard(await p.multiselect({
       message: 'Which packages should ship skills?',
       options: monoPackages.map(pkg => ({
@@ -495,6 +528,16 @@ async function authorCommand(opts: {
     if (selected.length === 0)
       return
 
+    // Resolve LLM config once for all packages
+    const llmConfig = await resolveLlmConfig(opts.model, opts.yes)
+
+    // Resolve monorepo-level repoUrl for packages that lack their own
+    const rootPkgPath = join(cwd, 'package.json')
+    const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf-8'))
+    const rootRepoUrl = typeof rootPkg.repository === 'string'
+      ? rootPkg.repository
+      : rootPkg.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
+
     const results: Array<{ name: string, outDir: string }> = []
 
     for (const pkg of selected) {
@@ -504,11 +547,9 @@ async function authorCommand(opts: {
         packageName: pkg.name,
         version: pkg.version,
         description: pkg.description,
-        repoUrl: pkg.repoUrl,
+        repoUrl: pkg.repoUrl || rootRepoUrl,
         monorepoRoot: cwd,
-        out: opts.out,
-        model: opts.model,
-        yes: opts.yes,
+        llmConfig,
         force: opts.force,
         debug: opts.debug,
       })
@@ -539,6 +580,8 @@ async function authorCommand(opts: {
 
   p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m author \x1B[36m${packageName}\x1B[0m@${version}`)
 
+  const llmConfig = await resolveLlmConfig(opts.model, opts.yes)
+
   const outDir = await authorSinglePackage({
     packageDir: cwd,
     packageName,
@@ -546,8 +589,7 @@ async function authorCommand(opts: {
     description: pkgInfo.description,
     repoUrl,
     out: opts.out,
-    model: opts.model,
-    yes: opts.yes,
+    llmConfig,
     force: opts.force,
     debug: opts.debug,
   })
