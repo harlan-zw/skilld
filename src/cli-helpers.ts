@@ -5,14 +5,13 @@
 
 import type { AgentType, OptimizeModel } from './agent/index.ts'
 import type { ProjectState } from './core/skills.ts'
-import { existsSync, readFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { parseTree } from 'jsonc-parser'
 import { join } from 'pathe'
 import { detectCurrentAgent } from 'unagent/env'
 import { agents, detectInstalledAgents, detectProjectAgents, detectTargetAgent, getAgentVersion, getModelName } from './agent/index.ts'
 import { readConfig, updateConfig } from './core/config.ts'
-import { editJsonProperty, patchPackageJson } from './core/package-json.ts'
+import { editJsonProperty, patchPackageJson, readPackageJsonSafe } from './core/package-json.ts'
 import { version } from './version.ts'
 
 export type { AgentType, OptimizeModel }
@@ -442,18 +441,28 @@ export async function pickModel<T extends { provider: string, providerName: stri
 }
 
 /**
+ * Check if the prepare hook is already installed in package.json.
+ */
+export function hasPrepareHook(cwd: string = process.cwd()): boolean {
+  const pkg = readPackageJsonSafe(join(cwd, 'package.json'))
+  if (!pkg)
+    return true // no package.json means nothing to suggest
+  const existing = (pkg.parsed.scripts as Record<string, unknown> | undefined)?.prepare
+  return typeof existing === 'string' && existing.includes('skilld')
+}
+
+/**
  * Prompt to add `skilld prepare` to package.json "prepare" script.
  * In non-interactive environments, falls back to an info log.
  * Returns true if the hook was added or already present.
  */
 export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<boolean> {
   const pkgJsonPath = join(cwd, 'package.json')
-  if (!existsSync(pkgJsonPath))
+  const pkg = readPackageJsonSafe(pkgJsonPath)
+  if (!pkg)
     return false
 
-  const raw = readFileSync(pkgJsonPath, 'utf-8')
-  const pkgJson = JSON.parse(raw)
-  const rawExisting = pkgJson.scripts?.prepare
+  const rawExisting = (pkg.parsed.scripts as Record<string, unknown> | undefined)?.prepare
   const existing: string | undefined = typeof rawExisting === 'string' ? rawExisting : undefined
 
   if (existing?.includes('skilld'))
@@ -512,10 +521,10 @@ export function buildPrepareScript(existing: string | undefined): string {
 }
 
 export function getRepoHint(name: string, cwd: string): string | undefined {
-  const pkgJsonPath = join(cwd, 'node_modules', name, 'package.json')
-  if (!existsSync(pkgJsonPath))
+  const result = readPackageJsonSafe(join(cwd, 'node_modules', name, 'package.json'))
+  if (!result)
     return undefined
-  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+  const pkg = result.parsed as Record<string, any>
   const url = typeof pkg.repository === 'string'
     ? pkg.repository
     : pkg.repository?.url

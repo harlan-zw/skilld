@@ -38,6 +38,7 @@ import { isInteractive, NO_MODELS_MESSAGE, pickModel } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
+import { readPackageJsonSafe } from '../core/package-json.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir, semverDiff } from '../core/shared.ts'
 import { createIndex, listIndexIds, SearchDepsUnavailableError } from '../retriv/index.ts'
@@ -264,12 +265,12 @@ export function resolveBaseDir(cwd: string, agent: AgentType, global: boolean): 
 
 /** Try resolving a `link:` dependency to local package docs. Returns null if not a link dep or resolution fails. */
 export async function resolveLocalDep(packageName: string, cwd: string): Promise<ResolvedPackage | null> {
-  const pkgPath = join(cwd, 'package.json')
-  if (!existsSync(pkgPath))
+  const result = readPackageJsonSafe(join(cwd, 'package.json'))
+  if (!result)
     return null
 
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
-  const deps = { ...pkg.dependencies, ...pkg.devDependencies }
+  const pkg = result.parsed
+  const deps = { ...pkg.dependencies as Record<string, string>, ...pkg.devDependencies as Record<string, string> }
   const depVersion = deps[packageName]
 
   if (!depVersion?.startsWith('link:'))

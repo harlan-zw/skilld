@@ -7,13 +7,14 @@ import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
 import { join, resolve } from 'pathe'
 import { agents, detectImportedPackages, detectInstalledAgents } from './agent/index.ts'
-import { formatStatus, getRepoHint, guard, isInteractive, isRunningInsideAgent, menuLoop, promptForAgent, relativeTime, resolveAgent, sharedArgs, suggestPrepareHook } from './cli-helpers.ts'
+import { formatStatus, getRepoHint, guard, hasPrepareHook, isInteractive, isRunningInsideAgent, menuLoop, promptForAgent, relativeTime, resolveAgent, sharedArgs, suggestPrepareHook } from './cli-helpers.ts'
 import { configCommand, configCommandDef } from './commands/config.ts'
 import { removeCommand, removeCommandDef } from './commands/remove.ts'
 import { infoCommandDef, statusCommand } from './commands/status.ts'
 import { runWizard } from './commands/wizard.ts'
 import { timedSpinner } from './core/formatting.ts'
 import { getProjectState, hasCompletedWizard, isOutdated, readConfig, semverGt } from './core/index.ts'
+import { readPackageJsonSafe } from './core/package-json.ts'
 import { iterateSkills } from './core/skills.ts'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index.ts'
 
@@ -293,10 +294,9 @@ const main = defineCommand({
 
       // Transition to project setup
       const pkgJsonPath = join(cwd, 'package.json')
-      const hasPkgJson = existsSync(pkgJsonPath)
-      const projectName = hasPkgJson
-        ? JSON.parse(readFileSync(pkgJsonPath, 'utf-8')).name
-        : undefined
+      const projectPkg = readPackageJsonSafe(pkgJsonPath)
+      const hasPkgJson = !!projectPkg
+      const projectName = projectPkg?.parsed.name as string | undefined
       const projectLabel = projectName
         ? `Generating skills for \x1B[36m${projectName}\x1B[0m`
         : 'Generating skills for current directory'
@@ -527,6 +527,11 @@ const main = defineCommand({
     const status = formatStatus(state.synced.length, state.outdated.length)
     p.log.info(status)
 
+    let needsPrepareHook = !hasPrepareHook(cwd)
+    if (needsPrepareHook) {
+      p.log.warn(`\x1B[33mNo prepare hook.\x1B[0m Skills won't auto-restore on \x1B[36mnpm install\x1B[0m.`)
+    }
+
     if (state.shipped.length > 0) {
       const totalSkills = state.shipped.reduce((sum, s) => sum + s.skills.length, 0)
       const names = state.shipped.map(s => s.packageName).join(', ')
@@ -549,6 +554,9 @@ const main = defineCommand({
         opts.push({ label: 'Add new skills', value: 'install' })
         if (state.outdated.length > 0) {
           opts.push({ label: 'Update skills', value: 'update', hint: `\x1B[33m${state.outdated.length} outdated\x1B[0m` })
+        }
+        if (needsPrepareHook) {
+          opts.push({ label: 'Setup prepare hook', value: 'prepare-hook', hint: '\x1B[33mrecommended\x1B[0m' })
         }
         opts.push(
           { label: 'Remove skills', value: 'remove' },
@@ -593,7 +601,7 @@ const main = defineCommand({
             ].filter(Boolean) as string[])
             const uninstalledDeps = [...state.deps.keys()].filter(d => !installedNames.has(d))
             const allDepsInstalled = uninstalledDeps.length === 0
-            const hasPkgJsonMenu = existsSync(join(cwd, 'package.json'))
+            const hasPkgJsonMenu = !!readPackageJsonSafe(join(cwd, 'package.json'))
 
             const source = hasPkgJsonMenu
               ? guard(await p.select({
@@ -758,6 +766,12 @@ const main = defineCommand({
             await configCommand()
             await refreshState()
             break
+          case 'prepare-hook': {
+            const added = await suggestPrepareHook(cwd)
+            if (added)
+              needsPrepareHook = false
+            break
+          }
         }
       },
     })

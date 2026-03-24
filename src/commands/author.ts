@@ -18,7 +18,7 @@ import {
 import { guard } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
-import { appendToJsonArray, patchPackageJson } from '../core/package-json.ts'
+import { appendToJsonArray, patchPackageJson, readPackageJsonSafe } from '../core/package-json.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import {
   fetchGitHubDiscussions,
@@ -55,11 +55,11 @@ export interface MonorepoPackage {
 }
 
 export function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
-  const pkgPath = join(cwd, 'package.json')
-  if (!existsSync(pkgPath))
+  const rootResult = readPackageJsonSafe(join(cwd, 'package.json'))
+  if (!rootResult)
     return null
 
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+  const pkg = rootResult.parsed as Record<string, any>
 
   // Must be private (monorepo root) with workspaces or pnpm-workspace.yaml
   if (!pkg.private)
@@ -105,11 +105,11 @@ export function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
     for (const entry of readdirSync(scanDir, { withFileTypes: true })) {
       if (!entry.isDirectory())
         continue
-      const pkgJsonPath = join(scanDir, entry.name, 'package.json')
-      if (!existsSync(pkgJsonPath))
+      const childResult = readPackageJsonSafe(join(scanDir, entry.name, 'package.json'))
+      if (!childResult)
         continue
 
-      const childPkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+      const childPkg = childResult.parsed as Record<string, any>
       if (childPkg.private)
         continue
       if (!childPkg.name)
@@ -532,11 +532,11 @@ async function authorCommand(opts: {
     const llmConfig = await resolveLlmConfig(opts.model, opts.yes)
 
     // Resolve monorepo-level repoUrl for packages that lack their own
-    const rootPkgPath = join(cwd, 'package.json')
-    const rootPkg = JSON.parse(readFileSync(rootPkgPath, 'utf-8'))
-    const rootRepoUrl = typeof rootPkg.repository === 'string'
+    const rootPkgResult = readPackageJsonSafe(join(cwd, 'package.json'))
+    const rootPkg = rootPkgResult?.parsed as Record<string, any> | undefined
+    const rootRepoUrl = typeof rootPkg?.repository === 'string'
       ? rootPkg.repository
-      : rootPkg.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
+      : rootPkg?.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
 
     const results: Array<{ name: string, outDir: string }> = []
 

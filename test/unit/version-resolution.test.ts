@@ -36,6 +36,7 @@ vi.mock('node:fs', async () => {
 })
 
 const { fetchLatestVersion, fetchNpmRegistryMeta, parseVersionSpecifier, resolveInstalledVersion } = await import('../../src/sources/npm')
+const { clearPackageJsonCache } = await import('../../src/core/package-json')
 
 function makeSkill(version: string | undefined): SkillEntry {
   return {
@@ -50,6 +51,7 @@ function makeSkill(version: string | undefined): SkillEntry {
 describe('version resolution stability gaps', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    clearPackageJsonCache()
   })
 
   describe('fetchLatestVersion - no fallback when unpkg fails', () => {
@@ -142,8 +144,9 @@ describe('version resolution stability gaps', () => {
 
     it('catalog: resolves from node_modules when available', async () => {
       const { resolvePathSync } = await import('mlly')
-      const { readFileSync } = await import('node:fs')
+      const { existsSync, readFileSync } = await import('node:fs')
       vi.mocked(resolvePathSync).mockReturnValue('/test/node_modules/some-pkg/package.json')
+      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: '2.1.0' }))
 
       const result = parseVersionSpecifier('some-pkg', 'catalog:deps', '/test')
@@ -155,8 +158,9 @@ describe('version resolution stability gaps', () => {
   describe('resolveInstalledVersion - edge cases', () => {
     it('handles scoped packages correctly', async () => {
       const { resolvePathSync } = await import('mlly')
-      const { readFileSync } = await import('node:fs')
+      const { existsSync, readFileSync } = await import('node:fs')
       vi.mocked(resolvePathSync).mockReturnValue('/test/node_modules/@vue/compiler-core/package.json')
+      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: '3.4.0' }))
 
       const result = resolveInstalledVersion('@vue/compiler-core', '/test')

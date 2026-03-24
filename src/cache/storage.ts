@@ -5,6 +5,7 @@
 import type { CachedDoc, CachedPackage } from './types.ts'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'pathe'
+import { readPackageJsonSafe } from '../core/package-json.ts'
 import { resolvePkgDir } from '../core/prepare.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getRepoCacheDir, REFERENCES_DIR, REPOS_DIR } from './config.ts'
@@ -189,8 +190,9 @@ export function getPkgKeyFiles(name: string, cwd: string, version?: string): str
   const files: string[] = []
   const pkgJsonPath = join(pkgPath, 'package.json')
 
-  if (existsSync(pkgJsonPath)) {
-    const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
+  const pkgJsonResult = readPackageJsonSafe(pkgJsonPath)
+  if (pkgJsonResult) {
+    const pkg = pkgJsonResult.parsed as Record<string, any>
 
     // Entry points
     if (pkg.main)

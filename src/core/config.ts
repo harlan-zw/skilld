@@ -29,6 +29,8 @@ export interface SkilldConfig {
 const CONFIG_DIR = join(homedir(), '.skilld')
 const CONFIG_PATH = join(CONFIG_DIR, 'config.yaml')
 
+let configCache: SkilldConfig | undefined
+
 export function hasConfig(): boolean {
   return existsSync(CONFIG_PATH)
 }
@@ -42,6 +44,13 @@ export function hasCompletedWizard(): boolean {
 }
 
 export function readConfig(): SkilldConfig {
+  if (configCache) {
+    return {
+      ...configCache,
+      features: configCache.features ? { ...configCache.features } : undefined,
+      projects: configCache.projects ? [...configCache.projects] : undefined,
+    }
+  }
   if (!existsSync(CONFIG_PATH))
     return {}
 
@@ -93,6 +102,7 @@ export function readConfig(): SkilldConfig {
     config.projects = projects
   if (Object.keys(features).length > 0)
     config.features = { ...defaultFeatures, ...features }
+  configCache = config
   return config
 }
 
@@ -120,6 +130,7 @@ export function writeConfig(config: SkilldConfig): void {
   }
 
   writeFileSync(CONFIG_PATH, yaml, { mode: 0o600 })
+  configCache = undefined
 }
 
 export function updateConfig(updates: Partial<SkilldConfig>): void {

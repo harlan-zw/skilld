@@ -12,7 +12,7 @@
 import type { AgentType, CustomPrompt, SkillSection } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import type { SkillInfo } from '../core/lockfile.ts'
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
@@ -39,6 +39,7 @@ import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile.ts'
+import { readPackageJsonSafe } from '../core/package-json.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 import { createIndex, SearchDepsUnavailableError } from '../retriv/index.ts'
@@ -578,9 +579,9 @@ async function enhanceRegenerated(
     let description: string | undefined
     if (pkgPath) {
       const pkgJsonPath = join(pkgPath, 'package.json')
-      if (existsSync(pkgJsonPath)) {
-        const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
-        description = pkg.description
+      const pkgJsonResult = readPackageJsonSafe(pkgJsonPath)
+      if (pkgJsonResult) {
+        description = pkgJsonResult.parsed.description as string | undefined
       }
     }
 
@@ -657,10 +658,9 @@ function regenerateBaseSkillMd(
   const pkgPath = resolvePkgDir(pkgName, cwd, version)
   let description: string | undefined
   if (pkgPath) {
-    const pkgJsonPath = join(pkgPath, 'package.json')
-    if (existsSync(pkgJsonPath)) {
-      const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'))
-      description = pkg.description
+    const pkgResult = readPackageJsonSafe(join(pkgPath, 'package.json'))
+    if (pkgResult) {
+      description = pkgResult.parsed.description as string | undefined
     }
   }
 

@@ -12,8 +12,10 @@ vi.mock('node:fs', async () => {
 })
 
 describe('core/lockfile', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetAllMocks()
+    const { invalidateLockCache } = await import('../../src/core/lockfile')
+    invalidateLockCache()
   })
 
   afterEach(() => {
