@@ -53,7 +53,7 @@
     "test:run": "vitest run",
     "release": "pnpm build && bumpp -x \"npx changelogen --output=CHANGELOG.md\"",
     "prepack": "pnpm run build",
-    "prepare": "skilld update -b --model haiku || true"
+    "prepare": "skilld prepare"
   },
   "dependencies": {
     "@clack/prompts": "catalog:deps",
@@ -80,7 +80,7 @@
     "sqlite-vec": "catalog:deps",
     "std-env": "catalog:",
     "tinyglobby": "catalog:deps",
-    "typescript": "catalog:deps",
+    "typescript": "catalog:",
     "unagent": "catalog:",
     "unist-util-visit": "catalog:deps"
   },

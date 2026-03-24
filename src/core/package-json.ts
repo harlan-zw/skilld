@@ -77,7 +77,7 @@ export function appendToJsonArray(raw: string, path: string[], value: string, op
   if (allStrings) {
     const items = node.children.map(c => c.value as string)
     for (let i = 0; i < items.length; i++) {
-      if (value.localeCompare(items[i]) < 0) {
+      if (value.localeCompare(items[i]!) < 0) {
         idx = i
         break
       }

@@ -14,6 +14,7 @@ export default antfu({
     'CLAUDE.md',
     'docs/**',
     '.claude/skills/**',
+    '.claude/worktrees/**',
     'test/fixtures/**',
   ],
 }, {

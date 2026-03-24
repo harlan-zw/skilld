@@ -262,7 +262,7 @@ export async function uninstallCommand(opts: UninstallOptions): Promise<void> {
     const [prefix, name] = item.label.includes(': ')
       ? item.label.split(': ', 2)
       : ['other', item.label]
-    mapInsert(groups, prefix, () => []).push({ name, version: item.version })
+    mapInsert(groups, prefix!, () => []).push({ name: name!, version: item.version })
   }
 
   const formatGroup = (items: Array<{ name: string, version?: string }>) =>

@@ -74,7 +74,7 @@ export function readLock(skillsDir: string): SkilldLock | null {
   for (const line of content.split('\n')) {
     const skillMatch = line.match(/^ {2}(\S+):$/)
     if (skillMatch) {
-      currentSkill = skillMatch[1]
+      currentSkill = skillMatch[1]!
       skills[currentSkill] = {}
       continue
     }

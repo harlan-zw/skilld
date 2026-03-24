@@ -139,8 +139,8 @@ export function processOutsideCodeBlocks(content: string, fn: (text: string) => 
       if (match) {
         flushNonCode()
         inCodeBlock = true
-        fenceChar = match[1][0]!
-        fenceLen = match[1].length
+        fenceChar = match[1]![0]!
+        fenceLen = match[1]!.length
         codeBuffer = [line]
         continue
       }
@@ -148,7 +148,7 @@ export function processOutsideCodeBlocks(content: string, fn: (text: string) => 
     }
     else {
       const match = trimmed.match(/^(`{3,}|~{3,})\s*$/)
-      if (match && match[1][0] === fenceChar && match[1].length >= fenceLen) {
+      if (match && match[1]![0] === fenceChar && match[1]!.length >= fenceLen) {
         // Properly closed — emit code block as-is
         result.push(codeBuffer.join('\n'))
         result.push(line)
@@ -266,13 +266,13 @@ function closeUnclosedCodeBlocks(content: string): string {
       const match = trimmed.match(/^(`{3,}|~{3,})/)
       if (match) {
         inCodeBlock = true
-        fence = match[1][0]!.repeat(match[1].length)
+        fence = match[1]![0]!.repeat(match[1]!.length)
       }
     }
     else {
       // Check for closing fence (same char, at least same length)
       const match = trimmed.match(/^(`{3,}|~{3,})\s*$/)
-      if (match && match[1][0] === fence[0] && match[1].length >= fence.length) {
+      if (match && match[1]![0] === fence[0] && match[1]!.length >= fence.length) {
         inCodeBlock = false
         fence = ''
       }
@@ -280,7 +280,7 @@ function closeUnclosedCodeBlocks(content: string): string {
         // New fence opener inside unclosed block (same char, same length, with lang tag)
         // LLMs commonly forget to close a code block before starting a new one
         const openMatch = trimmed.match(/^(`{3,}|~{3,})\S/)
-        if (openMatch && openMatch[1][0] === fence[0] && openMatch[1].length === fence.length) {
+        if (openMatch && openMatch[1]![0] === fence[0] && openMatch[1]!.length === fence.length) {
           result.push(fence)
           // fence char/length stays the same since both match
         }
@@ -328,8 +328,8 @@ function cleanupCodeBlocks(content: string): string {
       continue
     }
 
-    const fChar = fm[1][0]!
-    const fLen = fm[1].length
+    const fChar = fm[1]![0]!
+    const fLen = fm[1]!.length
     const openIdx = i
     i++
 
@@ -337,7 +337,7 @@ function cleanupCodeBlocks(content: string): string {
     while (i < lines.length) {
       const ct = lines[i]!.trimStart()
       const cm = ct.match(/^(`{3,}|~{3,})\s*$/)
-      if (cm && cm[1][0] === fChar && cm[1].length >= fLen) {
+      if (cm && cm[1]![0] === fChar && cm[1]!.length >= fLen) {
         closeIdx = i
         i++
         break
@@ -383,14 +383,14 @@ function closeUnclosedInlineCode(content: string): string {
       const m = trimmed.match(/^(`{3,}|~{3,})/)
       if (m) {
         inFence = true
-        fenceChar = m[1][0]!
-        fenceLen = m[1].length
+        fenceChar = m[1]![0]!
+        fenceLen = m[1]!.length
         return line
       }
     }
     else {
       const m = trimmed.match(/^(`{3,}|~{3,})\s*$/)
-      if (m && m[1][0] === fenceChar && m[1].length >= fenceLen) {
+      if (m && m[1]![0] === fenceChar && m[1]!.length >= fenceLen) {
         inFence = false
       }
       return line

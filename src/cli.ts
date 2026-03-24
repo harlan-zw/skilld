@@ -271,7 +271,7 @@ const main = defineCommand({
     // Show self-update notification
     if (selfUpdate) {
       const released = selfUpdate.releasedAt ? `\x1B[90m · ${relativeTime(new Date(selfUpdate.releasedAt))}\x1B[0m` : ''
-      const binPath = realpathSync(process.argv[1])
+      const binPath = realpathSync(process.argv[1]!)
       const isLocal = binPath.startsWith(resolve(cwd, 'node_modules'))
       const flag = isLocal ? '' : ' -g'
       const cmd = `npx nypm add${flag} skilld@${selfUpdate.latest}`

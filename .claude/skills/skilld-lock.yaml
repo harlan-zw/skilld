@@ -9,11 +9,11 @@ skills:
     generator: skilld
   microsoft-typescript:
     packageName: typescript
-    version: 6.0.0-beta
-    packages: "typescript@6.0.0-beta"
+    version: 6.0.2
+    packages: "typescript@6.0.2"
     repo: microsoft/TypeScript
-    source: "ungh://microsoft/TypeScript"
-    syncedAt: 2026-02-14
+    source: "https://github.com/microsoft/TypeScript/tree/v6.0.2/docs"
+    syncedAt: 2026-03-24
     generator: skilld
   vue-skilld:
     packageName: vue
@@ -61,14 +61,6 @@ skills:
     repo: SuperchupuDev/tinyglobby
     source: "ungh://SuperchupuDev/tinyglobby"
     syncedAt: 2026-02-27
-    generator: skilld
-  typescript-skilld:
-    packageName: typescript
-    version: 6.0.0-beta
-    packages: "typescript@6.0.0-beta"
-    repo: microsoft/TypeScript
-    source: "https://www.typescriptlang.org/**"
-    syncedAt: 2026-03-02
     generator: skilld
   nuxt-og-image-skilld:
     packageName: nuxt-og-image
