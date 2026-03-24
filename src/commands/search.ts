@@ -330,11 +330,12 @@ export const searchCommandDef = defineCommand({
     const packageFilter = args.package || undefined
     let filter: SearchFilter | undefined
     if (args.filter) {
-      filter = parseJsonFilter(args.filter)
-      if (!filter) {
+      const parsed = parseJsonFilter(args.filter)
+      if (!parsed) {
         p.log.error(`Invalid JSON filter: ${args.filter}\nExpected JSON object, e.g. '{"type":"issue"}'`)
         return
       }
+      filter = parsed
     }
 
     const limit = args.limit ? Number.parseInt(args.limit, 10) : undefined
