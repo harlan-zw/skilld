@@ -68,24 +68,15 @@ function formatShortDate(isoDate: string): string {
   return `${months[date.getUTCMonth()]} ${date.getUTCFullYear()}`
 }
 
-function generatePackageHeader({ name, description, version, releasedAt, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, docsType, pkgFiles, packages, eject }: SkillOptions): string {
-  let title = `# ${name}`
+function generatePackageHeader({ name, version, distTags, repoUrl, hasIssues, hasDiscussions, hasReleases, docsType, pkgFiles, packages, eject }: SkillOptions): string {
+  const versionSuffix = version ? `@${version}` : ''
+  let title = `# ${name}${versionSuffix}`
   if (repoUrl) {
     const url = repoUrl.startsWith('http') ? repoUrl : `https://github.com/${repoUrl}`
     const repoName = repoUrl.startsWith('http') ? repoUrl.split('/').slice(-2).join('/') : repoUrl
-    title = `# [${repoName}](${url}) \`${name}\``
+    title = `# [${repoName}](${url}) \`${name}${versionSuffix}\``
   }
   const lines: string[] = [title]
-
-  if (description)
-    lines.push('', `> ${description}`)
-
-  // Version with release date (absolute to avoid stale relative times in published skills)
-  if (version) {
-    const dateStr = releasedAt ? formatShortDate(releasedAt) : ''
-    const versionStr = dateStr ? `${version} (${dateStr})` : version
-    lines.push('', `**Version:** ${versionStr}`)
-  }
 
   if (distTags && Object.keys(distTags).length > 0) {
     const tags = Object.entries(distTags)
@@ -104,7 +95,7 @@ function generatePackageHeader({ name, description, version, releasedAt, distTag
   const refBase = eject ? './references' : './.skilld'
   const refs: string[] = []
   if (!eject) {
-    refs.push(`[package.json](${refBase}/pkg/package.json) — exports, entry points`)
+    refs.push(`[package.json](${refBase}/pkg/package.json)`)
     if (packages && packages.length > 1) {
       for (const pkg of packages) {
         const shortName = pkg.name.split('/').pop()!.toLowerCase()
@@ -112,16 +103,16 @@ function generatePackageHeader({ name, description, version, releasedAt, distTag
       }
     }
     if (pkgFiles?.includes('README.md'))
-      refs.push(`[README](${refBase}/pkg/README.md) — setup, basic usage`)
+      refs.push(`[README](${refBase}/pkg/README.md)`)
   }
   if (docsType && docsType !== 'readme')
-    refs.push(`[Docs](${refBase}/docs/_INDEX.md) — API reference, guides`)
+    refs.push(`[Docs](${refBase}/docs/_INDEX.md)`)
   if (hasIssues)
-    refs.push(`[GitHub Issues](${refBase}/issues/_INDEX.md) — bugs, workarounds, edge cases`)
+    refs.push(`[Issues](${refBase}/issues/_INDEX.md)`)
   if (hasDiscussions)
-    refs.push(`[GitHub Discussions](${refBase}/discussions/_INDEX.md) — Q&A, patterns, recipes`)
+    refs.push(`[Discussions](${refBase}/discussions/_INDEX.md)`)
   if (hasReleases)
-    refs.push(`[Releases](${refBase}/releases/_INDEX.md) — changelog, breaking changes, new APIs`)
+    refs.push(`[Releases](${refBase}/releases/_INDEX.md)`)
 
   if (refs.length > 0)
     lines.push(`**References:** ${refs.join(' • ')}`)
