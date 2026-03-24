@@ -468,7 +468,7 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
   if (existing?.includes('skilld'))
     return true
 
-  const prepareCmd = buildPrepareScript(existing)
+  const prepareCmd = buildPrepareScript(existing, cwd)
 
   if (!isInteractive()) {
     p.log.info(
@@ -505,8 +505,9 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
 /**
  * Build the full prepare script value, safely appending to any existing command.
  */
-export function buildPrepareScript(existing: string | undefined): string {
-  const cmd = 'skilld prepare || true'
+export function buildPrepareScript(existing: string | undefined, cwd: string = process.cwd()): string {
+  const bin = isNpxExecution() && !isSkilldDep(cwd) ? 'npx skilld' : 'skilld'
+  const cmd = `${bin} prepare || true`
   if (!existing || !existing.trim())
     return cmd
 
@@ -518,6 +519,29 @@ export function buildPrepareScript(existing: string | undefined): string {
     return cmd
 
   return `${cleaned} && (${cmd})`
+}
+
+/**
+ * Detect if the current process was launched via npx, pnpm dlx, or similar one-shot runners.
+ */
+function isNpxExecution(): boolean {
+  // npm/pnpm set npm_command=exec when running via npx/dlx
+  if (process.env.npm_command === 'exec')
+    return true
+  // Fallback: check if the resolved binary path contains npx or dlx cache dirs
+  const execPath = process.env._ || ''
+  return /npx|\.store|dlx/.test(execPath)
+}
+
+/**
+ * Check if skilld is listed as a dependency (dev or regular) in the project's package.json.
+ */
+function isSkilldDep(cwd: string): boolean {
+  const pkg = readPackageJsonSafe(join(cwd, 'package.json'))
+  if (!pkg)
+    return false
+  const deps = pkg.parsed as Record<string, any>
+  return !!(deps.dependencies?.skilld || deps.devDependencies?.skilld)
 }
 
 export function getRepoHint(name: string, cwd: string): string | undefined {
