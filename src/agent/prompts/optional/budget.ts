@@ -17,8 +17,10 @@ function remainingLines(overheadLines?: number): number {
 /** Scale max lines based on enabled section count and available remaining space. */
 export function maxLines(min: number, max: number, sectionCount?: number, overheadLines?: number): number {
   const remaining = remainingLines(overheadLines)
+  const sections = Math.max(1, sectionCount ?? 1)
+  const perSection = Math.floor(remaining / sections)
   const scale = budgetScale(sectionCount)
-  return Math.max(min, Math.min(Math.round(max * scale), remaining))
+  return Math.max(min, Math.min(Math.round(max * scale), perSection))
 }
 
 /** Scale item count based on enabled section count. */
