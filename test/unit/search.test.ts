@@ -1,6 +1,6 @@
 import type { SearchSnippet } from '../../src/retriv/types'
 import { describe, expect, it } from 'vitest'
-import { parseFilterPrefix } from '../../src/commands/search'
+import { generateSearchGuide, parseFilterPrefix, parseJsonFilter } from '../../src/commands/search'
 import { normalizeScores, scoreLabel } from '../../src/core/formatting'
 
 function snippet(overrides: Partial<SearchSnippet> = {}): SearchSnippet {
@@ -54,6 +54,117 @@ describe('parseFilterPrefix', () => {
       query: 'bug',
       filter: { type: 'issue' },
     })
+  })
+})
+
+describe('parseJsonFilter', () => {
+  it('parses valid JSON object', () => {
+    expect(parseJsonFilter('{"type":"issue"}')).toEqual({ type: 'issue' })
+  })
+
+  it('parses filter with operators', () => {
+    expect(parseJsonFilter('{"type":{"$in":["doc","issue"]}}')).toEqual({
+      type: { $in: ['doc', 'issue'] },
+    })
+  })
+
+  it('parses $prefix operator', () => {
+    expect(parseJsonFilter('{"source":{"$prefix":"docs/api/"}}')).toEqual({
+      source: { $prefix: 'docs/api/' },
+    })
+  })
+
+  it('parses numeric operators', () => {
+    expect(parseJsonFilter('{"number":{"$gt":100}}')).toEqual({
+      number: { $gt: 100 },
+    })
+  })
+
+  it('parses $exists operator', () => {
+    expect(parseJsonFilter('{"number":{"$exists":true}}')).toEqual({
+      number: { $exists: true },
+    })
+  })
+
+  it('parses multiple fields', () => {
+    expect(parseJsonFilter('{"type":"issue","number":{"$lt":50}}')).toEqual({
+      type: 'issue',
+      number: { $lt: 50 },
+    })
+  })
+
+  it('returns null for invalid JSON', () => {
+    expect(parseJsonFilter('not json')).toBeNull()
+  })
+
+  it('returns null for JSON array', () => {
+    expect(parseJsonFilter('[1,2,3]')).toBeNull()
+  })
+
+  it('returns null for JSON string', () => {
+    expect(parseJsonFilter('"hello"')).toBeNull()
+  })
+
+  it('returns null for JSON number', () => {
+    expect(parseJsonFilter('42')).toBeNull()
+  })
+
+  it('returns null for JSON null', () => {
+    expect(parseJsonFilter('null')).toBeNull()
+  })
+
+  it('returns null for unknown operator', () => {
+    expect(parseJsonFilter('{"type":{"$unknown":"value"}}')).toBeNull()
+  })
+
+  it('returns null for multi-key operator object', () => {
+    expect(parseJsonFilter('{"type":{"$eq":"doc","$ne":"issue"}}')).toBeNull()
+  })
+
+  it('returns null for null value', () => {
+    expect(parseJsonFilter('{"type":null}')).toBeNull()
+  })
+
+  it('returns null for nested non-operator object', () => {
+    expect(parseJsonFilter('{"type":{"nested":{"deep":"value"}}}')).toBeNull()
+  })
+
+  it('accepts boolean values', () => {
+    expect(parseJsonFilter('{"active":true}')).toEqual({ active: true })
+  })
+})
+
+describe('generateSearchGuide', () => {
+  it('generates generic guide without package', () => {
+    const guide = generateSearchGuide()
+    expect(guide).toContain('skilld search guide')
+    expect(guide).toContain('-p <package>')
+    expect(guide).toContain('$prefix')
+    expect(guide).toContain('$in')
+    expect(guide).toContain('--filter')
+    expect(guide).toContain('--limit')
+  })
+
+  it('tailors guide to specific package', () => {
+    const guide = generateSearchGuide('vue')
+    expect(guide).toContain('Search guide for vue')
+    expect(guide).toContain('-p vue')
+    expect(guide).toContain('e.g. "vue"')
+    expect(guide).not.toContain('<package>')
+  })
+
+  it('includes all metadata fields', () => {
+    const guide = generateSearchGuide()
+    expect(guide).toContain('package')
+    expect(guide).toContain('source')
+    expect(guide).toContain('type')
+    expect(guide).toContain('number')
+  })
+
+  it('includes all filter operators', () => {
+    const guide = generateSearchGuide()
+    for (const op of ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte', '$in', '$prefix', '$exists'])
+      expect(guide).toContain(op)
   })
 })
 
