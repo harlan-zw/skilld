@@ -362,10 +362,16 @@ describe('cleanSectionOutput', () => {
       expect(result).toMatch(/^## API Changes/)
     })
 
-    it('does not strip non-code text before section marker', () => {
+    it('strips non-code preamble (LLM reasoning) before section marker', () => {
       const input = 'Here is some context about the package.\n\n## API Changes\n\n- NEW: `foo()`'
       const result = cleanSectionOutput(input)
-      expect(result).toContain('Here is some context')
+      expect(result).toMatch(/^## API Changes/)
+    })
+
+    it('strips tool_call XML preamble before section marker', () => {
+      const input = '<tool_call>\n{"name": "read_file"}\n</tool_call>\n\n## Best Practices\n\n- Use foo'
+      const result = cleanSectionOutput(input)
+      expect(result).toMatch(/^## Best Practices/)
     })
   })
 

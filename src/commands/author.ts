@@ -493,7 +493,7 @@ async function resolveLlmConfig(model?: OptimizeModel, yes?: boolean): Promise<L
   const globalConfig = readConfig()
   if (globalConfig.skipLlm || (yes && !model))
     return undefined
-  return selectLlmConfig(model)
+  return selectLlmConfig(model, 'Generate skill sections')
 }
 
 async function authorCommand(opts: {
@@ -530,6 +530,10 @@ async function authorCommand(opts: {
 
     // Resolve LLM config once for all packages
     const llmConfig = await resolveLlmConfig(opts.model, opts.yes)
+    if (llmConfig === null) {
+      p.cancel('Cancelled')
+      return
+    }
 
     // Resolve monorepo-level repoUrl for packages that lack their own
     const rootPkgResult = readPackageJsonSafe(join(cwd, 'package.json'))
@@ -581,6 +585,10 @@ async function authorCommand(opts: {
   p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m author \x1B[36m${packageName}\x1B[0m@${version}`)
 
   const llmConfig = await resolveLlmConfig(opts.model, opts.yes)
+  if (llmConfig === null) {
+    p.cancel('Cancelled')
+    return
+  }
 
   const outDir = await authorSinglePackage({
     packageDir: cwd,

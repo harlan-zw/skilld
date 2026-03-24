@@ -1271,7 +1271,7 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
   const defaultHint = providerHint ? `${providerHint} · ${sourceHint}` : sourceHint
 
   // Build update context hint for the prompt message
-  let enhanceMessage = 'Enhance SKILL.md?'
+  let enhanceMessage = message ? `${message}?` : 'Enhance SKILL.md?'
   let defaultToSkip = false
   if (updateCtx) {
     const diff = updateCtx.bumpType
@@ -1385,7 +1385,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
 
   const effectiveFeatures = features
 
-  const llmLog = p.taskLog({ title: `Agent exploring ${packageName}` })
+  const llmLog = p.taskLog({ title: `Agent exploring ${packageName}`, limit: 3 })
   const docFiles = listReferenceFiles(skillDir)
   const hasGithub = hasIssues || hasDiscussions
   const { optimized, wasOptimized, usage, cost, warnings, error, debugLogsDir } = await optimizeDocs({
