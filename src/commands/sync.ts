@@ -718,7 +718,9 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   try {
     await suggestPrepareHook(cwd)
   }
-  catch {}
+  catch (err) {
+    p.log.warn(`Failed to suggest prepare hook: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 // ── Citty command definitions (lazy-loaded by cli.ts) ──

@@ -517,7 +517,9 @@ const main = defineCommand({
       try {
         await suggestPrepareHook(cwd)
       }
-      catch {}
+      catch (err) {
+        p.log.warn(`Failed to suggest prepare hook: ${err instanceof Error ? err.message : String(err)}`)
+      }
       return
     }
 

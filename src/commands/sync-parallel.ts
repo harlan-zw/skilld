@@ -389,7 +389,9 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
   try {
     await suggestPrepareHook(cwd)
   }
-  catch {}
+  catch (err) {
+    p.log.warn(`Failed to suggest prepare hook: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 type UpdateFn = (pkg: string, status: PackageStatus, message: string, version?: string) => void
