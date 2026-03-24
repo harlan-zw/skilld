@@ -290,6 +290,20 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   }
 
   if (!resolved) {
+    // Even without docs, the package may ship its own skills (skills-npm convention)
+    const shippedVersion = localVersion || resolveResult.attempts.find(a => a.source === 'npm' && a.status === 'success')?.message?.match(/@(.+)$/)?.[1] || 'latest'
+    const earlyShipped = handleShippedSkills(packageName, shippedVersion, cwd, config.agent, config.global)
+    if (earlyShipped) {
+      const shared = !config.global && getSharedSkillsDir(cwd)
+      for (const shipped of earlyShipped.shipped) {
+        if (shared)
+          linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
+        p.log.success(`Using published SKILL.md: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
+      }
+      spin.stop(`Using published SKILL.md(s) from ${packageName}`)
+      return
+    }
+
     // Search npm for alternatives before giving up
     spin.message(`Searching npm for "${packageName}"...`)
     const suggestions = await searchNpmPackages(packageName)

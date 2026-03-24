@@ -414,6 +414,19 @@ async function syncBaseSkill(
   }
 
   if (!resolved) {
+    // Even without docs, the package may ship its own skills (skills-npm convention)
+    const shippedVersion = localVersion || attempts.find(a => a.source === 'npm' && a.status === 'success')?.message?.match(/@(.+)$/)?.[1] || 'latest'
+    const earlyShipped = handleShippedSkills(packageName, shippedVersion, cwd, config.agent, config.global)
+    if (earlyShipped) {
+      const shared = !config.global && getSharedSkillsDir(cwd)
+      if (shared) {
+        for (const shipped of earlyShipped.shipped)
+          linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
+      }
+      update(packageName, 'done', 'Published SKILL.md', getVersionKey(shippedVersion))
+      return 'shipped'
+    }
+
     const npmAttempt = attempts.find(a => a.source === 'npm')
     let reason: string
     if (npmAttempt?.status === 'not-found') {
