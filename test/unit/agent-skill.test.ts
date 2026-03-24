@@ -206,20 +206,21 @@ describe('agent/skill', () => {
       expect(result).toMatch(/generated_at: \d{4}-\d{2}-\d{2}/)
     })
 
-    it('includes releasedAt as short absolute date in version line', () => {
+    it('includes version in frontmatter metadata', () => {
       const result = generateSkillMd({
         name: 'pkg',
         version: '1.0.0',
         releasedAt: '2024-02-01T12:00:00Z',
         relatedSkills: [],
       })
-      expect(result).toContain('**Version:** 1.0.0 (Feb 2024)')
+      expect(result).toContain('  version: 1.0.0')
+      expect(result).toContain('# pkg@1.0.0')
     })
 
-    it('omits date if releasedAt not provided', () => {
-      const result = generateSkillMd({ name: 'pkg', version: '1.0.0', relatedSkills: [] })
-      expect(result).toContain('**Version:** 1.0.0')
-      expect(result).not.toMatch(/\*\*Version:\*\* 1\.0\.0 \(/)
+    it('omits version from metadata if not provided', () => {
+      const result = generateSkillMd({ name: 'pkg', relatedSkills: [] })
+      expect(result).not.toContain('  version:')
+      expect(result).toContain('# pkg')
     })
   })
 
