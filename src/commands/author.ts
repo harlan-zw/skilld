@@ -18,6 +18,7 @@ import {
 import { guard } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
+import { sanitizeMarkdown } from '../core/sanitize.ts'
 import {
   fetchGitHubDiscussions,
   fetchGitHubIssues,
@@ -174,7 +175,7 @@ function resolveLocalDocs(
     const mdFiles = walkMarkdownFiles(docsDir)
     if (mdFiles.length > 0) {
       for (const f of mdFiles)
-        cachedDocs.push({ path: `docs/${f.path}`, content: f.content })
+        cachedDocs.push({ path: `docs/${f.path}`, content: sanitizeMarkdown(f.content) })
       writeToCache(packageName, version, cachedDocs)
       cacheChangelog()
       return { docsType: 'docs', docSource: `local docs/ (${mdFiles.length} files)` }
@@ -189,7 +190,7 @@ function resolveLocalDocs(
         const mdFiles = walkMarkdownFiles(rootDocsDir)
         if (mdFiles.length > 0) {
           for (const f of mdFiles)
-            cachedDocs.push({ path: `docs/${f.path}`, content: f.content })
+            cachedDocs.push({ path: `docs/${f.path}`, content: sanitizeMarkdown(f.content) })
           writeToCache(packageName, version, cachedDocs)
           cacheChangelog()
           return { docsType: 'docs', docSource: `monorepo ${candidate}/ (${mdFiles.length} files)` }
@@ -202,7 +203,7 @@ function resolveLocalDocs(
   for (const dir of [packageDir, monorepoRoot].filter(Boolean) as string[]) {
     const llmsPath = join(dir, 'llms.txt')
     if (existsSync(llmsPath)) {
-      cachedDocs.push({ path: 'llms.txt', content: readFileSync(llmsPath, 'utf-8') })
+      cachedDocs.push({ path: 'llms.txt', content: sanitizeMarkdown(readFileSync(llmsPath, 'utf-8')) })
       writeToCache(packageName, version, cachedDocs)
       cacheChangelog()
       const source = dir === packageDir ? 'local llms.txt' : 'monorepo llms.txt'
@@ -214,7 +215,7 @@ function resolveLocalDocs(
   for (const dir of [packageDir, monorepoRoot].filter(Boolean) as string[]) {
     const readmeFile = readdirSync(dir).find(f => /^readme\.md$/i.test(f))
     if (readmeFile) {
-      cachedDocs.push({ path: 'docs/README.md', content: readFileSync(join(dir, readmeFile), 'utf-8') })
+      cachedDocs.push({ path: 'docs/README.md', content: sanitizeMarkdown(readFileSync(join(dir, readmeFile), 'utf-8')) })
       writeToCache(packageName, version, cachedDocs)
       cacheChangelog()
       const source = dir === packageDir ? 'local README.md' : 'monorepo README.md'
@@ -234,7 +235,7 @@ function cacheLocalChangelog(dir: string, packageName: string, version: string, 
   if (changelogFile && changelogDir) {
     writeToCache(packageName, version, [{
       path: `releases/${changelogFile}`,
-      content: readFileSync(join(changelogDir, changelogFile), 'utf-8'),
+      content: sanitizeMarkdown(readFileSync(join(changelogDir, changelogFile), 'utf-8')),
     }])
   }
 }
@@ -365,7 +366,16 @@ async function authorSinglePackage(opts: {
   const spin = timedSpinner()
 
   const sanitizedName = computeSkillDirName(packageName)
-  const outDir = opts.out || join(packageDir, 'skills', sanitizedName)
+  const outDir = opts.out ? resolve(packageDir, opts.out) : join(packageDir, 'skills', sanitizedName)
+
+  // Validate --out doesn't point at the package root or a parent
+  if (opts.out) {
+    const rel = relative(packageDir, outDir)
+    if (!rel || rel === '.' || rel.startsWith('..')) {
+      p.log.error('--out must point to a child directory, not the package root or a parent')
+      return null
+    }
+  }
 
   if (existsSync(outDir))
     rmSync(outDir, { recursive: true, force: true })
@@ -430,59 +440,66 @@ async function authorSinglePackage(opts: {
   p.log.success(`Created base skill: ${relative(packageDir, outDir)}`)
 
   // LLM enhancement (config resolved by caller)
-  const llmConfig = opts.llmConfig
-  if (llmConfig?.promptOnly) {
-    writePromptFiles({
-      packageName,
-      skillDir: outDir,
-      version,
-      hasIssues,
-      hasDiscussions,
-      hasReleases,
-      hasChangelog,
-      docsType,
-      hasShippedDocs: false,
-      pkgFiles: [],
-      sections: llmConfig.sections,
-      customPrompt: llmConfig.customPrompt,
-      features,
-    })
-  }
-  else if (llmConfig) {
-    p.log.step(getModelLabel(llmConfig.model))
-    await enhanceSkillWithLLM({
-      packageName,
-      version,
-      skillDir: outDir,
-      dirName: sanitizedName,
-      model: llmConfig.model,
-      resolved: { repoUrl: opts.repoUrl },
-      relatedSkills: [],
-      hasIssues,
-      hasDiscussions,
-      hasReleases,
-      hasChangelog,
-      docsType,
-      hasShippedDocs: false,
-      pkgFiles: [],
-      force: opts.force,
-      debug: opts.debug,
-      sections: llmConfig.sections,
-      customPrompt: llmConfig.customPrompt,
-      features,
-      eject: true,
-    })
-  }
-
-  // Clean up .skilld/ symlinks → eject references as real files
   const skilldDir = join(outDir, '.skilld')
-  if (existsSync(skilldDir))
-    rmSync(skilldDir, { recursive: true, force: true })
+  try {
+    const llmConfig = opts.llmConfig
+    if (llmConfig?.promptOnly) {
+      writePromptFiles({
+        packageName,
+        skillDir: outDir,
+        version,
+        hasIssues,
+        hasDiscussions,
+        hasReleases,
+        hasChangelog,
+        docsType,
+        hasShippedDocs: false,
+        pkgFiles: [],
+        sections: llmConfig.sections,
+        customPrompt: llmConfig.customPrompt,
+        features,
+      })
+    }
+    else if (llmConfig) {
+      p.log.step(getModelLabel(llmConfig.model))
+      await enhanceSkillWithLLM({
+        packageName,
+        version,
+        skillDir: outDir,
+        dirName: sanitizedName,
+        model: llmConfig.model,
+        resolved: { repoUrl: opts.repoUrl },
+        relatedSkills: [],
+        hasIssues,
+        hasDiscussions,
+        hasReleases,
+        hasChangelog,
+        docsType,
+        hasShippedDocs: false,
+        pkgFiles: [],
+        force: opts.force,
+        debug: opts.debug,
+        sections: llmConfig.sections,
+        customPrompt: llmConfig.customPrompt,
+        features,
+        eject: true,
+      })
+    }
 
-  ejectReferences(outDir, packageName, packageDir, version, docsType, features)
+    ejectReferences(outDir, packageName, packageDir, version, docsType, features)
+  }
+  finally {
+    // Always clean up .skilld/ symlinks, even if LLM enhancement fails
+    if (existsSync(skilldDir))
+      rmSync(skilldDir, { recursive: true, force: true })
+  }
 
-  // Patch package.json
-  patchPackageJsonFiles(packageDir)
+  // Only patch package.json when output is under skills/
+  const relOut = relative(packageDir, outDir)
+  if (relOut === 'skills' || relOut.startsWith('skills/'))
+    patchPackageJsonFiles(packageDir)
+  else if (opts.out)
+    p.log.info('Output is outside skills/, skipping package.json patch. Add the path to "files" manually if publishing.')
 
   return outDir
 }
