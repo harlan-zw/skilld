@@ -33,14 +33,20 @@ export async function configCommand(): Promise<void> {
         : config.model
           ? getModelName(config.model)
           : 'auto'
-      const connectedOAuth = getOAuthProviderList().filter(pr => pr.loggedIn).length
-      const oauthHint = connectedOAuth > 0 ? `${connectedOAuth} connected` : 'none'
-      return [
+      const oauthProviders = getOAuthProviderList()
+      const options = [
         { label: 'Data sources', value: 'features', hint: `${enabledCount}/4 enabled · issues, releases, search, discussions` },
-        { label: 'OAuth providers', value: 'oauth', hint: `${oauthHint} · pi-ai direct API` },
+      ]
+      if (oauthProviders.length > 0) {
+        const connectedOAuth = oauthProviders.filter(pr => pr.loggedIn).length
+        const oauthHint = connectedOAuth > 0 ? `${connectedOAuth} connected` : 'none'
+        options.push({ label: 'OAuth providers', value: 'oauth', hint: `${oauthHint} · ⚠ may violate provider ToS` })
+      }
+      options.push(
         { label: 'Enhancement model', value: 'model', hint: `${modelHint} · rewrites SKILL.md with best practices` },
         { label: 'Target agent', value: 'agent', hint: `${config.agent || 'auto-detect'} · where skills are installed` },
-      ]
+      )
+      return options
     },
     onSelect: async (action) => {
       switch (action) {
@@ -179,14 +185,21 @@ async function configureModel(): Promise<void> {
     if (available.length === 0)
       p.log.warn(NO_MODELS_MESSAGE)
 
+    const oauthProviders = getOAuthProviderList()
+    const afterOptions = oauthProviders.length > 0
+      ? [
+          { label: '⚠ Connect OAuth provider...', value: '_connect', hint: 'may violate provider ToS' },
+          { label: 'Skip enhancement', value: '_skip', hint: 'base skill with docs, issues, and types' },
+        ]
+      : [
+          { label: 'Skip enhancement', value: '_skip', hint: 'base skill with docs, issues, and types' },
+        ]
+
     const choice = await pickModel(available, {
       before: available.length > 0
         ? [{ label: 'Auto', value: '_auto', hint: 'picks best available model from connected providers' }]
         : [],
-      after: [
-        { label: 'Connect OAuth provider...', value: '_connect', hint: 'use existing Claude Pro, ChatGPT Plus, etc.' },
-        { label: 'Skip enhancement', value: '_skip', hint: 'base skill with docs, issues, and types' },
-      ],
+      after: afterOptions,
     })
 
     if (!choice)

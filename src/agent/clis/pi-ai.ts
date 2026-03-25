@@ -3,7 +3,10 @@
  *
  * Optional alternative to CLI spawning. Supports:
  * - Env-var API keys (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY, etc.)
- * - OAuth login to piggyback on existing subscriptions (Claude Pro, ChatGPT Plus, Copilot)
+ *
+ * OAuth providers are blocked by default. Consumer subscription OAuth
+ * impersonates official CLI clients and violates provider ToS, risking
+ * account bans. Use API keys or native CLI tools (claude, gemini, codex).
  *
  * Models are enumerated dynamically from pi-ai's registry — no hardcoded list.
  * Reference content is inlined into the prompt via portabilizePrompt().
@@ -36,6 +39,18 @@ export function parsePiAiModelId(model: string): { provider: string, modelId: st
     return null
   return { provider: rest.slice(0, slashIdx), modelId: rest.slice(slashIdx + 1) }
 }
+
+// ── Blocked OAuth providers ──────────────────────────────────────────
+// These providers use consumer subscription OAuth in ways that violate
+// the service's ToS and are known to result in account bans/revocations.
+// API key access remains fully supported for these services.
+const BLOCKED_OAUTH_PROVIDERS = new Set([
+  'google-antigravity', // confirmed account bans
+  'google-gemini-cli', // same enforcement posture as Antigravity
+  'github-copilot', // Microsoft restricts to approved integrations only
+  'anthropic', // use `claude` CLI or ANTHROPIC_API_KEY instead
+  'openai-codex', // use `codex` CLI or OPENAI_API_KEY instead
+])
 
 // ── OAuth credentials ────────────────────────────────────────────────
 
@@ -88,8 +103,12 @@ const OAUTH_PROVIDER_OVERRIDES: Record<string, string> = {
   openai: 'openai-codex',
 }
 
-/** Resolve model provider ID → OAuth provider ID */
+/** Resolve model provider ID → OAuth provider ID (returns null for blocked providers) */
 function resolveOAuthProviderId(modelProvider: string): string | null {
+  const oauthId = OAUTH_PROVIDER_OVERRIDES[modelProvider] ?? modelProvider
+  // Block providers known to ban accounts for unauthorized OAuth usage
+  if (BLOCKED_OAUTH_PROVIDERS.has(oauthId))
+    return null
   if (OAUTH_PROVIDER_OVERRIDES[modelProvider])
     return OAUTH_PROVIDER_OVERRIDES[modelProvider]
   // Auto-match: if the model provider ID is also an OAuth provider, use it directly
@@ -139,15 +158,17 @@ export interface LoginCallbacks {
   onProgress?: (message: string) => void
 }
 
-/** Get available OAuth providers for login */
+/** Get available OAuth providers for login (excludes blocked providers) */
 export function getOAuthProviderList(): Array<{ id: string, name: string, loggedIn: boolean }> {
   const auth = loadAuth()
   const providers = getOAuthProviders() as Array<{ id: string, name: string }>
-  return providers.map((p: any) => ({
-    id: p.id,
-    name: p.name ?? p.id,
-    loggedIn: !!auth[p.id],
-  }))
+  return providers
+    .filter((p: any) => !BLOCKED_OAUTH_PROVIDERS.has(p.id))
+    .map((p: any) => ({
+      id: p.id,
+      name: p.name ?? p.id,
+      loggedIn: !!auth[p.id],
+    }))
 }
 
 /** Run OAuth login for a provider, saving credentials to ~/.skilld/ */

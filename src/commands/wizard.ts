@@ -111,8 +111,8 @@ export async function runWizard(opts: WizardOptions = {}): Promise<boolean> {
     + '\x1B[1mThis is a one-time build step\x1B[0m - it generates the SKILL.md, then your\n'
     + 'coding agent reads the result every session. Can be a different model.\n'
     + '\n'
-    + '\x1B[90mWorks with API keys, existing subscriptions (Claude Pro, ChatGPT Plus,\n'
-    + 'Copilot, Gemini) via OAuth, or CLI tools (claude, gemini, codex).\x1B[0m',
+    + '\x1B[90mWorks with API keys (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY)\n'
+    + 'or CLI tools (claude, gemini, codex).\x1B[0m',
     'Enhancement model (optional)',
   )
 
@@ -146,14 +146,21 @@ export async function runWizard(opts: WizardOptions = {}): Promise<boolean> {
         p.log.success(`Found: ${[...providers].join(', ')}`)
     }
 
+    const oauthProviders = getOAuthProviderList()
+    const afterOptions = oauthProviders.length > 0
+      ? [
+          { label: '⚠ Connect OAuth provider...', value: '_connect', hint: 'may violate provider ToS' },
+          { label: 'Skip enhancement', value: '_skip', hint: 'base skill with docs, issues, and types, add LLM later via `skilld config`' },
+        ]
+      : [
+          { label: 'Skip enhancement', value: '_skip', hint: 'base skill with docs, issues, and types, add LLM later via `skilld config`' },
+        ]
+
     const choice = await pickModel(allModels, {
       before: allModels.length > 0
         ? [{ label: 'Auto', value: '_auto', hint: 'picks best available model from connected providers' }]
         : [],
-      after: [
-        { label: 'Connect OAuth provider...', value: '_connect', hint: 'use existing Claude Pro, ChatGPT Plus, etc.' },
-        { label: 'Skip enhancement', value: '_skip', hint: 'base skill with docs, issues, and types - add LLM later via `skilld config`' },
-      ],
+      after: afterOptions,
     })
 
     if (choice === null) {

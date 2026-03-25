@@ -338,23 +338,23 @@ export function formatStatus(synced: number, outdated: number): string {
 // ── Shared UI constants ───────────────────────────────────────────────
 
 export const OAUTH_NOTE
-  = 'Use an existing subscription (Claude Pro, ChatGPT Plus, Gemini)\n'
-    + 'without an API key. You authenticate directly with the provider\n'
-    + 'in your browser - no data leaves your machine.\n'
+  = '\x1B[33m⚠\x1B[0m  OAuth providers are disabled.\n'
     + '\n'
-    + 'A refresh token is stored locally at ~/.skilld/pi-ai-auth.json\n'
-    + 'and used to call the provider API directly from your computer.\n'
-    + '\x1B[90mOAuth handled by pi-ai, an open-source local client library:\n'
-    + 'https://github.com/badlogic/pi-mono\x1B[0m'
+    + 'Consumer subscription OAuth impersonates official CLI clients and\n'
+    + 'violates provider Terms of Service, risking account bans.\n'
+    + '\n'
+    + 'Use API keys or native CLI tools instead:\n'
+    + '  \x1B[36mANTHROPIC_API_KEY\x1B[0m / \x1B[36mclaude\x1B[0m CLI\n'
+    + '  \x1B[36mOPENAI_API_KEY\x1B[0m   / \x1B[36mcodex\x1B[0m CLI\n'
+    + '  \x1B[36mGEMINI_API_KEY\x1B[0m   / \x1B[36mgemini\x1B[0m CLI'
 
 export const NO_MODELS_MESSAGE = 'No enhancement models detected.\n'
-  + '  \x1B[90mSkills work fine without this - you get raw docs, issues, and types.\n'
+  + '  \x1B[90mSkills work fine without this, you get raw docs, issues, and types.\n'
   + '  Enhancement compresses them into a concise cheat sheet with gotchas.\x1B[0m\n'
   + '\n'
   + '  To connect a model (optional):\n'
-  + '  1. Connect a subscription via OAuth below (Claude Pro, ChatGPT Plus, Copilot, Gemini)\n'
-  + '  2. Set an env var: ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY\n'
-  + '  3. Install a CLI tool: \x1B[36mclaude\x1B[0m, \x1B[36mgemini\x1B[0m, or \x1B[36mcodex\x1B[0m (restart wizard after)'
+  + '  1. Set an env var: ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY\n'
+  + '  2. Install a CLI tool: \x1B[36mclaude\x1B[0m, \x1B[36mgemini\x1B[0m, or \x1B[36mcodex\x1B[0m (restart wizard after)'
 
 /** Group models by vendor for provider→model selection. Uses vendorGroup to merge CLI and API entries under one heading. */
 export function groupModelsByProvider<T extends { provider: string, providerName: string, vendorGroup?: string }>(models: T[]): Map<string, { name: string, models: T[] }> {
