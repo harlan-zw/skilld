@@ -90,9 +90,11 @@ describe('restorePkgSymlink', () => {
         return true
       return false
     })
-    // lstatSync throws — no file at all
+    // lstatSync throws ENOENT — no file at all
     vi.mocked(fs.lstatSync).mockImplementation(() => {
-      throw new Error('ENOENT')
+      const err = new Error('ENOENT') as NodeJS.ErrnoException
+      err.code = 'ENOENT'
+      throw err
     })
 
     restorePkgSymlink('/project/.skills', 'vue', { version: '3.4.0' }, '/project')

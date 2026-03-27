@@ -47,8 +47,9 @@ export function restorePkgSymlink(skillsDir: string, name: string, info: SkillIn
       return // real file/dir exists at this path
     }
   }
-  catch {
-    // path doesn't exist — continue to create symlink
+  catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT')
+      return // permission/IO error — bail instead of masking
   }
 
   const pkgName = info.packageName || name
