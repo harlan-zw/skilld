@@ -34,8 +34,22 @@ export function restorePkgSymlink(skillsDir: string, name: string, info: SkillIn
   if (!existsSync(join(skillsDir, name)))
     return
 
-  if (existsSync(pkgLink))
-    return
+  // Use lstatSync to detect dangling symlinks — existsSync follows symlinks
+  // and returns false for dangling ones, causing symlinkSync to throw EEXIST
+  try {
+    const stat = lstatSync(pkgLink)
+    if (stat.isSymbolicLink()) {
+      if (existsSync(pkgLink))
+        return // symlink exists and target is valid
+      unlinkSync(pkgLink) // dangling symlink — remove before re-creating
+    }
+    else {
+      return // real file/dir exists at this path
+    }
+  }
+  catch {
+    // path doesn't exist — continue to create symlink
+  }
 
   const pkgName = info.packageName || name
   const pkgDir = resolvePkgDir(pkgName, cwd, info.version)
