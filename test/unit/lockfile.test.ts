@@ -236,6 +236,35 @@ describe('core/lockfile', () => {
       expect(written).toContain('generator: external')
     })
 
+    it('readLock returns isolated copies from cache', async () => {
+      const { existsSync, readFileSync } = await import('node:fs')
+      const { readLock } = await import('../../src/core/lockfile')
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(
+        'skills:\n'
+        + '  vue:\n'
+        + '    packageName: vue\n'
+        + '    version: "3.5.0"\n',
+      )
+
+      const first = readLock('/skills')
+      const second = readLock('/skills')
+
+      // Both should parse correctly
+      expect(first?.skills.vue?.packageName).toBe('vue')
+      expect(second?.skills.vue?.packageName).toBe('vue')
+
+      // Mutating first should not affect second (both are isolated copies)
+      delete first!.skills.vue
+      expect(first!.skills.vue).toBeUndefined()
+      expect(second?.skills.vue?.packageName).toBe('vue')
+
+      // A third read should still see the original data
+      const third = readLock('/skills')
+      expect(third?.skills.vue?.packageName).toBe('vue')
+    })
+
     it('writeLock omits git fields when not set', async () => {
       const { existsSync, writeFileSync } = await import('node:fs')
       const { writeLock } = await import('../../src/core/lockfile')

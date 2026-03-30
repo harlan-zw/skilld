@@ -74,7 +74,7 @@ export function invalidateLockCache(skillsDir?: string): void {
 export function readLock(skillsDir: string): SkilldLock | null {
   const cached = lockCache.get(skillsDir)
   if (cached)
-    return cached
+    return { skills: { ...cached.skills } }
   const lockPath = join(skillsDir, 'skilld-lock.yaml')
   if (!existsSync(lockPath))
     return null
