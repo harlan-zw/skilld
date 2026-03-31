@@ -38,10 +38,10 @@ import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from
 import { timedSpinner } from '../core/formatting.ts'
 import { parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
+import { parseSkillInput } from '../core/prefix.ts'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { getProjectState } from '../core/skills.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
-import { parseGitSkillInput } from '../sources/git-skills.ts'
 import {
   fetchPkgDist,
   isPrerelease,
@@ -741,7 +741,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 // ── Citty command definitions (lazy-loaded by cli.ts) ──
 
 export const addCommandDef = defineCommand({
-  meta: { name: 'add', description: 'Add skills for package(s)' },
+  meta: { name: 'add', description: 'Install skills (npm:<pkg>, gh:<owner/repo>, @<curator>)' },
   args: {
     package: {
       type: 'positional',
@@ -784,16 +784,30 @@ export const addCommandDef = defineCommand({
     if (!hasCompletedWizard())
       await runWizard({ agent })
 
-    // Partition: git sources vs npm packages
+    // Classify inputs via prefix parser
+    const parsedSources = rawInputs.map(parseSkillInput)
     const gitSources: GitSkillSource[] = []
-    const npmTokens: string[] = []
+    const npmEntries: Array<{ name: string, spec: string }> = []
 
-    for (const input of rawInputs) {
-      const git = parseGitSkillInput(input)
-      if (git)
-        gitSources.push(git)
-      else
-        npmTokens.push(input)
+    for (const source of parsedSources) {
+      switch (source.type) {
+        case 'git':
+          gitSources.push(source.source)
+          break
+        case 'npm':
+          npmEntries.push({ name: source.package, spec: source.tag ? `${source.package}@${source.tag}` : source.package })
+          break
+        case 'bare':
+          p.log.warn(`Bare names are deprecated. Use \x1B[36mnpm:${source.package}\x1B[0m instead.`)
+          npmEntries.push({ name: source.package, spec: source.tag ? `${source.package}@${source.tag}` : source.package })
+          break
+        case 'curator':
+          p.log.warn(`Curator installs (\x1B[36m@${source.handle}\x1B[0m) are not yet available.`)
+          break
+        case 'collection':
+          p.log.warn(`Collection installs (\x1B[36m@${source.handle}/${source.name}\x1B[0m) are not yet available.`)
+          break
+      }
     }
 
     // Handle git sources
@@ -804,20 +818,43 @@ export const addCommandDef = defineCommand({
       }
     }
 
-    // Handle npm packages via existing flow
-    if (npmTokens.length > 0) {
-      const packages = [...new Set(npmTokens.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
-      const state = await getProjectState(cwd)
-      p.intro(introLine({ state, agentId: agent || undefined }))
-      return syncCommand(state, {
-        packages,
-        global: args.global,
-        agent,
-        model: args.model as OptimizeModel | undefined,
-        yes: args.yes,
-        force: args.force,
-        debug: args.debug,
+    // Handle npm packages: registry first, then fallback to doc generation
+    if (npmEntries.length > 0) {
+      const { syncRegistrySkill } = await import('./sync-registry.ts')
+      const seen = new Set<string>()
+      const dedupedEntries = npmEntries.filter((e) => {
+        if (seen.has(e.name))
+          return false
+        seen.add(e.name)
+        return true
       })
+
+      // Try registry for each package, collect misses for fallback
+      const fallbackPackages: string[] = []
+      for (const entry of dedupedEntries) {
+        const result = await syncRegistrySkill({ packageName: entry.name, agent, cwd })
+        if (result) {
+          p.log.success(`Installed \x1B[36m${result.name}\x1B[0m (${result.version}) from registry`)
+        }
+        else {
+          fallbackPackages.push(entry.spec)
+        }
+      }
+
+      // Fallback: generate from docs for packages not in registry
+      if (fallbackPackages.length > 0) {
+        const state = await getProjectState(cwd)
+        p.intro(introLine({ state, agentId: agent || undefined }))
+        return syncCommand(state, {
+          packages: fallbackPackages,
+          global: args.global,
+          agent,
+          model: args.model as OptimizeModel | undefined,
+          yes: args.yes,
+          force: args.force,
+          debug: args.debug,
+        })
+      }
     }
   },
 })

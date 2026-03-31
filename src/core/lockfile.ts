@@ -96,6 +96,11 @@ export function readLock(skillsDir: string): SkilldLock | null {
         skills[currentSkill]![kv[0]] = kv[1]
     }
   }
+  // Normalize legacy source values
+  for (const info of Object.values(skills)) {
+    if (info.source === 'npm')
+      info.source = 'registry'
+  }
   const lock = { skills }
   lockCache.set(skillsDir, lock)
   return { skills: { ...lock.skills } }

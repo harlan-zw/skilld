@@ -637,7 +637,7 @@ function printConsumerGuidance(packageNames: string[]): void {
 }
 
 export const authorCommandDef = defineCommand({
-  meta: { name: 'author', description: 'Generate portable skill for npm publishing' },
+  meta: { name: 'package', description: 'Generate a package skill from documentation' },
   args: {
     out: {
       type: 'string',
