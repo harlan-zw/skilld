@@ -50,7 +50,7 @@ function readSkillsFromDir(dir: string, source: 'local' | 'global', extraLockDir
     skills.push({
       name: fm.name || dirName,
       description: fm.description,
-      version: fm.metadata?.version || fm.version || lockInfo?.version,
+      version: fm.version || lockInfo?.version,
       repo: lockInfo?.repo,
       generator: lockInfo?.generator,
       source,
@@ -147,7 +147,7 @@ export async function uploadCommand(options?: { dryRun?: boolean }): Promise<voi
     process.stdout.write(`Found ${colorize('bold', String(skills.length))} skill${skills.length === 1 ? '' : 's'}:\n\n`)
     for (const skill of skills) {
       const version = skill.version ? colorize('dim', ` v${skill.version}`) : ''
-      const tag = colorize(SOURCE_COLORS[skill.source] || 'dim', skill.source)
+      const tag = colorize((SOURCE_COLORS[skill.source] || 'dim') as 'dim', skill.source)
       const repo = skill.repo ? colorize('dim', ` github.com/${skill.repo}`) : ''
       process.stdout.write(`  ${colorize('cyan', skill.name)}${version} ${tag}${repo}\n`)
     }
