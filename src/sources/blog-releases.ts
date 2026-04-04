@@ -5,6 +5,7 @@
 
 import type { BlogRelease } from './package-registry.ts'
 import { htmlToMarkdown } from 'mdream'
+import pLimit from 'p-limit'
 import { yamlEscape } from '../core/yaml.ts'
 import { getBlogPreset } from './package-registry.ts'
 import { compareSemver, parseSemver } from './releases.ts'
@@ -114,18 +115,12 @@ export async function fetchBlogReleases(
   if (filteredReleases.length === 0)
     return []
 
-  const releases: BlogReleasePost[] = []
-
-  // Fetch all blog posts in parallel with 3 concurrent requests
-  const batchSize = 3
-  for (let i = 0; i < filteredReleases.length; i += batchSize) {
-    const batch = filteredReleases.slice(i, i + batchSize)
-    const results = await Promise.all(batch.map(entry => fetchBlogPost(entry)))
-    for (const result of results) {
-      if (result)
-        releases.push(result)
-    }
-  }
+  // Fetch all blog posts with controlled concurrency
+  const limit = pLimit(3)
+  const results = await Promise.all(
+    filteredReleases.map(entry => limit(() => fetchBlogPost(entry))),
+  )
+  const releases = results.filter((r): r is BlogReleasePost => r !== null)
 
   if (releases.length === 0)
     return []
