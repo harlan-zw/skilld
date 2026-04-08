@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/skilld?color=yellow)](https://npmjs.com/package/skilld)
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)
-[![license](https://img.shields.io/npm/l/skilld?color=yellow)](https://github.com/harlan-zw/skilld/blob/main/LICENSE)
+[![license](https://img.shields.io/npm/l/skilld?color=yellow)](https://github.com/skilld-dev/skilld/blob/main/LICENSE)
 
 > Generate AI agent skills from your NPM dependencies.
 
@@ -330,4 +330,4 @@ DO_NOT_TRACK=1
 
 ## License
 
-Licensed under the [MIT license](https://github.com/harlan-zw/skilld/blob/main/LICENSE).
+Licensed under the [MIT license](https://github.com/skilld-dev/skilld/blob/main/LICENSE).
