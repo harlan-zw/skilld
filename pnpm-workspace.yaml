@@ -7,7 +7,7 @@ packages:
 overrides:
   global-agent: ^4.1.3
 catalog:
-  '@mariozechner/pi-ai': ^0.63.1
+  '@mariozechner/pi-ai': ^0.64.0
   '@mdream/crawl': ^1.0.3
   '@types/semver': ^7.7.1
   bumpp: ^11.0.1
@@ -36,7 +36,7 @@ catalogs:
     mlly: ^1.8.2
     oxc-parser: ^0.121.0
     p-limit: ^7.3.0
-    sqlite-vec: ^0.1.7
+    sqlite-vec: ^0.1.8
     tinyglobby: ^0.2.15
     unist-util-visit: ^5.1.0
   dev-build:

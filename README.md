@@ -1,4 +1,4 @@
-<h1>skilld</h1>
+<h1><a href="https://skilld.dev"><img src=".github/logos/logo-mark.svg" alt="" width="28" height="28" valign="middle"></a> skilld</h1>
 
 [![npm version](https://img.shields.io/npm/v/skilld?color=yellow)](https://npmjs.com/package/skilld)
 [![npm downloads](https://img.shields.io/npm/dm/skilld?color=yellow)](https://npm.chart.dev/skilld)

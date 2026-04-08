@@ -6,15 +6,47 @@ export type { ChunkEntity, Document, IndexConfig, IndexPhase, IndexProgress, Sea
 type RetrivInstance = Awaited<ReturnType<typeof getDb>>
 
 export class SearchDepsUnavailableError extends Error {
-  constructor(cause: unknown) {
-    super('Search dependencies unavailable (sqlite-vec or retriv not installed). Search indexing skipped.')
+  constructor(cause: unknown, message?: string) {
+    super(message ?? 'Search dependencies unavailable (sqlite-vec or retriv not installed). Search indexing skipped.')
     this.name = 'SearchDepsUnavailableError'
     this.cause = cause
   }
 }
 
+let _fts5Available: boolean | null = null
+
+/**
+ * Probe whether SQLite FTS5 module is available.
+ * Windows Node.js binaries often ship without FTS5 compiled in.
+ */
+function checkFts5(): boolean {
+  if (_fts5Available !== null)
+    return _fts5Available
+  const nodeSqlite = globalThis.process?.getBuiltinModule?.('node:sqlite') as typeof import('node:sqlite') | undefined
+  if (!nodeSqlite) {
+    _fts5Available = false
+    return false
+  }
+  const db = new nodeSqlite.DatabaseSync(':memory:')
+  try {
+    db.exec('CREATE VIRTUAL TABLE _fts5_probe USING fts5(content)')
+    db.exec('DROP TABLE _fts5_probe')
+    _fts5Available = true
+  }
+  catch {
+    _fts5Available = false
+  }
+  finally {
+    db.close()
+  }
+  return _fts5Available
+}
+
 // Dynamic imports: retriv/chunkers/auto eagerly loads typescript which may not be installed (e.g. npx)
 export async function getDb(config: Pick<IndexConfig, 'dbPath'>) {
+  if (!checkFts5())
+    throw new SearchDepsUnavailableError(new Error('FTS5 module not available'), 'SQLite FTS5 module not available. Search indexing skipped. On Windows, run from WSL where FTS5 is included.')
+
   let createRetriv, autoChunker, sqliteMod, sqliteVec, transformersJs, cachedEmbeddings
   try {
     ;([
