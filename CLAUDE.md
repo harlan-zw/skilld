@@ -34,7 +34,8 @@ skilld prepare        # Hook for package.json "prepare" (restore refs, sync ship
 skilld uninstall      # Remove skilld data
 skilld search "query" # Search indexed docs
 skilld search "query" -p nuxt  # Search filtered by package
-skilld cache             # Clean expired LLM cache entries
+skilld cache --clean     # Clean expired LLM cache entries
+skilld cache --stats     # Show cache disk usage breakdown
 skilld add owner/repo    # Add pre-authored skills from git repo
 skilld eject vue                    # Eject skill (portable, no symlinks)
 skilld eject vue --name vue         # Eject with custom skill dir name
