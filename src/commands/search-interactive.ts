@@ -2,7 +2,7 @@ import type { SearchFilter, SearchSnippet } from '../retriv/index.ts'
 import { createLogUpdate } from 'log-update'
 import { formatCompactSnippet, highlightTerms, normalizeScores, sanitizeMarkdown, scoreLabel } from '../core/index.ts'
 import { closePool, openPool, SearchDepsUnavailableError, searchPooled } from '../retriv/index.ts'
-import { findPackageDbs, getPackageVersions, listLockPackages, parseFilterPrefix } from './search.ts'
+import { findPackageDbs, getPackageVersions, listLockPackages, parseFilterPrefix } from './search-helpers.ts'
 
 const FILTER_CYCLE = [undefined, 'docs', 'issues', 'releases'] as const
 type FilterLabel = typeof FILTER_CYCLE[number]

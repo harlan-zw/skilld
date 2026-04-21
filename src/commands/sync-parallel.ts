@@ -46,7 +46,10 @@ import {
 } from '../sources/index.ts'
 
 import {
+  DEFAULT_SECTIONS,
   detectChangelog,
+  ensureAgentInstructions,
+  ensureGitignore,
   fetchAndCacheResources,
   findRelatedSkills,
   forceClearCache,
@@ -56,8 +59,9 @@ import {
   RESOLVE_STEP_LABELS,
   resolveBaseDir,
   resolveLocalDep,
+  selectLlmConfig,
+  writePromptFiles,
 } from './sync-shared.ts'
-import { DEFAULT_SECTIONS, ensureAgentInstructions, ensureGitignore, selectLlmConfig, writePromptFiles } from './sync.ts'
 
 type PackageStatus = 'pending' | 'resolving' | 'downloading' | 'embedding' | 'exploring' | 'thinking' | 'generating' | 'done' | 'error'
 

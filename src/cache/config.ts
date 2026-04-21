@@ -4,7 +4,6 @@
 
 import { homedir } from 'node:os'
 import { join } from 'pathe'
-import { getCacheKey } from './version.ts'
 
 /** Global cache directory */
 export const CACHE_DIR = join(homedir(), '.skilld')
@@ -24,5 +23,5 @@ export function getRepoCacheDir(owner: string, repo: string): string {
 
 /** Get search DB path for a specific package@version */
 export function getPackageDbPath(name: string, version: string): string {
-  return join(REFERENCES_DIR, getCacheKey(name, version), 'search.db')
+  return join(REFERENCES_DIR, `${name}@${version}`, 'search.db')
 }
