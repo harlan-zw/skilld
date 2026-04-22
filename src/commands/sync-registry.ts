@@ -45,7 +45,7 @@ export async function syncRegistrySkill(opts: SyncRegistryOptions): Promise<Regi
   mkdirSync(baseDir, { recursive: true })
   writeLock(baseDir, skill.name, {
     packageName: skill.packageName,
-    version: skill.version,
+    version: skill.updatedAt,
     repo: skill.repo,
     source: 'registry',
     syncedAt: new Date().toISOString().slice(0, 10),
