@@ -5,6 +5,7 @@ import { join } from 'pathe'
 import { agents, detectTargetAgent } from '../agent/index.ts'
 import { getPackageDbPath, REFERENCES_DIR } from '../cache/index.ts'
 import { readLock } from '../core/index.ts'
+import { toStoragePackageName } from '../core/prefix.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
@@ -72,10 +73,11 @@ function filterLockDbs(lock: ReturnType<typeof readLock>, packageFilter?: string
       return filterTokens.every(ft => nameTokens.some(nt => nt.includes(ft) || ft.includes(nt)))
     })
     .map((info) => {
-      const exact = getPackageDbPath(info.packageName!, info.version!)
+      const storageName = toStoragePackageName(info.packageName!)
+      const exact = getPackageDbPath(storageName, info.version!)
       if (existsSync(exact))
         return exact
-      const fallback = findAnyPackageDb(info.packageName!)
+      const fallback = findAnyPackageDb(storageName)
       if (fallback)
         p.log.warn(`Using cached search index for ${info.packageName} (v${info.version} not indexed). Run \`skilld update ${info.packageName}\` to re-index.`)
       return fallback

@@ -40,6 +40,7 @@ import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
 import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile.ts'
 import { readPackageJsonSafe } from '../core/package-json.ts'
+import { toStoragePackageName } from '../core/prefix.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 import { createIndex, SearchDepsUnavailableError } from '../retriv/index.ts'
@@ -118,7 +119,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     const needsRestore = !existsSync(skillDir)
       || !existsSync(skillMdPath)
       || !existsSync(referencesPath)
-      || hasStaleReferences(referencesPath, info.packageName || name, info.version!, features)
+      || hasStaleReferences(referencesPath, toStoragePackageName(info.packageName || name), info.version!, features)
 
     if (needsRestore) {
       toRestore.push({ name, info })
@@ -138,7 +139,8 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
 
   for (const { name, info } of toRestore) {
     const version = info.version!
-    const pkgName = info.packageName || unsanitizeName(name, info.source)
+    const identityName = info.packageName || unsanitizeName(name, info.source)
+    const pkgName = toStoragePackageName(identityName)
 
     // Shipped skills: re-link from node_modules or cached dist
     if (info.source === 'shipped') {

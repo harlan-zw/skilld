@@ -5,12 +5,40 @@
 import { ofetch } from 'ofetch'
 import { getGitHubToken, isKnownPrivateRepo, markRepoPrivate } from './github-common.ts'
 
+export const SKILLD_USER_AGENT = 'skilld/1.0 (+https://github.com/harlan-zw/skilld)'
+
 export const $fetch = ofetch.create({
   retry: 3,
-  retryDelay: 500,
+  retryDelay: 1000,
+  retryStatusCodes: [408, 429, 500, 502, 503, 504],
   timeout: 15_000,
-  headers: { 'User-Agent': 'skilld/1.0' },
+  headers: { 'User-Agent': SKILLD_USER_AGENT },
 })
+
+/**
+ * Create a rate-limited runner that enforces a minimum gap between task starts.
+ * Queues tasks serially so consumers don't need to coordinate.
+ */
+export function createRateLimitedRunner(intervalMs: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let queue: Promise<void> = Promise.resolve()
+  let lastRunAt = 0
+
+  return async function runRateLimited<T>(task: () => Promise<T>): Promise<T> {
+    const run = async (): Promise<T> => {
+      const elapsed = Date.now() - lastRunAt
+      const waitMs = intervalMs - elapsed
+      if (waitMs > 0)
+        await new Promise(resolve => setTimeout(resolve, waitMs))
+
+      lastRunAt = Date.now()
+      return task()
+    }
+
+    const request = queue.then(run, run)
+    queue = request.then(() => undefined, () => undefined)
+    return request
+  }
+}
 
 /**
  * Fetch text content from URL
@@ -105,6 +133,19 @@ export function isGitHubRepoUrl(url: string): boolean {
   try {
     const parsed = new URL(url)
     return parsed.hostname === 'github.com' || parsed.hostname === 'www.github.com'
+  }
+  catch {
+    return false
+  }
+}
+
+/** Check if URL points to a code hosting provider (GitHub/GitLab) rather than a docs site */
+export function isLikelyCodeHostUrl(url: string | undefined): boolean {
+  if (!url)
+    return false
+  try {
+    const parsed = new URL(url)
+    return ['github.com', 'www.github.com', 'gitlab.com', 'www.gitlab.com'].includes(parsed.hostname)
   }
   catch {
     return false
