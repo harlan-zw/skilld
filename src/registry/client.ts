@@ -16,7 +16,7 @@ import { ofetch } from 'ofetch'
 const DEFAULT_REGISTRY_URL = 'https://skilld.dev/api'
 
 export function getRegistryBase(): string {
-  return process.env.SKILLD_REGISTRY_URL || DEFAULT_REGISTRY_URL
+  return (process.env.SKILLD_REGISTRY_URL || DEFAULT_REGISTRY_URL).replace(/\/$/, '')
 }
 
 export interface RegistrySkill {
