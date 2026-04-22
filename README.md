@@ -51,7 +51,7 @@ __Requires Node 22.6.0 or higher.__
 Or add a specific package directly:
 
 ```bash
-npx -y skilld add vue
+npx -y skilld add npm:vue
 ```
 
 If you need to re-configure skilld, just run `npx -y skilld config` to update your agent, model, or preferences.
@@ -59,10 +59,10 @@ If you need to re-configure skilld, just run `npx -y skilld config` to update yo
 **No agent CLI?** No problem - choose "No agent" when prompted. You get a base skill immediately, plus portable prompts you can run in any LLM:
 
 ```bash
-npx -y skilld add vue
+npx -y skilld add npm:vue
 # Choose "No agent" -> base skill + prompts exported
 # Paste prompts into ChatGPT/Claude web, save outputs, then:
-npx -y skilld assemble
+npx -y skilld author assemble
 ```
 
 ### Tips
@@ -143,8 +143,11 @@ Yes. Add `skilld prepare` to your prepare script. It restores references, auto-i
 # Interactive mode - auto-discover from package.json
 skilld
 
-# Add skills for specific package(s)
-skilld add vue nuxt pinia
+# Add skills for specific package(s) — npm: prefix for registry packages
+skilld add npm:vue npm:nuxt npm:pinia
+
+# Add a pre-authored skill from a GitHub repo
+skilld add gh:vercel-labs/agent-skills
 
 # Update outdated skills
 skilld update
@@ -156,13 +159,13 @@ skilld search "error" -p nuxt --filter '{"type":"issue"}'
 skilld search --guide -p nuxt
 
 # Target a specific agent
-skilld add react --agent cursor
+skilld add npm:react --agent cursor
 
 # Install globally to ~/.claude/skills
-skilld add zod --global
+skilld add npm:zod --global
 
 # Skip prompts
-skilld add drizzle-orm --yes
+skilld add npm:drizzle-orm --yes
 
 # Check skill info
 skilld info
@@ -180,8 +183,8 @@ skilld config
 | Command | Description |
 |---------|-------------|
 | `skilld` | Interactive wizard (first run) or status menu (existing skills) |
-| `skilld add <pkg...>` | Add skills for package(s), space or comma-separated |
-| `skilld update [pkg]` | Update outdated skills (all or specific) |
+| `skilld add <source...>` | Add skills. Sources: `npm:<pkg>`, `gh:<owner/repo>`, or bare names (deprecated) |
+| `skilld update [pkg]`   | Update outdated skills (all or specific) |
 | `skilld search [query]` | Search indexed docs (`-p` package, `--filter` JSON, `--limit`, `--guide`) |
 | `skilld list`           | List installed skills (`--json` for machine-readable output) |
 | `skilld info`           | Show skill info and config |
@@ -190,15 +193,18 @@ skilld config
 | `skilld remove`         | Remove installed skills |
 | `skilld uninstall`      | Remove all skilld data |
 | `skilld cache`          | Cache management (clean expired LLM cache entries) |
-| `skilld eject <pkg>`    | Eject skill as portable directory (no symlinks) |
-| `skilld assemble [dir]` | Merge LLM output files back into SKILL.md (auto-discovers) |
+| `skilld author package <pkg>`  | Generate a portable package skill from docs |
+| `skilld author publish` | Publish skills to skilld.dev |
+| `skilld author eject <pkg>`    | Eject skill as portable directory (no symlinks) |
+| `skilld author validate <file>`| Validate a skill section |
+| `skilld author assemble [dir]` | Merge LLM output files back into SKILL.md (auto-discovers) |
 
 ### Works Without an Agent CLI
 
 No Claude, Gemini, or Codex CLI? Choose "No agent" when prompted. You get a base skill immediately, plus portable prompts you can run in any LLM to enhance it:
 
 ```bash
-skilld add vue
+skilld add npm:vue
 # Choose "No agent" -> installs to .claude/skills/vue-skilld/
 
 # What you get:
@@ -208,23 +214,23 @@ skilld add vue
 
 # Run each PROMPT_*.md in ChatGPT/Claude web/any LLM
 # Save outputs as _BEST_PRACTICES.md, _API_CHANGES.md, then:
-skilld assemble
+skilld author assemble
 ```
 
-`skilld assemble` auto-discovers skills with pending output files. `skilld update` re-exports prompts for outdated packages.
+`skilld author assemble` auto-discovers skills with pending output files. `skilld update` re-exports prompts for outdated packages.
 
 ### Eject
 
 Export a skill as a portable, self-contained directory for sharing via git repos:
 
 ```bash
-skilld eject vue                    # Default skill directory
-skilld eject vue --name vue         # Custom directory name
-skilld eject vue --out ./skills/    # Custom path
-skilld eject vue --from 2025-07-01  # Only recent releases/issues
+skilld author eject vue                    # Default skill directory
+skilld author eject vue --name vue         # Custom directory name
+skilld author eject vue --out ./skills/    # Custom path
+skilld author eject vue --from 2025-07-01  # Only recent releases/issues
 ```
 
-Share via `skilld add owner/repo` - consumers get fully functional skills with no LLM cost.
+Share via `skilld add gh:owner/repo` - consumers get fully functional skills with no LLM cost.
 
 ### CLI Options
 

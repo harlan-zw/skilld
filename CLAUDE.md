@@ -20,35 +20,44 @@ pnpm test -- --project e2e               # E2E tests only
 ### CLI Commands
 
 ```bash
-skilld                # Interactive menu
-skilld add vue nuxt   # Add skills for packages
-skilld update         # Update all outdated skills
-skilld update vue     # Update specific package
-skilld remove         # Remove installed skills
-skilld list           # List installed skills (one per line)
-skilld list --json    # List as JSON
-skilld info           # Show config, agents, features, per-package detail
-skilld config         # Change settings
-skilld install        # Restore references from lockfile
-skilld prepare        # Hook for package.json "prepare" (restore refs, sync shipped, report outdated)
-skilld uninstall      # Remove skilld data
-skilld search "query" # Search indexed docs
-skilld search "query" -p nuxt  # Search filtered by package
-skilld cache --clean     # Clean expired LLM cache entries
-skilld cache --stats     # Show cache disk usage breakdown
-skilld add owner/repo    # Add pre-authored skills from git repo
-skilld eject vue                    # Eject skill (portable, no symlinks)
-skilld eject vue --name vue         # Eject with custom skill dir name
-skilld eject vue --out ./dir/       # Eject to custom path
-skilld eject vue --from 2025-07-01  # Only releases/issues since date
-skilld author                       # Generate skill for npm publishing (monorepo-aware)
-skilld author -m haiku              # Author with specific LLM model
-skilld author -o ./custom/          # Author to custom output directory
+skilld                          # Interactive menu
+skilld add npm:vue npm:nuxt     # Install package skills from registry
+skilld add gh:owner/repo        # Install git skills from GitHub
+skilld add @curator             # Install all skills from a curator (coming soon)
+skilld add @curator/collection  # Install a specific collection (coming soon)
+skilld add vue                  # Bare names deprecated, resolves as npm:vue with warning
+skilld update                   # Update all outdated skills
+skilld update vue               # Update specific package
+skilld remove                   # Remove installed skills
+skilld list                     # List installed skills (one per line)
+skilld list --json              # List as JSON
+skilld info                     # Show config, agents, features, per-package detail
+skilld config                   # Change settings
+skilld install                  # Restore references from lockfile
+skilld prepare                  # Hook for package.json "prepare" (restore refs, sync shipped, report outdated)
+skilld uninstall                # Remove skilld data
+skilld search "query"           # Search indexed docs
+skilld search "query" -p nuxt   # Search filtered by package
+skilld cache --clean            # Clean expired LLM cache entries
+skilld cache --stats            # Show cache disk usage breakdown
+```
+
+### Author Commands (skill creation and publishing)
+
+```bash
+skilld author package               # Generate a package skill from docs (monorepo-aware)
+skilld author package -m haiku      # Author with specific LLM model
+skilld author package -o ./custom/  # Author to custom output directory
+skilld author publish               # Publish skill list to skilld.dev
+skilld author eject vue             # Eject skill (portable, no symlinks)
+skilld author eject vue --name vue  # Eject with custom skill dir name
+skilld author validate <file>       # Validate a skill section
+skilld author assemble [dir]        # Merge enhancement output into SKILL.md
 ```
 
 ## Architecture
 
-CLI tool that generates AI agent skills from NPM package documentation. Requires Node >= 22.6.0. Flow: `package name → resolve docs → cache references → generate SKILL.md → install to agent dirs`.
+CLI tool and curated registry for AI agent skills. Requires Node >= 22.6.0. Primary flow: `skilld add npm:<pkg>` → fetch curated skill from skilld.dev → install to agent dirs. Fallback: `skilld author package <pkg>` → resolve docs → cache references → generate SKILL.md.
 
 **Key directories:**
 - `~/.skilld/` - Global cache: `references/<pkg>@<version>/`, `llm-cache/`, `config.yaml`
@@ -61,7 +70,8 @@ CLI tool that generates AI agent skills from NPM package documentation. Requires
 - `src/sources/` - Doc fetching (npm registry, llms.txt, GitHub via ungh.cc)
 - `src/cache/` - Reference caching with symlinks to `~/.skilld/references/`
 - `src/retriv/` - Vector search with sqlite-vec + @huggingface/transformers embeddings
-- `src/core/` - Config (custom YAML parser), skills iteration, formatting, lockfile
+- `src/core/` - Config (custom YAML parser), skills iteration, formatting, lockfile, prefix parser
+- `src/registry/` - Registry client for skilld.dev API (curated skill fetching)
 
 **Doc resolution cascade (src/commands/sync.ts):**
 1. Package ships `skills/` directory → symlink directly (skills-npm convention)

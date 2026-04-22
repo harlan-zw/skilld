@@ -149,9 +149,29 @@ async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> 
   return result
 }
 
+// ── Deprecation forwarder ──
+
+function deprecatedForwarder(
+  oldName: string,
+  newName: string,
+  loader: () => Promise<any>,
+): () => Promise<any> {
+  return () => loader().then((cmd: any) => {
+    const original = cmd.run
+    return defineCommand({
+      ...cmd,
+      meta: { ...cmd.meta, name: oldName },
+      async run(ctx: any) {
+        console.warn(`\x1B[33m⚠ \`skilld ${oldName}\` is deprecated. Use \`skilld ${newName}\` instead.\x1B[0m`)
+        return original(ctx)
+      },
+    })
+  })
+}
+
 // ── Subcommands (lazy-loaded) ──
 
-const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate', 'assemble', 'setup', 'prepare', 'author', 'publish']
+const SUBCOMMAND_NAMES = ['add', 'eject', 'update', 'info', 'list', 'config', 'remove', 'install', 'uninstall', 'search', 'cache', 'validate', 'assemble', 'setup', 'prepare', 'author', 'publish', 'upload']
 
 // ── Main command ──
 
@@ -159,14 +179,13 @@ const main = defineCommand({
   meta: {
     name: 'skilld',
     version,
-    description: 'Sync package documentation for agentic use',
+    description: 'Curated agent skills for your projects',
   },
   args: {
     agent: sharedArgs.agent,
   },
   subCommands: {
     add: () => import('./commands/sync.ts').then(m => m.addCommandDef),
-    eject: () => import('./commands/sync.ts').then(m => m.ejectCommandDef),
     update: () => import('./commands/sync.ts').then(m => m.updateCommandDef),
     info: () => infoCommandDef,
     list: () => import('./commands/list.ts').then(m => m.listCommandDef),
@@ -177,11 +196,15 @@ const main = defineCommand({
     uninstall: () => import('./commands/uninstall.ts').then(m => m.uninstallCommandDef),
     search: () => import('./commands/search.ts').then(m => m.searchCommandDef),
     cache: () => import('./commands/cache.ts').then(m => m.cacheCommandDef),
-    validate: () => import('./commands/validate.ts').then(m => m.validateCommandDef),
-    assemble: () => import('./commands/assemble.ts').then(m => m.assembleCommandDef),
     setup: () => import('./commands/setup.ts').then(m => m.setupCommandDef),
-    author: () => import('./commands/author.ts').then(m => m.authorCommandDef),
-    publish: () => import('./commands/author.ts').then(m => m.authorCommandDef),
+    // Author group (nested subcommands)
+    author: () => import('./commands/author-group.ts').then(m => m.authorGroupDef),
+    // Deprecated forwarders (old top-level commands → skilld author <subcommand>)
+    eject: deprecatedForwarder('eject', 'author eject', () => import('./commands/sync.ts').then(m => m.ejectCommandDef)),
+    validate: deprecatedForwarder('validate', 'author validate', () => import('./commands/validate.ts').then(m => m.validateCommandDef)),
+    assemble: deprecatedForwarder('assemble', 'author assemble', () => import('./commands/assemble.ts').then(m => m.assembleCommandDef)),
+    publish: deprecatedForwarder('publish', 'author publish', () => import('./commands/upload.ts').then(m => m.uploadCommandDef)),
+    upload: deprecatedForwarder('upload', 'author publish', () => import('./commands/upload.ts').then(m => m.uploadCommandDef)),
   },
   async run({ args }) {
     // Guard: citty always calls parent run() after subcommand dispatch.
