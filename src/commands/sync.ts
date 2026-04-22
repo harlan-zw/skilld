@@ -846,7 +846,7 @@ export const addCommandDef = defineCommand({
       for (const entry of dedupedEntries) {
         const result = await syncRegistrySkill({ packageName: entry.name, agent, cwd })
         if (result) {
-          p.log.success(`Installed \x1B[36m${result.name}\x1B[0m (${result.version}) from registry`)
+          p.log.success(`Installed \x1B[36m${result.name}\x1B[0m from registry`)
         }
         else {
           fallbackPackages.push(entry.spec)
