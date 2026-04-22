@@ -17,6 +17,7 @@ import { getProjectState, hasCompletedWizard, isOutdated, readConfig, semverGt }
 import { readPackageJsonSafe } from './core/package-json.ts'
 import { iterateSkills } from './core/skills.ts'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index.ts'
+import { brandLoader } from './ui.ts'
 
 import { version } from './version.ts'
 
@@ -26,128 +27,6 @@ process.emit = (event: string, ...args: any[]) =>
   event === 'warning' && args[0]?.name === 'ExperimentalWarning' && args[0]?.message?.includes('SQLite')
     ? false
     : _emit.apply(process, [event, ...args])
-
-// ── Brand animation ──
-
-const NOISE_CHARS = '⣿⡿⣷⣾⣽⣻⢿⡷⣯⣟⡾⣵⣳⢾⡽⣞⡷⣝⢯'
-
-// Seed hue from cwd so each project gets a consistent color
-function djb2(s: string): number {
-  let h = 5381
-  for (let i = 0; i < s.length; i++)
-    h = ((h << 5) + h + s.charCodeAt(i)) >>> 0
-  return h
-}
-
-function hueToChannel(p: number, q: number, t: number): number {
-  const t1 = t < 0 ? t + 1 : t > 1 ? t - 1 : t
-  if (t1 < 1 / 6)
-    return p + (q - p) * 6 * t1
-  if (t1 < 1 / 2)
-    return q
-  if (t1 < 2 / 3)
-    return p + (q - p) * (2 / 3 - t1) * 6
-  return p
-}
-
-function hsl(h: number, s: number, l: number): [number, number, number] {
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s
-  const p = 2 * l - q
-  return [
-    Math.round(hueToChannel(p, q, h + 1 / 3) * 255),
-    Math.round(hueToChannel(p, q, h) * 255),
-    Math.round(hueToChannel(p, q, h - 1 / 3) * 255),
-  ]
-}
-
-const BRAND_HUE = (djb2(process.cwd()) % 360) / 360
-
-// density 0 = random sparse braille, density 1 = ⣿ (all dots filled)
-function noiseChar(brightness: number, density = 0): string {
-  if (brightness < 0.08)
-    return ' '
-  const b = Math.min(brightness, 1)
-  const ch = Math.random() < density ? '⣿' : NOISE_CHARS[Math.floor(Math.random() * NOISE_CHARS.length)]
-  const [r, g, bl] = hsl(BRAND_HUE, 0.4 + b * 0.15, 0.35 + b * 0.25)
-  return `\x1B[38;2;${r};${g};${bl}m${ch}`
-}
-
-function noiseLine(len: number, brightnessFn: (x: number) => number, density = 0): string {
-  let s = ''
-  for (let i = 0; i < len; i++)
-    s += noiseChar(brightnessFn(i), density)
-  return `${s}\x1B[0m`
-}
-
-function brandFrame(t: number, floor = 0, density = 0): string {
-  const cx = 5
-  const cy = 1
-  const brightness = (x: number, y: number) => {
-    const d = Math.sqrt((x - cx) ** 2 + ((y - cy) * 3) ** 2)
-    let val = 0
-    for (let ring = 0; ring < 3; ring++) {
-      const rt = t - ring * 0.5
-      if (rt <= 0)
-        continue
-      const front = rt * 4
-      const proximity = Math.abs(d - front)
-      val += Math.exp(-proximity * proximity * 0.8) * Math.exp(-rt * 0.4)
-    }
-    const base = Math.max(0, (t - 1.5) * 0.3) * (Math.random() * 0.3 + 0.1)
-    return Math.min(1, Math.max(floor, val + base))
-  }
-  return [
-    noiseLine(10, x => brightness(x, 0), density),
-    `${noiseLine(2, x => brightness(x, 1), density)} %NAME% ${noiseLine(2, x => brightness(x + 8, 1), density)} %VER%`,
-    noiseLine(10, x => brightness(x, 2), density),
-  ].join('\n')
-}
-
-async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Promise<T> {
-  if (process.env.SKILLD_EFFECT === 'none')
-    return work()
-
-  const logUpdate = (await import('log-update')).default
-  const name = '\x1B[1m\x1B[38;2;255;255;255mskilld\x1B[0m'
-  const ver = `\x1B[2mv${version}\x1B[0m`
-  const status = '\x1B[2mSetting up your environment\x1B[0m'
-  const start = Date.now()
-
-  const sub = (raw: string) => raw.replace('%NAME%', name).replace('%VER%', ver)
-
-  let done = false
-  const result = Promise.all([
-    work(),
-    new Promise<void>(r => setTimeout(r, minMs)),
-  ]).then(([v]) => {
-    done = true
-    return v
-  })
-
-  // Main animation — ripple with status text
-  // eslint-disable-next-line no-unmodified-loop-condition -- modified async in .then()
-  while (!done) {
-    const t = (Date.now() - start) / 1000
-    logUpdate(`\n  ${sub(brandFrame(t))}\n\n  ${status}`)
-    await new Promise(r => setTimeout(r, 60))
-  }
-
-  // Fill outro — ramp floor + density so all dots fill in
-  const outroMs = 500
-  const outroStart = Date.now()
-  const tFinal = (outroStart - start) / 1000
-  while (Date.now() - outroStart < outroMs) {
-    const p = (Date.now() - outroStart) / outroMs
-    const eased = p * p
-    logUpdate(`\n  ${sub(brandFrame(tFinal + p * 0.5, eased * 0.9, eased))}\n`)
-    await new Promise(r => setTimeout(r, 40))
-  }
-
-  // Final frame — all pixels ⣿, full brightness
-  logUpdate(`\n  ${sub(brandFrame(tFinal + 1, 0.9, 1))}\n`)
-  logUpdate.done()
-  return result
-}
 
 // ── Deprecation forwarder ──
 
