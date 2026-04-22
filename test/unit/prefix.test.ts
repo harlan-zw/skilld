@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSkillInput, parseSkillInputs } from '../../src/core/prefix'
+import { parseSkillInput, parseSkillInputs, resolveSkillName } from '../../src/core/prefix'
 
 describe('prefix parser', () => {
   describe('npm: prefix', () => {
@@ -127,6 +127,32 @@ describe('prefix parser', () => {
         package: 'vue',
         tag: undefined,
       })
+    })
+  })
+
+  describe('resolveSkillName', () => {
+    it('strips npm: prefix', () => {
+      expect(resolveSkillName('npm:vue')).toBe('vue')
+    })
+
+    it('strips npm: prefix from scoped package', () => {
+      expect(resolveSkillName('npm:@nuxt/ui')).toBe('@nuxt/ui')
+    })
+
+    it('returns bare name unchanged', () => {
+      expect(resolveSkillName('vue')).toBe('vue')
+    })
+
+    it('returns repo name for gh:owner/repo', () => {
+      expect(resolveSkillName('gh:vercel-labs/skills')).toBe('skills')
+    })
+
+    it('returns null for curator', () => {
+      expect(resolveSkillName('@antfu')).toBeNull()
+    })
+
+    it('returns null for collection', () => {
+      expect(resolveSkillName('@antfu/utils')).toBeNull()
     })
   })
 })

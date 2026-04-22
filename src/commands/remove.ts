@@ -7,6 +7,7 @@ import { unlinkSkillFromAgents } from '../agent/index.ts'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
 import { readConfig } from '../core/config.ts'
 import { removeLockEntry } from '../core/lockfile.ts'
+import { resolveSkillName } from '../core/prefix.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
 import { getProjectState, getSkillsDir, iterateSkills } from '../core/skills.ts'
 
@@ -128,9 +129,22 @@ export const removeCommandDef = defineCommand({
     const intro = { state, generators, modelId: config.model, agentId: agent || config.agent || undefined }
     p.intro(`${introLine(intro)} · remove (${scope})`)
 
-    // Collect packages from positional args
+    // Collect packages from positional args (strip npm:/gh: prefixes)
     const packages = args.package
-      ? [...new Set([args.package, ...((args as any)._ || [])].map((s: string) => s.trim()).filter(Boolean))]
+      ? [...new Set(
+          [args.package, ...((args as any)._ || [])]
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+            .map((s) => {
+              const name = resolveSkillName(s)
+              if (!name) {
+                p.log.warn(`Cannot remove \x1B[36m${s}\x1B[0m: curator/collection inputs are not addressable here.`)
+                return null
+              }
+              return name
+            })
+            .filter((s): s is string => s !== null),
+        )]
       : undefined
 
     return removeCommand(state, {

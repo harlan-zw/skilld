@@ -7,7 +7,11 @@
 
 import { ofetch } from 'ofetch'
 
-const REGISTRY_BASE = 'https://skilld.dev/api'
+const DEFAULT_REGISTRY_BASE = 'https://skilld.dev/api'
+
+function registryBase(): string {
+  return process.env.SKILLD_REGISTRY_URL?.replace(/\/$/, '') || DEFAULT_REGISTRY_BASE
+}
 
 export interface RegistrySkill {
   /** Skill directory name (e.g. "vue-skilld") */
@@ -40,7 +44,7 @@ export interface RegistrySearchResult {
  */
 export async function fetchRegistrySkill(packageName: string): Promise<RegistrySkill | null> {
   try {
-    return await ofetch<RegistrySkill>(`${REGISTRY_BASE}/skills/${encodeURIComponent(packageName)}`)
+    return await ofetch<RegistrySkill>(`${registryBase()}/skills/${encodeURIComponent(packageName)}`)
   }
   catch {
     // Registry unavailable or skill not found
@@ -53,7 +57,7 @@ export async function fetchRegistrySkill(packageName: string): Promise<RegistryS
  */
 export async function searchRegistry(query: string): Promise<RegistrySearchResult> {
   try {
-    return await ofetch<RegistrySearchResult>(`${REGISTRY_BASE}/search`, {
+    return await ofetch<RegistrySearchResult>(`${registryBase()}/search`, {
       query: { q: query },
     })
   }

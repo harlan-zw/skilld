@@ -203,7 +203,7 @@ const main = defineCommand({
     eject: deprecatedForwarder('eject', 'author eject', () => import('./commands/sync.ts').then(m => m.ejectCommandDef)),
     validate: deprecatedForwarder('validate', 'author validate', () => import('./commands/validate.ts').then(m => m.validateCommandDef)),
     assemble: deprecatedForwarder('assemble', 'author assemble', () => import('./commands/assemble.ts').then(m => m.assembleCommandDef)),
-    publish: deprecatedForwarder('publish', 'author publish', () => import('./commands/author.ts').then(m => m.authorCommandDef)),
+    publish: deprecatedForwarder('publish', 'author publish', () => import('./commands/upload.ts').then(m => m.uploadCommandDef)),
     upload: deprecatedForwarder('upload', 'author publish', () => import('./commands/upload.ts').then(m => m.uploadCommandDef)),
   },
   async run({ args }) {

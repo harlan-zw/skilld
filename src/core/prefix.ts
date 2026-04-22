@@ -84,6 +84,31 @@ export function parseSkillInputs(inputs: string[]): SkillSource[] {
 }
 
 /**
+ * Resolve a CLI input to the bare package/skill name used for lookup in the lockfile.
+ * Strips `npm:` / `gh:` prefixes. Returns null for curator/collection (not addressable
+ * as a single skill name).
+ */
+export function resolveSkillName(input: string): string | null {
+  const source = parseSkillInput(input)
+  switch (source.type) {
+    case 'npm':
+    case 'bare':
+      return source.package
+    case 'git':
+      if (source.source.type === 'github' && source.source.repo)
+        return source.source.repo
+      return null
+    case 'curator':
+    case 'collection':
+      return null
+    default: {
+      const _exhaustive: never = source
+      throw new Error(`Unhandled SkillSource type: ${JSON.stringify(_exhaustive)}`)
+    }
+  }
+}
+
+/**
  * Split "package@tag" into name and optional tag.
  * Handles scoped packages: "@scope/pkg@tag"
  */

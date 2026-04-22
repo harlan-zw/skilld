@@ -38,7 +38,7 @@ import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from
 import { timedSpinner } from '../core/formatting.ts'
 import { parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
-import { parseSkillInput } from '../core/prefix.ts'
+import { parseSkillInput, resolveSkillName } from '../core/prefix.ts'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { getProjectState } from '../core/skills.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
@@ -788,6 +788,7 @@ export const addCommandDef = defineCommand({
     const parsedSources = rawInputs.map(parseSkillInput)
     const gitSources: GitSkillSource[] = []
     const npmEntries: Array<{ name: string, spec: string }> = []
+    const unsupported: string[] = []
 
     for (const source of parsedSources) {
       switch (source.type) {
@@ -802,12 +803,23 @@ export const addCommandDef = defineCommand({
           npmEntries.push({ name: source.package, spec: source.tag ? `${source.package}@${source.tag}` : source.package })
           break
         case 'curator':
-          p.log.warn(`Curator installs (\x1B[36m@${source.handle}\x1B[0m) are not yet available.`)
+          unsupported.push(`@${source.handle} (curator)`)
           break
         case 'collection':
-          p.log.warn(`Collection installs (\x1B[36m@${source.handle}/${source.name}\x1B[0m) are not yet available.`)
+          unsupported.push(`@${source.handle}/${source.name} (collection)`)
           break
+        default: {
+          const _exhaustive: never = source
+          throw new Error(`Unhandled SkillSource type: ${JSON.stringify(_exhaustive)}`)
+        }
       }
+    }
+
+    if (unsupported.length > 0) {
+      p.log.error(`Curator and collection installs are not yet available:\n  ${unsupported.join('\n  ')}\n\nFollow https://skilld.dev for launch updates.`)
+      process.exitCode = 1
+      if (gitSources.length === 0 && npmEntries.length === 0)
+        return
     }
 
     // Handle git sources
@@ -960,7 +972,10 @@ export const updateCommandDef = defineCommand({
     if (agent === 'none') {
       const state = await getProjectState(cwd)
       const packages = args.package
-        ? [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+        ? Array.from(
+            new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean)),
+            s => resolveSkillName(s),
+          ).filter((s): s is string => s !== null)
         : state.outdated.map(s => s.packageName || s.name)
       if (packages.length === 0) {
         if (!silent)
@@ -980,9 +995,20 @@ export const updateCommandDef = defineCommand({
       p.intro(introLine({ state, generators, modelId: config.model, agentId: config.agent || agent || undefined }))
     }
 
-    // Specific packages
+    // Specific packages (strip npm:/gh: prefixes)
     if (args.package) {
-      const packages = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      const raw = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      const packages: string[] = []
+      for (const r of raw) {
+        const name = resolveSkillName(r)
+        if (!name) {
+          p.log.warn(`Cannot update \x1B[36m${r}\x1B[0m: curator/collection inputs are not addressable here.`)
+          continue
+        }
+        packages.push(name)
+      }
+      if (packages.length === 0)
+        return
       return syncCommand(state, {
         packages,
         global: args.global,

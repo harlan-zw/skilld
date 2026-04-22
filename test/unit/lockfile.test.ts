@@ -184,6 +184,40 @@ describe('core/lockfile', () => {
     })
   })
 
+  describe('legacy source normalization', () => {
+    it('normalizes source: npm to source: registry', async () => {
+      const { existsSync, readFileSync } = await import('node:fs')
+      const { readLock } = await import('../../src/core/lockfile')
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(
+        'skills:\n'
+        + '  vue-skilld:\n'
+        + '    packageName: vue\n'
+        + '    version: "3.5.0"\n'
+        + '    source: npm\n',
+      )
+
+      const lock = readLock('/skills')
+      expect(lock?.skills['vue-skilld']?.source).toBe('registry')
+    })
+
+    it('leaves non-npm source values untouched', async () => {
+      const { existsSync, readFileSync } = await import('node:fs')
+      const { readLock } = await import('../../src/core/lockfile')
+
+      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(readFileSync).mockReturnValue(
+        'skills:\n'
+        + '  external-skill:\n'
+        + '    source: github\n',
+      )
+
+      const lock = readLock('/skills')
+      expect(lock?.skills['external-skill']?.source).toBe('github')
+    })
+  })
+
   describe('git skill fields (path, ref, commit)', () => {
     it('readLock parses git fields from lockfile', async () => {
       const { existsSync, readFileSync } = await import('node:fs')
