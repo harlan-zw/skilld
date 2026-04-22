@@ -149,6 +149,9 @@ skilld add npm:vue npm:nuxt npm:pinia
 # Add a pre-authored skill from a GitHub repo
 skilld add gh:vercel-labs/agent-skills
 
+# Add a skill for a Rust crate (crates.io)
+skilld add crate:serde
+
 # Update outdated skills
 skilld update
 skilld update tailwindcss
@@ -183,7 +186,7 @@ skilld config
 | Command | Description |
 |---------|-------------|
 | `skilld` | Interactive wizard (first run) or status menu (existing skills) |
-| `skilld add <source...>` | Add skills. Sources: `npm:<pkg>`, `gh:<owner/repo>`, or bare names (deprecated) |
+| `skilld add <source...>` | Add skills. Sources: `npm:<pkg>`, `crate:<name>`, `gh:<owner/repo>`, or bare names (deprecated) |
 | `skilld update [pkg]`   | Update outdated skills (all or specific) |
 | `skilld search [query]` | Search indexed docs (`-p` package, `--filter` JSON, `--limit`, `--guide`) |
 | `skilld list`           | List installed skills (`--json` for machine-readable output) |

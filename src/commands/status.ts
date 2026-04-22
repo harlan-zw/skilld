@@ -11,6 +11,7 @@ import { sharedArgs } from '../cli-helpers.ts'
 import { defaultFeatures, hasConfig, readConfig } from '../core/config.ts'
 import { formatSource, timeAgo } from '../core/formatting.ts'
 import { parsePackages } from '../core/lockfile.ts'
+import { toStoragePackageName } from '../core/prefix.ts'
 import { getSharedSkillsDir, mapInsert } from '../core/shared.ts'
 
 import { iterateSkills } from '../core/skills.ts'
@@ -211,7 +212,7 @@ export async function statusCommand(opts: StatusOptions = {}): Promise<void> {
       lines.push(parts.join('  '))
 
       const meta: string[] = []
-      const pkgName = info.packageName || pkg.name
+      const pkgName = toStoragePackageName(info.packageName || pkg.name)
       const docs = countDocs(pkgName, info.version) || countRefDocs(join(
         pkg.scope === 'global'
           ? agents[pkg.agents.values().next().value!].globalSkillsDir!

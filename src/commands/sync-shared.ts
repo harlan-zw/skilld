@@ -1357,6 +1357,8 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
 
 export interface EnhanceOptions {
   packageName: string
+  /** Storage/cache key (e.g. namespaced '@skilld-crate/serde'); defaults to packageName */
+  cachePackageName?: string
   version: string
   skillDir: string
   dirName?: string
@@ -1381,7 +1383,8 @@ export interface EnhanceOptions {
 }
 
 export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
-  const { packageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject, overheadLines } = opts
+  const { packageName, cachePackageName, version, skillDir, dirName, model, resolved, relatedSkills, hasIssues, hasDiscussions, hasReleases, hasChangelog, docsType, hasShippedDocs: shippedDocs, pkgFiles, force, debug, sections, customPrompt, packages, features, eject, overheadLines } = opts
+  const cacheKey = cachePackageName || packageName
 
   const effectiveFeatures = features
 
@@ -1389,7 +1392,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
   const docFiles = listReferenceFiles(skillDir)
   const hasGithub = hasIssues || hasDiscussions
   const { optimized, wasOptimized, usage, cost, warnings, error, debugLogsDir } = await optimizeDocs({
-    packageName,
+    packageName: cacheKey,
     skillDir,
     model,
     version,

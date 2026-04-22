@@ -14,7 +14,7 @@ import { readPackageJsonSafe } from '../core/package-json.ts'
 import { fetchGitDocs, fetchGitHubRepoMeta, fetchReadme, searchGitHubRepo, validateGitDocsWithLlms } from './github.ts'
 import { fetchLlmsTxt, fetchLlmsUrl } from './llms.ts'
 import { getCrawlUrl } from './package-registry.ts'
-import { $fetch, isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl, parsePackageSpec } from './utils.ts'
+import { $fetch, isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl, parsePackageSpec, SKILLD_USER_AGENT } from './utils.ts'
 
 /**
  * Search npm registry for packages matching a query.
@@ -606,7 +606,7 @@ export async function fetchPkgDist(name: string, version: string): Promise<strin
 
   // Download tarball to temp file
   const tarballRes = await fetch(tarballUrl, {
-    headers: { 'User-Agent': 'skilld/1.0' },
+    headers: { 'User-Agent': SKILLD_USER_AGENT },
   }).catch(() => null)
 
   if (!tarballRes?.ok || !tarballRes.body)

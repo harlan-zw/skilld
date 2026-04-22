@@ -65,7 +65,7 @@ export interface FetchedDoc {
 }
 
 export interface ResolveAttempt {
-  source: 'npm' | 'github-docs' | 'github-meta' | 'github-search' | 'llms.txt' | 'readme'
+  source: 'npm' | 'crates' | 'github-docs' | 'github-meta' | 'github-search' | 'llms.txt' | 'readme'
   url?: string
   status: 'success' | 'not-found' | 'error'
   message?: string

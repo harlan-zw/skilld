@@ -3,6 +3,7 @@
  *
  * All sources require an explicit prefix:
  *   npm:vue         → package skill from registry
+ *   crate:serde     → Rust crate from crates.io
  *   gh:owner/repo   → git skill
  *   github:o/r      → git skill (alias)
  *   @handle          → curator's skills
@@ -16,6 +17,7 @@ import { parseGitSkillInput } from '../sources/git-skills.ts'
 
 export type SkillSource
   = | { type: 'npm', package: string, tag?: string }
+    | { type: 'crate', package: string, version?: string }
     | { type: 'git', source: GitSkillSource }
     | { type: 'curator', handle: string }
     | { type: 'collection', handle: string, name: string }
@@ -34,6 +36,15 @@ export function parseSkillInput(input: string): SkillSource {
     const rest = trimmed.slice(4)
     const { name, tag } = splitPackageTag(rest)
     return { type: 'npm', package: name, tag }
+  }
+
+  // crate: prefix → Rust crate from crates.io
+  if (trimmed.startsWith('crate:')) {
+    const rest = trimmed.slice(6).trim()
+    const atIdx = rest.indexOf('@')
+    const name = (atIdx === -1 ? rest : rest.slice(0, atIdx)).toLowerCase()
+    const version = atIdx === -1 ? undefined : rest.slice(atIdx + 1) || undefined
+    return { type: 'crate', package: name, version }
   }
 
   // gh: or github: prefix → git skill
@@ -94,6 +105,8 @@ export function resolveSkillName(input: string): string | null {
     case 'npm':
     case 'bare':
       return source.package
+    case 'crate':
+      return `crate:${source.package}`
     case 'git':
       if (source.source.type === 'github' && source.source.repo)
         return source.source.repo
@@ -106,6 +119,17 @@ export function resolveSkillName(input: string): string | null {
       throw new Error(`Unhandled SkillSource type: ${JSON.stringify(_exhaustive)}`)
     }
   }
+}
+
+/**
+ * Map a lockfile/identity package name to the storage-safe name used for
+ * cache directories and symlinks. `crate:serde` → `@skilld-crate/serde`;
+ * other names pass through unchanged.
+ */
+export function toStoragePackageName(identityName: string): string {
+  if (identityName.startsWith('crate:'))
+    return `@skilld-crate/${identityName.slice('crate:'.length)}`
+  return identityName
 }
 
 /**

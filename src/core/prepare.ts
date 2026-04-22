@@ -11,6 +11,13 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, symlinkSync, unl
 import { join } from 'pathe'
 import { getCacheDir } from '../cache/version.ts'
 
+/** Map lockfile identity name to storage-safe cache key (crate:X → @skilld-crate/X) */
+function toStorageName(name: string): string {
+  if (name.startsWith('crate:'))
+    return `@skilld-crate/${name.slice('crate:'.length)}`
+  return name
+}
+
 /** Resolve package directory: node_modules first, then global cache */
 export function resolvePkgDir(name: string, cwd: string, version?: string): string | null {
   const nodeModulesPath = join(cwd, 'node_modules', name)
@@ -52,7 +59,7 @@ export function restorePkgSymlink(skillsDir: string, name: string, info: SkillIn
       return // permission/IO error — bail instead of masking
   }
 
-  const pkgName = info.packageName || name
+  const pkgName = toStorageName(info.packageName || name)
   const pkgDir = resolvePkgDir(pkgName, cwd, info.version)
   if (!pkgDir)
     return

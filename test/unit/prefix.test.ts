@@ -56,6 +56,32 @@ describe('prefix parser', () => {
     })
   })
 
+  describe('crate: prefix', () => {
+    it('parses crate name', () => {
+      expect(parseSkillInput('crate:serde')).toEqual({
+        type: 'crate',
+        package: 'serde',
+        version: undefined,
+      })
+    })
+
+    it('parses crate name with version', () => {
+      expect(parseSkillInput('crate:serde@1.0.0')).toEqual({
+        type: 'crate',
+        package: 'serde',
+        version: '1.0.0',
+      })
+    })
+
+    it('lowercases crate name', () => {
+      expect(parseSkillInput('crate:Tokio')).toEqual({
+        type: 'crate',
+        package: 'tokio',
+        version: undefined,
+      })
+    })
+  })
+
   describe('@ prefix (curator and collection)', () => {
     it('parses @handle as curator', () => {
       expect(parseSkillInput('@antfu')).toEqual({
@@ -153,6 +179,10 @@ describe('prefix parser', () => {
 
     it('returns null for collection', () => {
       expect(resolveSkillName('@antfu/utils')).toBeNull()
+    })
+
+    it('returns crate:<name> for crate inputs', () => {
+      expect(resolveSkillName('crate:serde')).toBe('crate:serde')
     })
   })
 })

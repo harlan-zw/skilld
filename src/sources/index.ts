@@ -4,6 +4,9 @@
 
 export { fetchBlogReleases } from './blog-releases.ts'
 
+// Crates (crates.io)
+export { resolveCrateDocsWithAttempts } from './crates.ts'
+
 // Crawl
 export { fetchCrawledDocs, toCrawlPattern } from './crawl.ts'
 
