@@ -55,6 +55,16 @@ describe('core/lockfile', () => {
     })
   })
 
+  describe('parsePackageNames', () => {
+    it('drops version fields for SKILL.md package metadata', async () => {
+      const { parsePackageNames } = await import('../../src/core/lockfile')
+      expect(parsePackageNames('vue@3.5.0, @vue/reactivity@3.5.0')).toEqual([
+        { name: 'vue' },
+        { name: '@vue/reactivity' },
+      ])
+    })
+  })
+
   describe('serializePackages', () => {
     it('serializes single package', async () => {
       const { serializePackages } = await import('../../src/core/lockfile')

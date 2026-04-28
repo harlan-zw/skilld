@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubUrl, parsePackageSpec } from '../../src/sources/utils'
+import { isGitHubRepoUrl, normalizeRepoUrl, parseGitHubRepoSlug, parseGitHubUrl, parsePackageSpec } from '../../src/sources/utils'
 
 describe('sources/utils', () => {
   describe('isGitHubRepoUrl', () => {
@@ -52,6 +52,17 @@ describe('sources/utils', () => {
     it('returns null for invalid URLs', () => {
       expect(parseGitHubUrl('https://gitlab.com/owner/repo')).toBeNull()
       expect(parseGitHubUrl('not-a-url')).toBeNull()
+    })
+  })
+
+  describe('parseGitHubRepoSlug', () => {
+    it('extracts owner/repo slug', () => {
+      expect(parseGitHubRepoSlug('https://github.com/vuejs/vue.git#main')).toBe('vuejs/vue')
+    })
+
+    it('returns undefined for missing or non-GitHub URLs', () => {
+      expect(parseGitHubRepoSlug(undefined)).toBeUndefined()
+      expect(parseGitHubRepoSlug('https://example.com/foo/bar')).toBeUndefined()
     })
   })
 

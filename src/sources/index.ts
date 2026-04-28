@@ -113,6 +113,7 @@ export {
   fetchText,
   isGitHubRepoUrl,
   normalizeRepoUrl,
+  parseGitHubRepoSlug,
   parseGitHubUrl,
   parsePackageSpec,
   verifyUrl,

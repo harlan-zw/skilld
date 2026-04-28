@@ -33,12 +33,13 @@ import {
 } from '../cache/index.ts'
 import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
 import { formatDuration, todayIsoDate } from '../core/formatting.ts'
-import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
+import { parsePackageNames, parsePackages, readLock, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { getSharedSkillsDir, semverDiff, SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
+  parseGitHubRepoSlug,
   parsePackageSpec,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
@@ -556,7 +557,7 @@ async function syncBaseSkill(
   const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
 
   // Write base SKILL.md
-  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
 
   // Create named symlink for this package
   linkPkgNamed(skillDir, packageName, cwd, version)
@@ -572,7 +573,7 @@ async function syncBaseSkill(
 
   // Read back merged packages from lockfile
   const updatedLock = readLock(baseDir)?.skills[skillDirName]
-  const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+  const allPackages = parsePackageNames(updatedLock?.packages)
 
   const skillMd = generateSkillMd({
     name: packageName,

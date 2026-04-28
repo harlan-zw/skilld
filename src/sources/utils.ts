@@ -162,6 +162,14 @@ export function parseGitHubUrl(url: string): { owner: string, repo: string } | n
   return { owner: match[1]!, repo: match[2]! }
 }
 
+/** Parse owner/repo slug from GitHub URL */
+export function parseGitHubRepoSlug(url: string | undefined): string | undefined {
+  if (!url)
+    return undefined
+  const parsed = parseGitHubUrl(url)
+  return parsed ? `${parsed.owner}/${parsed.repo}` : undefined
+}
+
 /**
  * Normalize git repo URL to https
  */

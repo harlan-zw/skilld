@@ -36,7 +36,7 @@ import {
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs, suggestPrepareHook } from '../cli-helpers.ts'
 import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from '../core/config.ts'
 import { timedSpinner, todayIsoDate } from '../core/formatting.ts'
-import { parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
+import { parsePackageNames, parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { parseSkillInput, resolveSkillName, toStoragePackageName } from '../core/prefix.ts'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
@@ -45,6 +45,7 @@ import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
   isPrerelease,
+  parseGitHubRepoSlug,
   parsePackageSpec,
   readLocalDependencies,
   resolveCrateDocsWithAttempts,
@@ -460,7 +461,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     linkPkgNamed(skillDir, storagePackageName, cwd, version)
 
     // Merge into lockfile
-    const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+    const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
     writeLock(baseDir, skillDirName, {
       packageName: identityPackageName,
       version,
@@ -472,7 +473,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
     // Regenerate SKILL.md with all packages listed
     const updatedLock = readLock(baseDir)?.skills[skillDirName]
-    const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+    const allPackages = parsePackageNames(updatedLock?.packages)
     const relatedSkills = await findRelatedSkills(storagePackageName, baseDir)
     const existingStorageName = toStoragePackageName(existingLock.packageName!)
     const pkgFiles = getPkgKeyFiles(existingStorageName, cwd, existingLock.version)
@@ -566,7 +567,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const pkgFiles = getPkgKeyFiles(storagePackageName, cwd, version)
 
   // Write base SKILL.md (no LLM needed)
-  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
 
   // Also create named symlink for this package (skip in eject mode)
   if (!config.eject)
@@ -601,7 +602,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
   // Read back merged packages from lockfile for SKILL.md generation
   const updatedLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
-  const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+  const allPackages = parsePackageNames(updatedLock?.packages)
 
   const isEject = !!config.eject
   const baseSkillMd = generateSkillMd({
@@ -1252,7 +1253,7 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
   writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
   // Write lockfile so skilld list/update/assemble can discover this skill
-  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
   writeLock(baseDir, skillDirName, {
     packageName,
     version,
