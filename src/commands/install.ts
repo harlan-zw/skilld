@@ -27,7 +27,9 @@ import {
   getPkgKeyFiles,
   getRepoCacheDir,
   getShippedSkills,
+  inferDocsTypeFromCache,
   isCached,
+  isReadmeOnlyCache,
   linkPkgNamed,
   linkShippedSkill,
   listReferenceFiles,
@@ -199,7 +201,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       for (const pkg of parsePackages(info.packages))
         linkPkgNamed(skillDir, pkg.name, cwd, pkg.version)
       // Only link external docs if package doesn't ship its own and has more than just README
-      if (!pkgHasShippedDocs(pkgName, cwd, version) && !isReadmeOnly(globalCachePath)) {
+      if (!pkgHasShippedDocs(pkgName, cwd, version) && !isReadmeOnlyCache(globalCachePath)) {
         const docsLink = join(referencesPath, 'docs')
         const cachedDocs = join(globalCachePath, 'docs')
         if (existsSync(docsLink))
@@ -368,7 +370,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       for (const pkg of parsePackages(info.packages))
         linkPkgNamed(skillDir, pkg.name, cwd, pkg.version)
       // Link fetched docs unless it's just a README (already in pkg/)
-      if (!isReadmeOnly(globalCachePath)) {
+      if (!isReadmeOnlyCache(globalCachePath)) {
         const docsLink = join(referencesPath, 'docs')
         const cachedDocsDir = join(globalCachePath, 'docs')
         if (existsSync(docsLink))
@@ -514,15 +516,6 @@ function linkPkgSymlink(referencesDir: string, name: string, cwd: string, versio
   symlinkSync(pkgPath, pkgLink, 'junction')
 }
 
-/** Check if cache only has docs/README.md (pkg/ already has this) */
-function isReadmeOnly(cacheDir: string): boolean {
-  const docsDir = join(cacheDir, 'docs')
-  if (!existsSync(docsDir))
-    return false
-  const files = readdirSync(docsDir)
-  return files.length === 1 && files[0] === 'README.md'
-}
-
 /** Check if package ships its own docs folder */
 function pkgHasShippedDocs(name: string, cwd: string, version?: string): boolean {
   const pkgPath = resolvePkgDir(name, cwd, version)
@@ -587,11 +580,7 @@ async function enhanceRegenerated(
       }
     }
 
-    let docsType: 'llms.txt' | 'readme' | 'docs' = 'docs'
-    if (existsSync(join(globalCachePath, 'docs', 'llms.txt')))
-      docsType = 'llms.txt'
-    else if (isReadmeOnly(globalCachePath))
-      docsType = 'readme'
+    const docsType = inferDocsTypeFromCache(globalCachePath)
 
     // Derive dirName from the skill directory name
     const dirName = skillDir.split('/').pop()
@@ -668,11 +657,7 @@ function regenerateBaseSkillMd(
 
   // Infer docsType from source or cache
   const globalCachePath = getCacheDir(pkgName, version)
-  let docsType: 'llms.txt' | 'readme' | 'docs' = 'docs'
-  if (source?.includes('llms.txt') || existsSync(join(globalCachePath, 'docs', 'llms.txt')))
-    docsType = 'llms.txt'
-  else if (isReadmeOnly(globalCachePath))
-    docsType = 'readme'
+  const docsType = inferDocsTypeFromCache(globalCachePath, source)
 
   // Check cache dirs for issues/discussions/releases (only if feature enabled)
   const feat = readConfig().features ?? defaultFeatures

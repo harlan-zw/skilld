@@ -33,6 +33,21 @@ export function isCached(name: string, version: string): boolean {
   return existsSync(getCacheDir(name, version))
 }
 
+/** Check if cache only has docs/README.md (pkg/ already has this) */
+export function isReadmeOnlyCache(cacheDir: string): boolean {
+  const docsDir = join(cacheDir, 'docs')
+  if (!existsSync(docsDir))
+    return false
+  const files = readdirSync(docsDir)
+  return files.length === 1 && files[0] === 'README.md'
+}
+
+export function inferDocsTypeFromCache(cacheDir: string, source?: string): 'llms.txt' | 'readme' | 'docs' {
+  if (source?.includes('llms.txt') || existsSync(join(cacheDir, 'docs', 'llms.txt')))
+    return 'llms.txt'
+  return isReadmeOnlyCache(cacheDir) ? 'readme' : 'docs'
+}
+
 /**
  * Ensure cache directories exist
  */
