@@ -35,7 +35,7 @@ import {
 } from '../cache/index.ts'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs, suggestPrepareHook } from '../cli-helpers.ts'
 import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from '../core/config.ts'
-import { timedSpinner } from '../core/formatting.ts'
+import { timedSpinner, todayIsoDate } from '../core/formatting.ts'
 import { parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { parseSkillInput, resolveSkillName, toStoragePackageName } from '../core/prefix.ts'
@@ -466,7 +466,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       version,
       repo: repoSlug,
       source: existingLock.source,
-      syncedAt: new Date().toISOString().split('T')[0],
+      syncedAt: todayIsoDate(),
       generator: 'skilld',
     })
 
@@ -579,7 +579,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       version,
       repo: repoSlug,
       source: resources.docSource,
-      syncedAt: new Date().toISOString().split('T')[0],
+      syncedAt: todayIsoDate(),
       generator: 'skilld',
     })
 
@@ -1258,7 +1258,7 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
     version,
     repo: repoSlug,
     source: resources.docSource,
-    syncedAt: new Date().toISOString().split('T')[0],
+    syncedAt: todayIsoDate(),
     generator: 'skilld',
   })
 

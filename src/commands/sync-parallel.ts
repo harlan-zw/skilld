@@ -32,7 +32,7 @@ import {
   resolvePkgDir,
 } from '../cache/index.ts'
 import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
-import { formatDuration } from '../core/formatting.ts'
+import { formatDuration, todayIsoDate } from '../core/formatting.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { getSharedSkillsDir, semverDiff, SHARED_SKILLS_DIR } from '../core/shared.ts'
@@ -566,7 +566,7 @@ async function syncBaseSkill(
     version,
     repo: repoSlug,
     source: resources.docSource,
-    syncedAt: new Date().toISOString().split('T')[0],
+    syncedAt: todayIsoDate(),
     generator: 'skilld',
   })
 

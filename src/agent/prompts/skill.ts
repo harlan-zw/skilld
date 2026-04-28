@@ -3,6 +3,7 @@
  */
 
 import type { FeaturesConfig } from '../../core/config.ts'
+import { todayIsoDate } from '../../core/formatting.ts'
 import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize.ts'
 import { resolveSkilldCommand } from '../../core/shared.ts'
 import { yamlEscape } from '../../core/yaml.ts'
@@ -220,7 +221,7 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
     metaEntries.push(`  version: ${yamlEscape(version)}`)
   if (body && generatedBy)
     metaEntries.push(`  generated_by: ${yamlEscape(generatedBy)}`)
-  metaEntries.push(`  generated_at: ${new Date().toISOString().split('T')[0]}`)
+  metaEntries.push(`  generated_at: ${todayIsoDate()}`)
   if (metaEntries.length) {
     lines.push('metadata:')
     lines.push(...metaEntries)

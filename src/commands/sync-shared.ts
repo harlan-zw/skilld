@@ -36,6 +36,7 @@ import {
 } from '../cache/index.ts'
 import { isInteractive, NO_MODELS_MESSAGE, pickModel } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig, registerProject, updateConfig } from '../core/config.ts'
+import { todayIsoDate } from '../core/formatting.ts'
 import { parsePackages, readLock, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { readPackageJsonSafe } from '../core/package-json.ts'
@@ -239,7 +240,7 @@ export function handleShippedSkills(
       packageName,
       version,
       source: 'shipped',
-      syncedAt: new Date().toISOString().split('T')[0],
+      syncedAt: todayIsoDate(),
       generator: 'skilld',
     })
   }

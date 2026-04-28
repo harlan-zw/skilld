@@ -26,7 +26,7 @@ import {
   resolvePkgDir,
 } from '../cache/index.ts'
 import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
-import { timedSpinner } from '../core/formatting.ts'
+import { timedSpinner, todayIsoDate } from '../core/formatting.ts'
 import { writeLock } from '../core/lockfile.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
@@ -153,7 +153,7 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
       repo: source.type === 'local' ? source.localPath : `${source.owner}/${source.repo}`,
       path: skill.path || undefined,
       ref: source.ref || 'main',
-      syncedAt: new Date().toISOString().split('T')[0],
+      syncedAt: todayIsoDate(),
       generator: 'external',
     })
   }
@@ -270,7 +270,7 @@ async function syncGitHubRepo(opts: GitSyncOptions): Promise<void> {
     version,
     repo: `${owner}/${repo}`,
     source: resources.docSource,
-    syncedAt: new Date().toISOString().split('T')[0],
+    syncedAt: todayIsoDate(),
     generator: 'skilld',
   })
 
