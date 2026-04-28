@@ -45,6 +45,7 @@ import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
   isPrerelease,
+  parseGitHubRepoSlug,
   parsePackageSpec,
   readLocalDependencies,
   resolveCrateDocsWithAttempts,
@@ -460,7 +461,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     linkPkgNamed(skillDir, storagePackageName, cwd, version)
 
     // Merge into lockfile
-    const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+    const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
     writeLock(baseDir, skillDirName, {
       packageName: identityPackageName,
       version,
@@ -566,7 +567,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const pkgFiles = getPkgKeyFiles(storagePackageName, cwd, version)
 
   // Write base SKILL.md (no LLM needed)
-  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
 
   // Also create named symlink for this package (skip in eject mode)
   if (!config.eject)
@@ -1252,7 +1253,7 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
   writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
   // Write lockfile so skilld list/update/assemble can discover this skill
-  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
   writeLock(baseDir, skillDirName, {
     packageName,
     version,
