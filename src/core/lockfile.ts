@@ -32,6 +32,10 @@ export function parsePackages(packages?: string): Array<{ name: string, version:
   }).filter(p => p.name)
 }
 
+export function parsePackageNames(packages?: string): Array<{ name: string }> {
+  return parsePackages(packages).map(({ name }) => ({ name }))
+}
+
 export function serializePackages(pkgs: Array<{ name: string, version: string }>): string {
   return pkgs.map(p => `${p.name}@${p.version}`).join(', ')
 }

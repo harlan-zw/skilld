@@ -38,7 +38,7 @@ import {
 import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
-import { mergeLocks, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile.ts'
+import { mergeLocks, parsePackageNames, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile.ts'
 import { readPackageJsonSafe } from '../core/package-json.ts'
 import { toStoragePackageName } from '../core/prefix.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
@@ -596,7 +596,7 @@ async function enhanceRegenerated(
     // Derive dirName from the skill directory name
     const dirName = skillDir.split('/').pop()
 
-    const allPackages = parsePackages(packages).map(p => ({ name: p.name }))
+    const allPackages = parsePackageNames(packages)
     const skillMd = generateSkillMd({
       name: pkgName,
       version,
@@ -687,7 +687,7 @@ function regenerateBaseSkillMd(
   const dirName = skillDir.split('/').pop()
 
   // Build multi-package list from lockfile packages field
-  const allPackages = parsePackages(packages).map(p => ({ name: p.name }))
+  const allPackages = parsePackageNames(packages)
 
   const content = generateSkillMd({
     name: pkgName,
