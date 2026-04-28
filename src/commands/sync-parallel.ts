@@ -39,6 +39,7 @@ import { getSharedSkillsDir, semverDiff, SHARED_SKILLS_DIR } from '../core/share
 import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
+  parseGitHubRepoSlug,
   parsePackageSpec,
   readLocalDependencies,
   resolvePackageDocsWithAttempts,
@@ -556,7 +557,7 @@ async function syncBaseSkill(
   const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
 
   // Write base SKILL.md
-  const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]
+  const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
 
   // Create named symlink for this package
   linkPkgNamed(skillDir, packageName, cwd, version)
