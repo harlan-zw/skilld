@@ -36,7 +36,7 @@ import {
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs, suggestPrepareHook } from '../cli-helpers.ts'
 import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
-import { parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
+import { parsePackageNames, parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
 import { parseFrontmatter } from '../core/markdown.ts'
 import { parseSkillInput, resolveSkillName, toStoragePackageName } from '../core/prefix.ts'
 import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
@@ -473,7 +473,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
     // Regenerate SKILL.md with all packages listed
     const updatedLock = readLock(baseDir)?.skills[skillDirName]
-    const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+    const allPackages = parsePackageNames(updatedLock?.packages)
     const relatedSkills = await findRelatedSkills(storagePackageName, baseDir)
     const existingStorageName = toStoragePackageName(existingLock.packageName!)
     const pkgFiles = getPkgKeyFiles(existingStorageName, cwd, existingLock.version)
@@ -602,7 +602,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
 
   // Read back merged packages from lockfile for SKILL.md generation
   const updatedLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
-  const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
+  const allPackages = parsePackageNames(updatedLock?.packages)
 
   const isEject = !!config.eject
   const baseSkillMd = generateSkillMd({
