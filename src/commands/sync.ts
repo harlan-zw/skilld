@@ -11,7 +11,6 @@ import {
   buildAllSectionPrompts,
   computeSkillDirName,
   detectImportedPackages,
-  generateSkillMd,
   getAvailableModels,
   getModelLabel,
   linkSkillToAgents,
@@ -20,6 +19,7 @@ import {
   SECTION_MERGE_ORDER,
   SECTION_OUTPUT_FILES,
   wrapSection,
+  writeGeneratedSkillMd,
 } from '../agent/index.ts'
 import {
   ensureCacheDir,
@@ -479,7 +479,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     const shippedDocs = hasShippedDocs(existingStorageName, cwd, existingLock.version)
 
     const mergeFeatures = readConfig().features ?? defaultFeatures
-    const skillMd = generateSkillMd({
+    writeGeneratedSkillMd(skillDir, {
       name: existingLock.packageName!,
       version: existingLock.version,
       relatedSkills,
@@ -493,7 +493,6 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       packages: allPackages,
       features: mergeFeatures,
     })
-    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
     const mergeShared = !config.global && getSharedSkillsDir(cwd)
     if (mergeShared)
@@ -604,7 +603,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   const allPackages = parsePackages(updatedLock?.packages).map(p => ({ name: p.name }))
 
   const isEject = !!config.eject
-  const baseSkillMd = generateSkillMd({
+  const baseSkillMd = writeGeneratedSkillMd(skillDir, {
     name: identityPackageName,
     version,
     releasedAt: resolved.releasedAt,
@@ -625,7 +624,6 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     features,
     eject: isEject,
   })
-  writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
   const overheadLines = baseSkillMd.split('\n').length
 
   p.log.success(config.mode === 'update' ? `Updated skill: ${relative(cwd, skillDir)}` : `Created base skill: ${relative(cwd, skillDir)}`)
@@ -649,7 +647,7 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
     }
     const cachedBody = cachedParts.join('\n\n')
 
-    const skillMd = generateSkillMd({
+    writeGeneratedSkillMd(skillDir, {
       name: identityPackageName,
       version,
       releasedAt: resolved.releasedAt,
@@ -672,7 +670,6 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
       features,
       eject: isEject,
     })
-    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
     p.log.success('Applied cached SKILL.md sections')
   }
 
@@ -1230,7 +1227,7 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
 
   // Generate SKILL.md (ejected — uses ./references/ paths)
   const relatedSkills = await findRelatedSkills(packageName, join(skillDir, '..'))
-  const skillMd = generateSkillMd({
+  writeGeneratedSkillMd(skillDir, {
     name: packageName,
     version,
     releasedAt: resolved.releasedAt,
@@ -1249,7 +1246,6 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
     features,
     eject: true,
   })
-  writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
 
   // Write lockfile so skilld list/update/assemble can discover this skill
   const repoSlug = resolved.repoUrl?.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:[/#]|$)/)?.[1]

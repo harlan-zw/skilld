@@ -18,7 +18,7 @@ import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { dirname, join } from 'pathe'
 import { agents, createToolProgress, getModelLabel, linkSkillToAgents, optimizeDocs } from '../agent/index.ts'
-import { generateSkillMd } from '../agent/prompts/skill.ts'
+import { writeGeneratedSkillMd, writeSkillMd } from '../agent/prompts/skill.ts'
 import {
   hasShippedDocs as checkShippedDocs,
   ensureCacheDir,
@@ -170,7 +170,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
       if (match) {
         const skillDir = join(skillsDir, name)
         mkdirSync(skillDir, { recursive: true })
-        writeFileSync(join(skillDir, 'SKILL.md'), sanitizeMarkdown(match.content))
+        writeSkillMd(skillDir, sanitizeMarkdown(match.content))
         for (const f of match.files) {
           const filePath = join(skillDir, f.path)
           mkdirSync(dirname(filePath), { recursive: true })
@@ -597,7 +597,7 @@ async function enhanceRegenerated(
     const dirName = skillDir.split('/').pop()
 
     const allPackages = parsePackages(packages).map(p => ({ name: p.name }))
-    const skillMd = generateSkillMd({
+    writeGeneratedSkillMd(skillDir, {
       name: pkgName,
       version,
       description,
@@ -613,7 +613,6 @@ async function enhanceRegenerated(
       packages: allPackages.length > 1 ? allPackages : undefined,
       features,
     })
-    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
     llmLog.message('Enhancement skipped')
@@ -689,7 +688,8 @@ function regenerateBaseSkillMd(
   // Build multi-package list from lockfile packages field
   const allPackages = parsePackages(packages).map(p => ({ name: p.name }))
 
-  const content = generateSkillMd({
+  mkdirSync(skillDir, { recursive: true })
+  writeGeneratedSkillMd(skillDir, {
     name: pkgName,
     version,
     description,
@@ -705,8 +705,6 @@ function regenerateBaseSkillMd(
     features: readConfig().features ?? defaultFeatures,
   })
 
-  mkdirSync(skillDir, { recursive: true })
-  writeFileSync(skillMdPath, content)
   return true
 }
 

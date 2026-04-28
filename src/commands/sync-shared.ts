@@ -8,12 +8,12 @@ import {
   agents,
   buildAllSectionPrompts,
   createToolProgress,
-  generateSkillMd,
   getAvailableModels,
   getModelLabel,
   getModelName,
   optimizeDocs,
   SECTION_OUTPUT_FILES,
+  writeGeneratedSkillMd,
 } from '../agent/index.ts'
 import { maxItems, maxLines } from '../agent/prompts/optional/budget.ts'
 import {
@@ -1430,7 +1430,7 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
       for (const w of warnings)
         p.log.warn(`\x1B[33m${w}\x1B[0m`)
     }
-    const skillMd = generateSkillMd({
+    writeGeneratedSkillMd(skillDir, {
       name: packageName,
       version,
       releasedAt: resolved.releasedAt,
@@ -1452,7 +1452,6 @@ export async function enhanceSkillWithLLM(opts: EnhanceOptions): Promise<void> {
       features,
       eject,
     })
-    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
   else {
     if (error && /\b429\b|rate.?limit|exhausted.*capacity|quota.*reset/i.test(error))

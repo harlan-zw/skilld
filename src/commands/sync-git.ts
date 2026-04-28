@@ -10,10 +10,11 @@ import * as p from '@clack/prompts'
 import { dirname, join, relative } from 'pathe'
 import {
   agents,
-  generateSkillMd,
   getModelLabel,
   linkSkillToAgents,
   sanitizeName,
+  writeGeneratedSkillMd,
+  writeSkillMd,
 } from '../agent/index.ts'
 import {
   CACHE_DIR,
@@ -134,7 +135,7 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
     mkdirSync(skillDir, { recursive: true })
 
     // Sanitize and write SKILL.md
-    writeFileSync(join(skillDir, 'SKILL.md'), sanitizeMarkdown(skill.content))
+    writeSkillMd(skillDir, sanitizeMarkdown(skill.content))
 
     // Write supporting files directly in skill dir (not under .skilld/)
     // so SKILL.md relative paths like ./references/docs/guide.md resolve correctly
@@ -275,7 +276,7 @@ async function syncGitHubRepo(opts: GitSyncOptions): Promise<void> {
   })
 
   // Write base SKILL.md
-  const baseSkillMd = generateSkillMd({
+  writeGeneratedSkillMd(skillDir, {
     name: packageName,
     version,
     releasedAt: resolved.releasedAt,
@@ -292,7 +293,6 @@ async function syncGitHubRepo(opts: GitSyncOptions): Promise<void> {
     repoUrl,
     features,
   })
-  writeFileSync(join(skillDir, 'SKILL.md'), baseSkillMd)
 
   p.log.success(`Created base skill: ${relative(cwd, skillDir)}`)
 

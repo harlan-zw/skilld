@@ -1,7 +1,41 @@
-import { describe, expect, it } from 'vitest'
-import { computeSkillDirName, generateSkillMd } from '../../src/agent'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { computeSkillDirName, generateSkillMd, writeGeneratedSkillMd, writeSkillMd } from '../../src/agent'
 
 describe('agent/skill', () => {
+  const tempDirs: string[] = []
+
+  afterEach(() => {
+    for (const dir of tempDirs)
+      rmSync(dir, { recursive: true, force: true })
+    tempDirs.length = 0
+  })
+
+  describe('writeSkillMd', () => {
+    it('writes SKILL.md inside the skill directory', () => {
+      const skillDir = mkdtempSync(join(tmpdir(), 'skilld-skill-'))
+      tempDirs.push(skillDir)
+
+      writeSkillMd(skillDir, '# Skill')
+
+      expect(readFileSync(join(skillDir, 'SKILL.md'), 'utf-8')).toBe('# Skill')
+    })
+  })
+
+  describe('writeGeneratedSkillMd', () => {
+    it('writes generated SKILL.md and returns the content', () => {
+      const skillDir = mkdtempSync(join(tmpdir(), 'skilld-skill-'))
+      tempDirs.push(skillDir)
+
+      const content = writeGeneratedSkillMd(skillDir, { name: 'vue', relatedSkills: [] })
+
+      expect(readFileSync(join(skillDir, 'SKILL.md'), 'utf-8')).toBe(content)
+      expect(content).toContain('name: vue-skilld')
+    })
+  })
+
   describe('generateSkillMd', () => {
     it('generates frontmatter with consistent description format', () => {
       const result = generateSkillMd({
