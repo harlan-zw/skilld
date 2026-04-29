@@ -1,14 +1,14 @@
 import type { OptimizeModel } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import type { LlmConfig } from './sync-shared.ts'
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
 import {
   computeSkillDirName,
-  generateSkillMd,
   getModelLabel,
+  writeGeneratedSkillMd,
 } from '../agent/index.ts'
 import {
   ensureCacheDir,
@@ -421,7 +421,7 @@ async function authorSinglePackage(opts: {
   const hasReleases = existsSync(join(cacheDir, 'releases'))
 
   // Generate base SKILL.md
-  const baseSkillMd = generateSkillMd({
+  writeGeneratedSkillMd(outDir, {
     name: packageName,
     version,
     description: opts.description,
@@ -438,7 +438,6 @@ async function authorSinglePackage(opts: {
     features,
     eject: true,
   })
-  writeFileSync(join(outDir, 'SKILL.md'), baseSkillMd)
   p.log.success(`Created base skill: ${relative(packageDir, outDir)}`)
 
   // LLM enhancement (config resolved by caller)

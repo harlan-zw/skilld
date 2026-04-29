@@ -24,7 +24,7 @@ export { detectInstalledAgents, detectProjectAgents, detectTargetAgent, getAgent
 export { computeSkillDirName, installSkillForAgents, linkSkillToAgents, sanitizeName, unlinkSkillFromAgents } from './install.ts'
 
 // Skill generation
-export { extractMarkedSections, generateSkillMd, getSectionValidator, portabilizePrompt, wrapSection } from './prompts/index.ts'
+export { extractMarkedSections, generateSkillMd, getSectionValidator, portabilizePrompt, wrapSection, writeGeneratedSkillMd, writeSkillMd } from './prompts/index.ts'
 
 export type { SkillOptions } from './prompts/index.ts'
 // Registry
