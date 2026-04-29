@@ -3,6 +3,8 @@
  */
 
 import type { FeaturesConfig } from '../../core/config.ts'
+import { writeFileSync } from 'node:fs'
+import { join } from 'pathe'
 import { todayIsoDate } from '../../core/formatting.ts'
 import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize.ts'
 import { resolveSkilldCommand } from '../../core/shared.ts'
@@ -41,6 +43,16 @@ export interface SkillOptions {
   features?: FeaturesConfig
   /** Eject mode: use ./references/ paths instead of ./.skilld/ for portable skills */
   eject?: boolean
+}
+
+export function writeSkillMd(skillDir: string, content: string): void {
+  writeFileSync(join(skillDir, 'SKILL.md'), content)
+}
+
+export function writeGeneratedSkillMd(skillDir: string, opts: SkillOptions): string {
+  const content = generateSkillMd(opts)
+  writeSkillMd(skillDir, content)
+  return content
 }
 
 export function generateSkillMd(opts: SkillOptions): string {

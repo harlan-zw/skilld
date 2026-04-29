@@ -9,9 +9,10 @@
 
 import type { AgentType } from '../agent/index.ts'
 import type { RegistrySkill } from '../registry/client.ts'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync } from 'node:fs'
 import { join } from 'pathe'
 import { linkSkillToAgents } from '../agent/install.ts'
+import { writeSkillMd } from '../agent/prompts/skill.ts'
 import { writeLock } from '../core/lockfile.ts'
 import { SHARED_SKILLS_DIR } from '../core/shared.ts'
 import { fetchRegistrySkill } from '../registry/client.ts'
@@ -38,7 +39,7 @@ export async function syncRegistrySkill(opts: SyncRegistryOptions): Promise<Regi
   const sharedDir = join(cwd, SHARED_SKILLS_DIR)
   const skillDir = join(sharedDir, skill.name)
   mkdirSync(skillDir, { recursive: true })
-  writeFileSync(join(skillDir, 'SKILL.md'), skill.content)
+  writeSkillMd(skillDir, skill.content)
 
   // Update lockfile
   const baseDir = join(cwd, '.claude', 'skills')

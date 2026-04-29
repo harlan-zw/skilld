@@ -1,7 +1,7 @@
 import type { AgentType, CustomPrompt, OptimizeModel, SkillSection } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import type { ResolvedPackage } from '../sources/index.ts'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import logUpdate from 'log-update'
 import pLimit from 'p-limit'
@@ -10,13 +10,13 @@ import {
   agents,
   computeSkillDirName,
 
-  generateSkillMd,
   getModelLabel,
   linkSkillToAgents,
   optimizeDocs,
   SECTION_MERGE_ORDER,
   SECTION_OUTPUT_FILES,
   wrapSection,
+  writeGeneratedSkillMd,
 
 } from '../agent/index.ts'
 import {
@@ -263,7 +263,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
         }
         const cachedBody = cachedParts.join('\n\n')
 
-        const skillMd = generateSkillMd({
+        writeGeneratedSkillMd(skillDir, {
           name: resolvedName,
           version: data.version,
           releasedAt: data.resolved.releasedAt,
@@ -284,7 +284,6 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
           repoUrl: data.resolved.repoUrl,
           features: data.features,
         })
-        writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
         cachedPkgs.push(pkg)
       }
     }
@@ -575,7 +574,7 @@ async function syncBaseSkill(
   const updatedLock = readLock(baseDir)?.skills[skillDirName]
   const allPackages = parsePackageNames(updatedLock?.packages)
 
-  const skillMd = generateSkillMd({
+  const skillMd = writeGeneratedSkillMd(skillDir, {
     name: packageName,
     version,
     releasedAt: resolved.releasedAt,
@@ -595,7 +594,6 @@ async function syncBaseSkill(
     repoUrl: resolved.repoUrl,
     features,
   })
-  writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   const overheadLines = skillMd.split('\n').length
 
   // Link shared dir to per-agent dirs
@@ -683,7 +681,7 @@ async function enhanceWithLLM(
   }
 
   if (wasOptimized) {
-    const skillMd = generateSkillMd({
+    writeGeneratedSkillMd(skillDir, {
       name: packageName,
       version: data.version,
       releasedAt: data.resolved.releasedAt,
@@ -702,7 +700,6 @@ async function enhanceWithLLM(
       repoUrl: data.resolved.repoUrl,
       features: data.features,
     })
-    writeFileSync(join(skillDir, 'SKILL.md'), skillMd)
   }
 
   update(packageName, 'done', 'Skill optimized', versionKey)
