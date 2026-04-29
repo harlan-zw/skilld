@@ -21,8 +21,8 @@ import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 import { getEnvApiKey, getModel, getModels, getProviders, streamSimple } from '@mariozechner/pi-ai'
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from '@mariozechner/pi-ai/oauth'
-import { Type } from '@sinclair/typebox'
 import { join } from 'pathe'
+import { Type } from 'typebox'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
 
 export function isPiAiModel(model: string): boolean {

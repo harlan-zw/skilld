@@ -44,6 +44,40 @@ describe('cache/storage', () => {
     })
   })
 
+  describe('inferDocsTypeFromCache', () => {
+    it('detects llms.txt from source', async () => {
+      const { inferDocsTypeFromCache } = await import('../../src/cache/storage')
+
+      expect(inferDocsTypeFromCache('/cache/vue', 'llms.txt')).toBe('llms.txt')
+    })
+
+    it('detects cached llms.txt docs', async () => {
+      const { existsSync } = await import('node:fs')
+      const { inferDocsTypeFromCache } = await import('../../src/cache/storage')
+      vi.mocked(existsSync).mockImplementation(path => String(path).endsWith('docs/llms.txt'))
+
+      expect(inferDocsTypeFromCache('/cache/vue')).toBe('llms.txt')
+    })
+
+    it('detects README-only cache', async () => {
+      const { existsSync, readdirSync } = await import('node:fs')
+      const { inferDocsTypeFromCache } = await import('../../src/cache/storage')
+      vi.mocked(existsSync).mockImplementation(path => String(path).endsWith('docs'))
+      vi.mocked(readdirSync).mockReturnValue(['README.md'] as any)
+
+      expect(inferDocsTypeFromCache('/cache/vue')).toBe('readme')
+    })
+
+    it('defaults to docs', async () => {
+      const { existsSync, readdirSync } = await import('node:fs')
+      const { inferDocsTypeFromCache } = await import('../../src/cache/storage')
+      vi.mocked(existsSync).mockImplementation(path => String(path).endsWith('docs'))
+      vi.mocked(readdirSync).mockReturnValue(['README.md', 'guide.md'] as any)
+
+      expect(inferDocsTypeFromCache('/cache/vue')).toBe('docs')
+    })
+  })
+
   describe('ensureCacheDir', () => {
     it('creates references directory', async () => {
       const { mkdirSync } = await import('node:fs')
