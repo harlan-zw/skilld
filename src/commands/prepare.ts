@@ -13,6 +13,7 @@ import { defineCommand } from 'citty'
 import { join } from 'pathe'
 import { agents, linkSkillToAgents } from '../agent/index.ts'
 import { resolveAgent } from '../cli-helpers.ts'
+import { todayIsoDate } from '../core/formatting.ts'
 import { readLock, writeLock } from '../core/lockfile.ts'
 import { getShippedSkills, linkShippedSkill, restorePkgSymlink } from '../core/prepare.ts'
 import { getSharedSkillsDir } from '../core/shared.ts'
@@ -91,7 +92,7 @@ export const prepareCommandDef = defineCommand({
             packageName: entry.packageName,
             version,
             source: 'shipped',
-            syncedAt: new Date().toISOString().split('T')[0],
+            syncedAt: todayIsoDate(),
             generator: 'skilld',
           })
 

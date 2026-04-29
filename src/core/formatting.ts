@@ -2,6 +2,10 @@ import type { SearchSnippet } from '../retriv/index.ts'
 import type { ProjectState } from './skills.ts'
 import * as p from '@clack/prompts'
 
+export function todayIsoDate(): string {
+  return new Date().toISOString().split('T')[0]!
+}
+
 export function timeAgo(iso?: string): string {
   if (!iso)
     return ''
