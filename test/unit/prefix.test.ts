@@ -82,7 +82,7 @@ describe('prefix parser', () => {
     })
   })
 
-  describe('@ prefix (curator and collection)', () => {
+  describe('@ prefix (curator and scoped npm)', () => {
     it('parses @handle as curator', () => {
       expect(parseSkillInput('@antfu')).toEqual({
         type: 'curator',
@@ -90,11 +90,19 @@ describe('prefix parser', () => {
       })
     })
 
-    it('parses @handle/collection as collection', () => {
-      expect(parseSkillInput('@antfu/vue-stack')).toEqual({
-        type: 'collection',
-        handle: 'antfu',
-        name: 'vue-stack',
+    it('parses @scope/pkg as bare scoped npm package', () => {
+      expect(parseSkillInput('@nuxt/fonts')).toEqual({
+        type: 'bare',
+        package: '@nuxt/fonts',
+        tag: undefined,
+      })
+    })
+
+    it('parses @scope/pkg@tag as bare scoped npm with tag', () => {
+      expect(parseSkillInput('@nuxt/fonts@1.0.0')).toEqual({
+        type: 'bare',
+        package: '@nuxt/fonts',
+        tag: '1.0.0',
       })
     })
   })
@@ -177,8 +185,8 @@ describe('prefix parser', () => {
       expect(resolveSkillName('@antfu')).toBeNull()
     })
 
-    it('returns null for collection', () => {
-      expect(resolveSkillName('@antfu/utils')).toBeNull()
+    it('returns scoped name for @scope/pkg', () => {
+      expect(resolveSkillName('@nuxt/fonts')).toBe('@nuxt/fonts')
     })
 
     it('returns crate:<name> for crate inputs', () => {

@@ -62,19 +62,17 @@ export function parseSkillInput(input: string): SkillSource {
     return { type: 'bare', package: rest }
   }
 
-  // @handle or @handle/collection
+  // @handle (curator) or @scope/pkg (npm scoped package)
   if (trimmed.startsWith('@')) {
     const rest = trimmed.slice(1)
     const slashIdx = rest.indexOf('/')
     if (slashIdx === -1) {
       return { type: 'curator', handle: rest }
     }
-    const handle = rest.slice(0, slashIdx)
-    const name = rest.slice(slashIdx + 1)
-    // Disambiguate: @scope/pkg (npm scoped) vs @handle/collection
-    // Scoped npm packages need npm: prefix in the new world.
-    // @handle with / is always a collection.
-    return { type: 'collection', handle, name }
+    // @scope/pkg → treat as npm scoped package (bare, deprecated form)
+    // Collections must be installed via npm:@handle/coll or a future prefix.
+    const { name, tag } = splitPackageTag(trimmed)
+    return { type: 'bare', package: name, tag }
   }
 
   // Try existing git detection (SSH, URLs, local paths, owner/repo shorthand)
