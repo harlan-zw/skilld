@@ -174,8 +174,13 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
     })
   }
 
-  const names = selected.map(s => `\x1B[36m${s.name}\x1B[0m`).join(', ')
-  p.log.success(`Installed ${names}`)
+  for (const skill of selected) {
+    const skillRel = relative(cwd, join(baseDir, skill.name))
+    const fileLines = ['SKILL.md', ...skill.files.map(f => f.path)]
+      .map(f => `  \x1B[90m└\x1B[0m ${f}`)
+      .join('\n')
+    p.log.success(`Installed \x1B[36m${skill.name}\x1B[0m \x1B[90m→ ${skillRel}\x1B[0m\n${fileLines}`)
+  }
 }
 
 /**
