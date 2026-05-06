@@ -33,6 +33,7 @@ export interface WorkerErrorResponse {
   type: 'error'
   id: number
   message: string
+  name?: string
 }
 
 export type WorkerResponse = WorkerProgressResponse | WorkerDoneResponse | WorkerErrorResponse
@@ -68,6 +69,7 @@ if (parentPort) {
           type: 'error',
           id,
           message: err instanceof Error ? err.message : String(err),
+          name: err instanceof Error ? err.name : undefined,
         } satisfies WorkerErrorResponse)
       }
     }

@@ -4,6 +4,13 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import { dirname, join } from 'pathe'
+import { SearchDepsUnavailableError } from './index.ts'
+
+function reconstructError(message: string, name?: string): Error {
+  if (name === 'SearchDepsUnavailableError')
+    return new SearchDepsUnavailableError(undefined, message)
+  return new Error(message)
+}
 
 interface PendingTask {
   id: number
@@ -54,7 +61,7 @@ function ensureWorker(): Worker {
     }
     else if (msg.type === 'error') {
       pending.delete(msg.id)
-      task.reject(new Error(msg.message))
+      task.reject(reconstructError(msg.message, msg.name))
     }
   })
 
