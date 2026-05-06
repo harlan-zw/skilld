@@ -125,6 +125,24 @@ export function parseSkillFrontmatterName(content: string): { name?: string, des
   return { name: fm.name, description: fm.description }
 }
 
+/** Recursively find all directories containing a SKILL.md file. */
+function findSkillDirs(root: string, prefix = ''): Array<{ dir: string, repoPath: string }> {
+  const out: Array<{ dir: string, repoPath: string }> = []
+  if (!existsSync(root))
+    return out
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory())
+      continue
+    const dir = resolve(root, entry.name)
+    const repoPath = prefix ? `${prefix}/${entry.name}` : entry.name
+    if (existsSync(resolve(dir, 'SKILL.md')))
+      out.push({ dir, repoPath })
+    else
+      out.push(...findSkillDirs(dir, repoPath))
+  }
+  return out
+}
+
 /** Recursively collect all files in a directory, returning relative paths */
 function collectFiles(dir: string, prefix = ''): Array<{ path: string, content: string }> {
   const files: Array<{ path: string, content: string }> = []
@@ -168,13 +186,11 @@ function fetchLocalSkills(source: GitSkillSource): { skills: RemoteSkill[] } {
 
   const skills: RemoteSkill[] = []
 
-  // Check for skills/ subdirectory
+  // Check for skills/ subdirectory (recursive — repos may nest by category)
   const skillsDir = resolve(base, 'skills')
   if (existsSync(skillsDir)) {
-    for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
-      if (!entry.isDirectory())
-        continue
-      const skill = readLocalSkill(resolve(skillsDir, entry.name), `skills/${entry.name}`)
+    for (const { dir, repoPath } of findSkillDirs(skillsDir, 'skills')) {
+      const skill = readLocalSkill(dir, repoPath)
       if (skill)
         skills.push(skill)
     }
@@ -263,10 +279,8 @@ async function downloadGitHubSkills(
       )
 
       const skills: RemoteSkill[] = []
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (!entry.isDirectory())
-          continue
-        const skill = readLocalSkill(resolve(dir, entry.name), `skills/${entry.name}`)
+      for (const { dir: skillDir, repoPath } of findSkillDirs(dir, 'skills')) {
+        const skill = readLocalSkill(skillDir, repoPath)
         if (skill)
           skills.push(skill)
       }
@@ -332,10 +346,8 @@ async function fetchGitLabSkills(
     }
 
     const skills: RemoteSkill[] = []
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (!entry.isDirectory())
-        continue
-      const skill = readLocalSkill(resolve(dir, entry.name), `skills/${entry.name}`)
+    for (const { dir: skillDir, repoPath } of findSkillDirs(dir, 'skills')) {
+      const skill = readLocalSkill(skillDir, repoPath)
       if (skill)
         skills.push(skill)
     }

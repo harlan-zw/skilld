@@ -197,5 +197,13 @@ author: someone
       const testSkill = skills.find(s => s.name === 'test-skill')
       expect(testSkill?.path).toBe('skills/test-skill')
     })
+
+    it('discovers skills nested under category subdirectories', async () => {
+      const nestedFixture = join(__dirname, '../fixtures/mock-skills-repo-nested')
+      const { skills } = await fetchGitSkills({ type: 'local', localPath: nestedFixture })
+      expect(skills.map(s => s.name).sort()).toEqual(['improve-codebase-architecture', 'zoom-out'])
+      const arch = skills.find(s => s.name === 'improve-codebase-architecture')
+      expect(arch?.path).toBe('skills/engineering/improve-codebase-architecture')
+    })
   })
 })
