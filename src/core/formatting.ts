@@ -40,18 +40,21 @@ export function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-/** Spinner wrapper that shows elapsed time via built-in timer indicator */
+/** Spinner wrapper that appends elapsed time on stop (ms when sub-second) */
 export function timedSpinner() {
-  const spin = p.spinner({ indicator: 'timer' })
+  const spin = p.spinner()
+  let startedAt = 0
   return {
     start(msg: string) {
+      startedAt = Date.now()
       spin.start(msg)
     },
     message(msg: string) {
       spin.message(msg)
     },
     stop(msg: string) {
-      spin.stop(msg)
+      const elapsed = startedAt ? formatDuration(Date.now() - startedAt) : ''
+      spin.stop(elapsed ? `${msg} \x1B[90m[${elapsed}]\x1B[0m` : msg)
     },
   }
 }
