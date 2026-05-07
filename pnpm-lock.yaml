@@ -46,8 +46,8 @@ catalogs:
       specifier: ^4.21.0
       version: 4.21.0
     typebox:
-      specifier: ^1.1.37
-      version: 1.1.37
+      specifier: ^1.1.38
+      version: 1.1.38
     typescript:
       specifier: 6.0.2
       version: 6.0.2
@@ -200,7 +200,7 @@ importers:
         version: 0.2.16
       typebox:
         specifier: 'catalog:'
-        version: 1.1.37
+        version: 1.1.38
       typescript:
         specifier: 'catalog:'
         version: 6.0.2
@@ -4594,8 +4594,8 @@ packages:
     resolution: {integrity: sha512-TeTSQ6H5YHvpqVwBRcnLDCBnDOHWYu7IvGbHT6N8AOymcr9PJGjc1GTtiWZTYg0NCgYwvnYWEkVChQAr9bjfwA==}
     engines: {node: '>=16'}
 
-  typebox@1.1.37:
-    resolution: {integrity: sha512-jb7jp6KvOvvy5sd+11AfJ0/e0F0AS9RcOXd55oGi2ZnRHIGmFvrTaNF+ZidRmGBmmNTkM5KKl0Z37KzxJ+owEQ==}
+  typebox@1.1.38:
+    resolution: {integrity: sha512-pZ0aQPmMmXoUvSbeuWf/Hzsc+avNw/Zd6VeE8CFgkVGWyuHPJvqeJJDeJqLve+K70LvjYIoleGcoJHPT17cWoA==}
 
   typescript@6.0.2:
     resolution: {integrity: sha512-bGdAIrZ0wiGDo5l8c++HWtbaNCWTS4UTv7RaTH/ThVIgjkveJt83m74bBHMJkuCbslY8ixgLBVZJIOiQlQTjfQ==}
@@ -6224,7 +6224,7 @@ snapshots:
       openai: 6.26.0(ws@8.19.0)(zod@4.3.6)
       partial-json: 0.1.7
       proxy-agent: 6.5.0
-      typebox: 1.1.37
+      typebox: 1.1.38
       undici: 7.24.5
       zod-to-json-schema: 3.25.1(zod@4.3.6)
     transitivePeerDependencies:
@@ -10065,7 +10065,7 @@ snapshots:
   type-fest@4.41.0:
     optional: true
 
-  typebox@1.1.37: {}
+  typebox@1.1.38: {}
 
   typescript@6.0.2: {}
 

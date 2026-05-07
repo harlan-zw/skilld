@@ -20,7 +20,7 @@ catalog:
   semver: ^7.7.4
   std-env: ^4.1.0
   tsx: ^4.21.0
-  typebox: ^1.1.37
+  typebox: ^1.1.38
   typescript: 6.0.2
   unagent: ^0.0.8
 catalogs:
