@@ -3,23 +3,15 @@
  */
 
 import type { FeaturesConfig } from '../../core/config.ts'
-import type { CustomPrompt, PromptSection, SectionContext, SectionValidationWarning } from './optional/index.ts'
+import type { CustomPrompt, SectionContext, SectionValidationWarning } from './optional/index.ts'
+import type { SkillSection } from './optional/registry.ts'
 import { dirname } from 'pathe'
-import { resolveSkilldCommand } from '../../core/shared.ts'
+import { resolveSkilldCommand } from '../../core/skilld-command.ts'
 import { getPackageRules } from '../../sources/package-registry.ts'
-import { apiChangesSection, bestPracticesSection, customSection } from './optional/index.ts'
+import { getSectionModule, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from './optional/registry.ts'
 
-export type SkillSection = 'api-changes' | 'best-practices' | 'custom'
-
-/** Output file per section (inside .skilld/) */
-export const SECTION_OUTPUT_FILES: Record<SkillSection, string> = {
-  'best-practices': '_BEST_PRACTICES.md',
-  'api-changes': '_API_CHANGES.md',
-  'custom': '_CUSTOM.md',
-}
-
-/** Merge order for final SKILL.md body */
-export const SECTION_MERGE_ORDER: SkillSection[] = ['api-changes', 'best-practices', 'custom']
+export type { SkillSection } from './optional/registry.ts'
+export { SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from './optional/registry.ts'
 
 /** Wrap section content with HTML comment markers for targeted re-assembly */
 export function wrapSection(section: SkillSection, content: string): string {
@@ -169,12 +161,8 @@ ${importantBlock}
 ${docsSection ? `${docsSection}\n` : ''}`
 }
 
-function getSectionDef(section: SkillSection, ctx: SectionContext, customPrompt?: CustomPrompt): PromptSection | null {
-  switch (section) {
-    case 'api-changes': return apiChangesSection(ctx)
-    case 'best-practices': return bestPracticesSection(ctx)
-    case 'custom': return customPrompt ? customSection(customPrompt, ctx.enabledSectionCount, ctx.overheadLines) : null
-  }
+function getSectionDef(section: SkillSection, ctx: SectionContext, customPrompt?: CustomPrompt) {
+  return getSectionModule(section)?.build(ctx, customPrompt) ?? null
 }
 
 /**

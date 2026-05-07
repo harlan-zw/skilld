@@ -9,12 +9,15 @@ vi.mock('../../src/cache/index.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/cache/index')>()
   return {
     ...actual,
-    isCached: isCachedMock,
+    createReferenceCache: (name: string, version: string) => ({
+      ...actual.createReferenceCache(name, version),
+      has: () => isCachedMock(name, version),
+    }),
   }
 })
 
-vi.mock('../../src/sources/index.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/sources/index')>()
+vi.mock('../../src/sources/npm.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/sources/npm')>()
   return {
     ...actual,
     resolvePackageDocsWithAttempts: vi.fn().mockResolvedValue({
@@ -30,21 +33,25 @@ vi.mock('../../src/sources/index.ts', async (importOriginal) => {
         },
       ],
     }),
-    resolveCrateDocsWithAttempts: vi.fn().mockResolvedValue({
-      package: {
-        name: 'serde',
-        version: '1.0.220',
-        docsUrl: 'https://docs.rs/serde/1.0.220',
-      },
-      attempts: [
-        {
-          source: 'crates',
-          status: 'success',
-        },
-      ],
-    }),
+    readLocalDependencies: vi.fn().mockResolvedValue([]),
   }
 })
+
+vi.mock('../../src/sources/crates.ts', () => ({
+  resolveCrateDocsWithAttempts: vi.fn().mockResolvedValue({
+    package: {
+      name: 'serde',
+      version: '1.0.220',
+      docsUrl: 'https://docs.rs/serde/1.0.220',
+    },
+    attempts: [
+      {
+        source: 'crates',
+        status: 'success',
+      },
+    ],
+  }),
+}))
 
 const { syncCommand } = await import('../../src/commands/sync')
 

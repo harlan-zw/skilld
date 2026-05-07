@@ -5,7 +5,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { mapInsert } from '../core/shared.ts'
+import { mapInsert } from '../core/map.ts'
 import { BOT_USERS, buildFrontmatter, COMMENT_NOISE_RE, hasCodeBlock, isoDate, truncateBody } from './github-common.ts'
 import { isGhAvailable } from './issues.ts'
 

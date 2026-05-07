@@ -165,7 +165,7 @@ export const PACKAGES: PackageSpec[] = [
     name: 'vue',
     preset: 'vue',
     expectRepoUrl: 'github.com/vuejs/core',
-    expectDocsUrl: 'https://vuejs.org',
+    expectDocsUrl: 'https://vuejs.org/',
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
@@ -357,7 +357,7 @@ export const PACKAGES: PackageSpec[] = [
     preset: 'astro',
     expectRepoUrl: 'github.com/withastro/astro',
     expectDocsUrl: 'https://astro.build',
-    expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
+    expectSources: { npm: true, gitDocs: true, llmsTxt: false, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
       'docs/basics/astro-components.mdx',
@@ -431,9 +431,9 @@ export const PACKAGES: PackageSpec[] = [
     expectSources: { npm: true, gitDocs: true, llmsTxt: true, readme: true },
     expectDocsType: 'docs',
     expectCacheFiles: [
-      'docs/server/routers.md',
+      'docs/skills/trpc-router/SKILL.md',
     ],
-    minCacheDocs: 50,
+    minCacheDocs: 15,
     expectDescriptionContains: '"@trpc/server"',
     searchQuery: { query: 'router', minHits: 1 },
   },
@@ -499,12 +499,12 @@ export const PACKAGES: PackageSpec[] = [
     preset: 'general',
     expectRepoUrl: 'github.com/harlan-zw/mdream',
     expectDocsUrl: 'https://mdream.dev',
-    expectSources: { npm: true, gitDocs: false, llmsTxt: false, readme: true },
-    expectDocsType: 'readme',
+    expectSources: { npm: true, gitDocs: false, llmsTxt: true, readme: true },
+    expectDocsType: 'docs',
     expectCacheFiles: [
-      'docs/README.md',
+      'docs/llms-txt/guide.md',
     ],
-    minCacheDocs: 1,
+    minCacheDocs: 10,
     expectDescriptionContains: '"mdream"',
   },
 

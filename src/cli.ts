@@ -247,7 +247,7 @@ const main = defineCommand({
         }
 
         if (source === 'shipped') {
-          const { handleShippedSkills: installShipped } = await import('./commands/sync-shared.ts')
+          const { handleShippedSkills: installShipped } = await import('./agent/skill-installer.ts')
           for (const pkg of state.shipped) {
             const version = state.deps.get(pkg.packageName)?.replace(/^[\^~>=<]+/, '') || '0.0.0'
             installShipped(pkg.packageName, version, cwd, agent, false)
@@ -483,7 +483,7 @@ const main = defineCommand({
             }))
             if (selected.length === 0)
               return
-            const { handleShippedSkills: installShipped } = await import('./commands/sync-shared.ts')
+            const { handleShippedSkills: installShipped } = await import('./agent/skill-installer.ts')
             const seen = new Set<string>()
             for (const s of selected) {
               if (seen.has(s.packageName))

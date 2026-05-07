@@ -4,22 +4,18 @@ vi.mock('../../src/commands/sync-parallel', () => ({
   syncPackagesParallel: vi.fn(),
 }))
 
-vi.mock('../../src/sources/index.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/sources/index')>()
-  return {
-    ...actual,
-    resolveCrateDocsWithAttempts: vi.fn().mockResolvedValue({
-      package: null,
-      attempts: [
-        {
-          source: 'crates',
-          status: 'not-found',
-          message: 'Crate not found on crates.io',
-        },
-      ],
-    }),
-  }
-})
+vi.mock('../../src/sources/crates.ts', () => ({
+  resolveCrateDocsWithAttempts: vi.fn().mockResolvedValue({
+    package: null,
+    attempts: [
+      {
+        source: 'crates',
+        status: 'not-found',
+        message: 'Crate not found on crates.io',
+      },
+    ],
+  }),
+}))
 
 const { syncCommand, isCrateSpec } = await import('../../src/commands/sync')
 

@@ -22,7 +22,8 @@ import {
   listReferenceFiles,
   resolvePkgDir,
 } from '../../src/cache'
-import { detectChangelog, linkAllReferences } from '../../src/commands/sync-shared'
+import { linkAllReferences } from '../../src/cache/references'
+import { detectChangelog } from '../../src/commands/sync-pipeline'
 import { runPipeline } from '../e2e/pipeline'
 import { GENERATE_SECTIONS } from './generate-matrix'
 

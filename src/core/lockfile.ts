@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join } from 'pathe'
 import { parseFrontmatter } from './markdown.ts'
+import { lockfilePath } from './paths.ts'
 import { yamlEscape, yamlParseKV } from './yaml.ts'
 
 export interface SkillInfo {
@@ -79,7 +79,7 @@ export function readLock(skillsDir: string): SkilldLock | null {
   const cached = lockCache.get(skillsDir)
   if (cached)
     return { skills: { ...cached.skills } }
-  const lockPath = join(skillsDir, 'skilld-lock.yaml')
+  const lockPath = lockfilePath(skillsDir)
   if (!existsSync(lockPath))
     return null
   const content = readFileSync(lockPath, 'utf-8')
@@ -110,6 +110,50 @@ export function readLock(skillsDir: string): SkilldLock | null {
   return { skills: { ...lock.skills } }
 }
 
+/**
+ * Find the skill dir that tracks `packageName` (as primary or in `packages`),
+ * or null. Single source of truth for "is this package already synced?".
+ */
+export function findSkillDirByPackage(lock: SkilldLock, packageName: string): string | null {
+  for (const [dirName, info] of Object.entries(lock.skills)) {
+    if (info.packageName === packageName)
+      return dirName
+    if (parsePackages(info.packages).some(p => p.name === packageName))
+      return dirName
+  }
+  return null
+}
+
+/**
+ * Every skill dir referencing `packageName`, optionally excluding one. Used by
+ * the installer to dedupe stale entries when a skill is renamed or merged.
+ */
+export function findSkillDirsByPackage(lock: SkilldLock, packageName: string, excludeDir?: string): string[] {
+  const out: string[] = []
+  for (const [dirName, info] of Object.entries(lock.skills)) {
+    if (dirName === excludeDir)
+      continue
+    if (info.packageName === packageName || parsePackages(info.packages).some(p => p.name === packageName))
+      out.push(dirName)
+  }
+  return out
+}
+
+/**
+ * Build a `packageName → skillDir` map covering both primary names and
+ * additional packages tracked in `packages`. Used for related-skill lookup.
+ */
+export function buildPackageDirMap(lock: SkilldLock): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const [dirName, info] of Object.entries(lock.skills)) {
+    if (info.packageName)
+      map.set(info.packageName, dirName)
+    for (const pkg of parsePackages(info.packages))
+      map.set(pkg.name, dirName)
+  }
+  return map
+}
+
 function serializeLock(lock: SkilldLock): string {
   let yaml = 'skills:\n'
   for (const [name, skill] of Object.entries(lock.skills)) {
@@ -123,7 +167,7 @@ function serializeLock(lock: SkilldLock): string {
 }
 
 export function writeLock(skillsDir: string, skillName: string, info: SkillInfo): void {
-  const lockPath = join(skillsDir, 'skilld-lock.yaml')
+  const lockPath = lockfilePath(skillsDir)
   let lock: SkilldLock = { skills: {} }
   if (existsSync(lockPath)) {
     lock = readLock(skillsDir) || { skills: {} }
@@ -184,7 +228,7 @@ export function mergeLocks(locks: SkilldLock[]): SkilldLock {
  */
 export function syncLockfilesToDirs(sourceLock: SkilldLock, dirs: string[]): void {
   for (const dir of dirs) {
-    const lockPath = join(dir, 'skilld-lock.yaml')
+    const lockPath = lockfilePath(dir)
     if (!existsSync(lockPath))
       continue
     const existing = readLock(dir)
@@ -198,7 +242,7 @@ export function syncLockfilesToDirs(sourceLock: SkilldLock, dirs: string[]): voi
 }
 
 export function removeLockEntry(skillsDir: string, skillName: string): void {
-  const lockPath = join(skillsDir, 'skilld-lock.yaml')
+  const lockPath = lockfilePath(skillsDir)
   const lock = readLock(skillsDir)
   if (!lock)
     return

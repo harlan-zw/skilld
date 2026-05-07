@@ -1,7 +1,6 @@
 import type { OptimizeModel } from '../agent/index.ts'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
-import { join } from 'pathe'
+import { CACHE_DIR, CONFIG_PATH } from './paths.ts'
 import { yamlEscape, yamlParseKV, yamlUnescape } from './yaml.ts'
 
 export interface FeaturesConfig {
@@ -18,6 +17,16 @@ export const defaultFeatures: FeaturesConfig = {
   releases: true,
 }
 
+/**
+ * Resolve the active feature set: defaults overlaid with user config, then
+ * caller-supplied overrides. Single seam so feature gating doesn't drift.
+ */
+export function getActiveFeatures(overrides?: Partial<FeaturesConfig>): FeaturesConfig {
+  const fromConfig = readConfig().features
+  const merged: FeaturesConfig = { ...defaultFeatures, ...(fromConfig ?? {}) }
+  return overrides ? { ...merged, ...overrides } : merged
+}
+
 export interface SkilldConfig {
   model?: OptimizeModel
   agent?: string
@@ -25,9 +34,6 @@ export interface SkilldConfig {
   projects?: string[]
   skipLlm?: boolean
 }
-
-const CONFIG_DIR = join(homedir(), '.skilld')
-const CONFIG_PATH = join(CONFIG_DIR, 'config.yaml')
 
 let configCache: SkilldConfig | undefined
 
@@ -107,7 +113,7 @@ export function readConfig(): SkilldConfig {
 }
 
 export function writeConfig(config: SkilldConfig): void {
-  mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 })
+  mkdirSync(CACHE_DIR, { recursive: true, mode: 0o700 })
 
   let yaml = ''
   if (config.model)

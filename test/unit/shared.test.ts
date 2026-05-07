@@ -50,13 +50,13 @@ describe('shared skills', () => {
       vi.mocked(existsSync).mockImplementation((p: any) =>
         String(p).endsWith('.skills'),
       )
-      const { getSharedSkillsDir } = await import('../../src/core/shared')
+      const { getSharedSkillsDir } = await import('../../src/core/paths')
       expect(getSharedSkillsDir('/project')).toBe('/project/.skills')
     })
 
     it('returns null when .skills/ does not exist', async () => {
       vi.mocked(existsSync).mockReturnValue(false)
-      const { getSharedSkillsDir } = await import('../../src/core/shared')
+      const { getSharedSkillsDir } = await import('../../src/core/paths')
       expect(getSharedSkillsDir('/project')).toBeNull()
     })
   })

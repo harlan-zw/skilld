@@ -29,7 +29,7 @@ describe('author', () => {
       const { existsSync } = await import('node:fs')
       vi.mocked(existsSync).mockReturnValue(false)
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       expect(detectMonorepoPackages('/project')).toBeNull()
     })
 
@@ -38,7 +38,7 @@ describe('author', () => {
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ name: 'my-pkg', version: '1.0.0' }))
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       expect(detectMonorepoPackages('/project')).toBeNull()
     })
 
@@ -69,7 +69,7 @@ describe('author', () => {
         { name: 'foo', isDirectory: () => true, isFile: () => false } as any,
       ])
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       const result = detectMonorepoPackages('/project')
 
       expect(result).toHaveLength(1)
@@ -111,7 +111,7 @@ describe('author', () => {
         { name: 'bar', isDirectory: () => true, isFile: () => false } as any,
       ])
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       const result = detectMonorepoPackages('/project')
 
       expect(result).toHaveLength(1)
@@ -150,7 +150,7 @@ describe('author', () => {
         { name: 'public', isDirectory: () => true, isFile: () => false } as any,
       ])
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       const result = detectMonorepoPackages('/project')
 
       expect(result).toHaveLength(1)
@@ -188,7 +188,7 @@ describe('author', () => {
         { name: 'a', isDirectory: () => true, isFile: () => false } as any,
       ])
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       const result = detectMonorepoPackages('/project')
 
       expect(result).toHaveLength(1)
@@ -220,7 +220,7 @@ describe('author', () => {
 
       vi.mocked(readdirSync).mockReturnValue([])
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       const result = detectMonorepoPackages('/project')
 
       expect(result).toHaveLength(1)
@@ -263,7 +263,7 @@ describe('author', () => {
         { name: 'x', isDirectory: () => true, isFile: () => false } as any,
       ])
 
-      const { detectMonorepoPackages } = await import('../../src/commands/author')
+      const { detectMonorepoPackages } = await import('../../src/core/monorepo')
       const result = detectMonorepoPackages('/project')
 
       expect(result![0].repoUrl).toBe('https://github.com/org/x')

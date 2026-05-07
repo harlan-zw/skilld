@@ -7,8 +7,8 @@ import { unlinkSkillFromAgents } from '../agent/index.ts'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
 import { readConfig } from '../core/config.ts'
 import { removeLockEntry } from '../core/lockfile.ts'
+import { getSharedSkillsDir } from '../core/paths.ts'
 import { resolveSkillName } from '../core/prefix.ts'
-import { getSharedSkillsDir } from '../core/shared.ts'
 import { getProjectState, getSkillsDir, iterateSkills } from '../core/skills.ts'
 
 export interface RemoveOptions {

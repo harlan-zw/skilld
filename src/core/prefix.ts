@@ -130,6 +130,16 @@ export function toStoragePackageName(identityName: string): string {
   return identityName
 }
 
+/** True if `spec` targets crates.io (`crate:<name>` form). */
+export function isCrateSpec(spec: string): boolean {
+  return spec.startsWith('crate:')
+}
+
+/** Wrap a bare crate name as the lockfile identity name. */
+export function toCrateIdentity(crateName: string): string {
+  return `crate:${crateName}`
+}
+
 /**
  * Split "package@tag" into name and optional tag.
  * Handles scoped packages: "@scope/pkg@tag"

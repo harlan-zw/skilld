@@ -8,7 +8,8 @@ import { CACHE_DIR } from '../cache/index.ts'
 import { isInteractive, sharedArgs } from '../cli-helpers.ts'
 import { getRegisteredProjects, unregisterProject } from '../core/config.ts'
 import { readLock } from '../core/lockfile.ts'
-import { mapInsert, SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { mapInsert } from '../core/map.ts'
+import { SHARED_SKILLS_DIR } from '../core/paths.ts'
 import { SKILLD_MARKER_END, SKILLD_MARKER_START } from './sync.ts'
 
 /**

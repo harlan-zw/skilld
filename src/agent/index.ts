@@ -11,7 +11,6 @@ export {
   getAvailableModels,
   getModelLabel,
   getModelName,
-  optimizeDocs,
   SECTION_MERGE_ORDER,
   SECTION_OUTPUT_FILES,
 } from './clis/index.ts'
@@ -19,9 +18,10 @@ export {
 export { detectImportedPackages } from './detect-imports.ts'
 // Detection
 export { detectInstalledAgents, detectProjectAgents, detectTargetAgent, getAgentVersion } from './detect.ts'
-
 // Installation
 export { computeSkillDirName, installSkillForAgents, linkSkillToAgents, sanitizeName, unlinkSkillFromAgents } from './install.ts'
+
+export { optimizeDocs } from './llm-enhancer.ts'
 
 // Skill generation
 export { extractMarkedSections, generateSkillMd, getSectionValidator, portabilizePrompt, wrapSection, writeGeneratedSkillMd, writeSkillMd } from './prompts/index.ts'

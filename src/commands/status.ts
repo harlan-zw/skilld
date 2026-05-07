@@ -11,8 +11,9 @@ import { sharedArgs } from '../cli-helpers.ts'
 import { defaultFeatures, hasConfig, readConfig } from '../core/config.ts'
 import { formatSource, timeAgo } from '../core/formatting.ts'
 import { parsePackages } from '../core/lockfile.ts'
+import { mapInsert } from '../core/map.ts'
+import { getSharedSkillsDir, skillInternalDir } from '../core/paths.ts'
 import { toStoragePackageName } from '../core/prefix.ts'
-import { getSharedSkillsDir, mapInsert } from '../core/shared.ts'
 
 import { iterateSkills } from '../core/skills.ts'
 import { version as skilldVersion } from '../version.ts'
@@ -77,7 +78,7 @@ async function countEmbeddings(packageName: string, version?: string): Promise<n
 }
 
 function countRefDocs(skillDir: string): number {
-  const refsDir = join(skillDir, '.skilld')
+  const refsDir = skillInternalDir(skillDir)
   if (!existsSync(refsDir))
     return 0
   let count = 0

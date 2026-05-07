@@ -14,7 +14,7 @@ import { join, resolve } from 'node:path'
 import { readLock } from './core/lockfile.ts'
 import { getShippedSkills, linkShippedSkill, restorePkgSymlink } from './core/prepare.ts'
 
-// Inlined from core/shared.ts to avoid pulling in semver/std-env via shared chunk
+// Duplicated from core/paths.ts: this entry point stays under 20 ms and avoids transitive deps.
 const SHARED_SKILLS_DIR = '.skills'
 
 // ── Lightweight agent resolution (avoids importing full agent registry) ──

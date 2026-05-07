@@ -8,45 +8,19 @@ import type { GitSkillSource } from '../sources/git-skills.ts'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { dirname, join, relative } from 'pathe'
-import {
-  agents,
-  getModelLabel,
-  linkSkillToAgents,
-  sanitizeName,
-  writeGeneratedSkillMd,
-  writeSkillMd,
-} from '../agent/index.ts'
-import {
-  CACHE_DIR,
-  ensureCacheDir,
-  getCacheDir,
-  getPkgKeyFiles,
-  getVersionKey,
-  hasShippedDocs,
-  isCached,
-  resolvePkgDir,
-} from '../cache/index.ts'
-import { defaultFeatures, readConfig, registerProject } from '../core/config.ts'
+import { agents, writeSkillMd } from '../agent/index.ts'
+import { installSkill } from '../agent/skill-installer.ts'
+import { CACHE_DIR } from '../cache/index.ts'
+import { readConfig } from '../core/config.ts'
 import { timedSpinner, todayIsoDate } from '../core/formatting.ts'
-import { writeLock } from '../core/lockfile.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
-import { getSharedSkillsDir } from '../core/shared.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
 import { fetchGitSkills } from '../sources/git-skills.ts'
-import { resolveGitHubRepo } from '../sources/github.ts'
 import { track } from '../telemetry.ts'
-import {
-  detectChangelog,
-  enhanceSkillWithLLM,
-  ensureAgentInstructions,
-  ensureGitignore,
-  fetchAndCacheResources,
-  indexResources,
-  linkAllReferences,
-  resolveBaseDir,
-  selectLlmConfig,
-  writePromptFiles,
-} from './sync-shared.ts'
+import { DEFAULT_SECTIONS, selectLlmConfig } from './llm-prompts.ts'
+import { createGithubResolver } from './sync-resolvers.ts'
+import { runBaseSync, runEnhancePhase } from './sync-runner.ts'
+import { createClackUi } from './sync-ui-clack.ts'
 
 export interface GitSyncOptions {
   source: GitSkillSource
@@ -147,20 +121,24 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
       }
     }
 
-    // Write lockfile entry
     const sourceType = source.type === 'local' ? 'local' : source.type
-    writeLock(baseDir, skill.name, {
-      source: sourceType,
-      repo: source.type === 'local' ? source.localPath : `${source.owner}/${source.repo}`,
-      path: skill.path || undefined,
-      ref: source.ref || 'main',
-      syncedAt: todayIsoDate(),
-      generator: 'external',
+    installSkill({
+      cwd,
+      agent,
+      global: isGlobal,
+      baseDir,
+      skillDirName: skill.name,
+      lock: {
+        source: sourceType,
+        repo: source.type === 'local' ? source.localPath : `${source.owner}/${source.repo}`,
+        path: skill.path || undefined,
+        ref: source.ref || 'main',
+        syncedAt: todayIsoDate(),
+        generator: 'external',
+      },
+      skipLinkAgents: true,
     })
   }
-
-  if (!isGlobal)
-    registerProject(cwd)
 
   // Track telemetry (skip local sources)
   if (source.type !== 'local' && source.owner && source.repo) {
@@ -185,191 +163,58 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
 
 /**
  * Generate a skill from a GitHub repo's docs (no npm package required).
- * Uses the same pipeline as npm packages: resolve → fetch → cache → generate → LLM enhance.
+ * Routes through the unified runner with a `createGithubResolver` so the
+ * fetch / cache / install / LLM cycle is shared with npm flows.
  */
 async function syncGitHubRepo(opts: GitSyncOptions): Promise<void> {
   const { source, agent, global: isGlobal, yes } = opts
   const owner = source.owner!
   const repo = source.repo!
   const cwd = process.cwd()
+  const ui = createClackUi({ cwd })
+  const spec = `${owner}/${repo}`
 
-  const spin = timedSpinner()
-  spin.start(`Resolving ${owner}/${repo}`)
+  const result = await runBaseSync(
+    spec,
+    {
+      agent,
+      global: isGlobal,
+      force: opts.force,
+      from: opts.from,
+    },
+    ui,
+    createGithubResolver(owner, repo),
+    cwd,
+    DEFAULT_SECTIONS,
+  )
 
-  const resolved = await resolveGitHubRepo(owner, repo, msg => spin.message(msg))
-  if (!resolved) {
-    spin.stop(`Could not find docs for ${owner}/${repo}`)
+  if (result.kind !== 'ready')
     return
-  }
 
-  const repoUrl = `https://github.com/${owner}/${repo}`
-  const packageName = `${owner}-${repo}`
-  const version = resolved.version || 'main'
-  const versionKey = getVersionKey(version)
-  const useCache = isCached(packageName, version)
-
-  spin.stop(`Resolved ${owner}/${repo}@${useCache ? versionKey : version}${useCache ? ' (cached)' : ''}`)
-
-  ensureCacheDir()
-
-  const baseDir = resolveBaseDir(cwd, agent, isGlobal)
-  const skillDirName = sanitizeName(`${owner}-${repo}`)
-  const skillDir = join(baseDir, skillDirName)
-  mkdirSync(skillDir, { recursive: true })
-
-  const features = readConfig().features ?? defaultFeatures
-
-  // Phase 1: Fetch & cache all resources
-  const resSpin = timedSpinner()
-  resSpin.start('Finding resources')
-  const resources = await fetchAndCacheResources({
-    packageName,
-    resolved,
-    version,
-    useCache,
-    features,
-    from: opts.from,
-    onProgress: msg => resSpin.message(msg),
-  })
-  const resParts: string[] = []
-  if (resources.docsToIndex.length > 0) {
-    const docCount = resources.docsToIndex.filter(d => d.metadata?.type === 'doc').length
-    if (docCount > 0)
-      resParts.push(`${docCount} docs`)
-  }
-  if (resources.hasIssues)
-    resParts.push('issues')
-  if (resources.hasDiscussions)
-    resParts.push('discussions')
-  if (resources.hasReleases)
-    resParts.push('releases')
-  resSpin.stop(`Fetched ${resParts.length > 0 ? resParts.join(', ') : 'resources'}`)
-  for (const w of resources.warnings)
-    p.log.warn(`\x1B[33m${w}\x1B[0m`)
-
-  // Create symlinks (linkPkg/linkPkgNamed gracefully skip when no node_modules)
-  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features)
-
-  // Phase 2: Search index
-  if (features.search) {
-    const idxSpin = timedSpinner()
-    idxSpin.start('Creating search index')
-    await indexResources({
-      packageName,
-      version,
-      cwd,
-      docsToIndex: resources.docsToIndex,
-      features,
-      onProgress: msg => idxSpin.message(msg),
-    })
-    idxSpin.stop('Search index ready')
-  }
-
-  const pkgDir = resolvePkgDir(packageName, cwd, version)
-  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version))
-  const shippedDocs = hasShippedDocs(packageName, cwd, version)
-  const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
-
-  // Write lockfile
-  writeLock(baseDir, skillDirName, {
-    packageName,
-    version,
-    repo: `${owner}/${repo}`,
-    source: resources.docSource,
-    syncedAt: todayIsoDate(),
-    generator: 'skilld',
-  })
-
-  // Write base SKILL.md
-  writeGeneratedSkillMd(skillDir, {
-    name: packageName,
-    version,
-    releasedAt: resolved.releasedAt,
-    description: resolved.description,
-    relatedSkills: [],
-    hasIssues: resources.hasIssues,
-    hasDiscussions: resources.hasDiscussions,
-    hasReleases: resources.hasReleases,
-    hasChangelog,
-    docsType: resources.docsType,
-    hasShippedDocs: shippedDocs,
-    pkgFiles,
-    dirName: skillDirName,
-    repoUrl,
-    features,
-  })
-
-  p.log.success(`Created base skill: ${relative(cwd, skillDir)}`)
-
-  // LLM enhancement
+  const { state } = result
   const globalConfig = readConfig()
-  if (!globalConfig.skipLlm && (!yes || opts.model)) {
-    const llmConfig = await selectLlmConfig(opts.model)
-    if (llmConfig?.promptOnly) {
-      writePromptFiles({
-        packageName,
-        skillDir,
-        version,
-        hasIssues: resources.hasIssues,
-        hasDiscussions: resources.hasDiscussions,
-        hasReleases: resources.hasReleases,
-        hasChangelog,
-        docsType: resources.docsType,
-        hasShippedDocs: shippedDocs,
-        pkgFiles,
-        sections: llmConfig.sections,
-        customPrompt: llmConfig.customPrompt,
-        features,
-      })
-    }
-    else if (llmConfig) {
-      p.log.step(getModelLabel(llmConfig.model))
-      await enhanceSkillWithLLM({
-        packageName,
-        version,
-        skillDir,
-        dirName: skillDirName,
-        model: llmConfig.model,
-        resolved,
-        relatedSkills: [],
-        hasIssues: resources.hasIssues,
-        hasDiscussions: resources.hasDiscussions,
-        hasReleases: resources.hasReleases,
-        hasChangelog,
-        docsType: resources.docsType,
-        hasShippedDocs: shippedDocs,
-        pkgFiles,
-        force: opts.force,
-        debug: opts.debug,
-        sections: llmConfig.sections,
-        customPrompt: llmConfig.customPrompt,
-        features,
-      })
-    }
-  }
+  let llmConfig: import('./llm-prompts.ts').LlmConfig | null = null
+  if (!state.allSectionsCached && !globalConfig.skipLlm && (!yes || opts.model))
+    llmConfig = await selectLlmConfig(opts.model)
 
-  // Link shared dir to per-agent dirs
-  const shared = !isGlobal && getSharedSkillsDir(cwd)
-  if (shared)
-    linkSkillToAgents(skillDirName, shared, cwd, agent)
-
-  if (!isGlobal) {
-    registerProject(cwd)
-    const skillsDir = shared || agents[agent].skillsDir
-    await ensureGitignore(skillsDir, cwd, isGlobal)
-    await ensureAgentInstructions(agent, cwd, isGlobal)
-  }
+  await runEnhancePhase(
+    state,
+    llmConfig,
+    { agent, global: isGlobal, force: opts.force, debug: opts.debug },
+    ui,
+    cwd,
+  )
 
   await shutdownWorker()
 
   track({
     event: 'install',
-    source: `${owner}/${repo}`,
-    skills: skillDirName,
+    source: spec,
+    skills: state.skillDirName,
     agents: agent,
     ...(isGlobal && { global: '1' as const }),
     sourceType: 'github-generated',
   })
 
-  p.outro(`Synced ${owner}/${repo} to ${relative(cwd, skillDir)}`)
+  p.outro(`Synced ${spec} to ${relative(cwd, state.skillDir)}`)
 }

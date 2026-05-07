@@ -5,6 +5,7 @@
 import type { AgentType } from './types.ts'
 import { existsSync, lstatSync, mkdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'pathe'
+import { skillInternalDir } from '../core/paths.ts'
 import { repairMarkdown, sanitizeMarkdown } from '../core/sanitize.ts'
 import { detectInstalledAgents } from './detect.ts'
 import { agents } from './registry.ts'
@@ -87,7 +88,7 @@ export function installSkillForAgents(
     }
 
     const skillDir = join(baseDir, sanitized)
-    const skilldDir = join(skillDir, '.skilld')
+    const skilldDir = skillInternalDir(skillDir)
     mkdirSync(skilldDir, { recursive: true })
     writeFileSync(join(skilldDir, '_SKILL.md'), sanitizeMarkdown(repairMarkdown(skillContent)))
 

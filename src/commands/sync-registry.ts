@@ -11,10 +11,9 @@ import type { AgentType } from '../agent/index.ts'
 import type { RegistrySkill } from '../registry/client.ts'
 import { mkdirSync } from 'node:fs'
 import { join } from 'pathe'
-import { linkSkillToAgents } from '../agent/install.ts'
 import { writeSkillMd } from '../agent/prompts/skill.ts'
-import { writeLock } from '../core/lockfile.ts'
-import { SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { installSkill, resolveBaseDir } from '../agent/skill-installer.ts'
+import { SHARED_SKILLS_DIR } from '../core/paths.ts'
 import { fetchRegistrySkill } from '../registry/client.ts'
 
 export interface SyncRegistryOptions {
@@ -41,20 +40,23 @@ export async function syncRegistrySkill(opts: SyncRegistryOptions): Promise<Regi
   mkdirSync(skillDir, { recursive: true })
   writeSkillMd(skillDir, skill.content)
 
-  // Update lockfile
-  const baseDir = join(cwd, '.claude', 'skills')
+  const baseDir = resolveBaseDir(cwd, agent, false)
   mkdirSync(baseDir, { recursive: true })
-  writeLock(baseDir, skill.name, {
-    packageName: skill.packageName,
-    version: skill.updatedAt,
-    repo: skill.repo,
-    source: 'registry',
-    syncedAt: new Date().toISOString().slice(0, 10),
-    generator: 'curator',
+  installSkill({
+    cwd,
+    agent,
+    global: false,
+    baseDir,
+    skillDirName: skill.name,
+    lock: {
+      packageName: skill.packageName,
+      version: skill.updatedAt,
+      repo: skill.repo,
+      source: 'registry',
+      syncedAt: new Date().toISOString().slice(0, 10),
+      generator: 'curator',
+    },
   })
-
-  // Link to agent skill directories
-  linkSkillToAgents(skill.name, skillDir, cwd, agent)
 
   return skill
 }

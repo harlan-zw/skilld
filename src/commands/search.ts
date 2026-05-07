@@ -4,7 +4,7 @@ import { defineCommand } from 'citty'
 import { detectCurrentAgent } from 'unagent/env'
 import { isInteractive } from '../cli-helpers.ts'
 import { formatSnippet, normalizeScores, sanitizeMarkdown } from '../core/index.ts'
-import { resolveSkilldCommand } from '../core/shared.ts'
+import { resolveSkilldCommand } from '../core/skilld-command.ts'
 import { SearchDepsUnavailableError, searchSnippets } from '../retriv/index.ts'
 import { findPackageDbs, getPackageVersions, listLockPackages, parseFilterPrefix } from './search-helpers.ts'
 

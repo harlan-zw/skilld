@@ -15,8 +15,8 @@ import { agents, linkSkillToAgents } from '../agent/index.ts'
 import { resolveAgent } from '../cli-helpers.ts'
 import { todayIsoDate } from '../core/formatting.ts'
 import { readLock, writeLock } from '../core/lockfile.ts'
+import { getSharedSkillsDir } from '../core/paths.ts'
 import { getShippedSkills, linkShippedSkill, restorePkgSymlink } from '../core/prepare.ts'
-import { getSharedSkillsDir } from '../core/shared.ts'
 import { getProjectState } from '../core/skills.ts'
 
 export const prepareCommandDef = defineCommand({

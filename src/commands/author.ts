@@ -1,6 +1,7 @@
 import type { OptimizeModel } from '../agent/index.ts'
+import type { ReferenceCache } from '../cache/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
-import type { LlmConfig } from './sync-shared.ts'
+import type { LlmConfig } from './llm-prompts.ts'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
@@ -10,15 +11,14 @@ import {
   getModelLabel,
   writeGeneratedSkillMd,
 } from '../agent/index.ts'
-import {
-  ensureCacheDir,
-  getCacheDir,
-  writeToCache,
-} from '../cache/index.ts'
+import { enhanceSkillWithLLM, writePromptFiles } from '../agent/skill-builder.ts'
+import { createReferenceCache, ensureCacheDir } from '../cache/index.ts'
 import { guard } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
+import { detectMonorepoPackages } from '../core/monorepo.ts'
 import { appendToJsonArray, patchPackageJson, readPackageJsonSafe } from '../core/package-json.ts'
+import { skillInternalDir } from '../core/paths.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import {
   fetchGitHubDiscussions,
@@ -31,125 +31,8 @@ import {
   parseGitHubUrl,
   readLocalPackageInfo,
 } from '../sources/index.ts'
-import {
-  detectChangelog,
-  ejectReferences,
-  enhanceSkillWithLLM,
-  forceClearCache,
-  linkAllReferences,
-  selectLlmConfig,
-  writePromptFiles,
-} from './sync-shared.ts'
-
-const QUOTE_PREFIX_RE = /^['"]/
-const QUOTE_SUFFIX_RE = /['"]$/
-
-// ── Monorepo detection ──
-
-export interface MonorepoPackage {
-  name: string
-  version: string
-  description?: string
-  repoUrl?: string
-  dir: string
-}
-
-export function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
-  const rootResult = readPackageJsonSafe(join(cwd, 'package.json'))
-  if (!rootResult)
-    return null
-
-  const pkg = rootResult.parsed as Record<string, any>
-
-  // Must be private (monorepo root) with workspaces or pnpm-workspace.yaml
-  if (!pkg.private)
-    return null
-
-  let patterns: string[] = []
-
-  if (Array.isArray(pkg.workspaces)) {
-    patterns = pkg.workspaces
-  }
-  else if (pkg.workspaces?.packages) {
-    patterns = pkg.workspaces.packages
-  }
-
-  // Check pnpm-workspace.yaml
-  if (patterns.length === 0) {
-    const pnpmWs = join(cwd, 'pnpm-workspace.yaml')
-    if (existsSync(pnpmWs)) {
-      const lines = readFileSync(pnpmWs, 'utf-8').split('\n')
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed.startsWith('-'))
-          continue
-        const value = trimmed.slice(1).trim().replace(QUOTE_PREFIX_RE, '').replace(QUOTE_SUFFIX_RE, '')
-        if (value)
-          patterns.push(value)
-      }
-    }
-  }
-
-  if (patterns.length === 0)
-    return null
-
-  const packages: MonorepoPackage[] = []
-
-  for (const pattern of patterns) {
-    // Expand simple glob: "packages/*" → scan packages/*/package.json
-    const base = pattern.replace(/\/?\*+$/, '')
-    const scanDir = resolve(cwd, base)
-    if (!existsSync(scanDir))
-      continue
-
-    const directResult = readPackageJsonSafe(join(scanDir, 'package.json'))
-    if (directResult) {
-      const directPkg = directResult.parsed as Record<string, any>
-      if (!directPkg.private && directPkg.name) {
-        const repoUrl = typeof directPkg.repository === 'string'
-          ? directPkg.repository
-          : directPkg.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
-
-        packages.push({
-          name: directPkg.name,
-          version: directPkg.version || '0.0.0',
-          description: directPkg.description,
-          repoUrl,
-          dir: scanDir,
-        })
-        continue
-      }
-    }
-
-    for (const entry of readdirSync(scanDir, { withFileTypes: true })) {
-      if (!entry.isDirectory())
-        continue
-      const childResult = readPackageJsonSafe(join(scanDir, entry.name, 'package.json'))
-      if (!childResult)
-        continue
-
-      const childPkg = childResult.parsed as Record<string, any>
-      if (childPkg.private)
-        continue
-      if (!childPkg.name)
-        continue
-
-      const repoUrl = typeof childPkg.repository === 'string'
-        ? childPkg.repository
-        : childPkg.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
-
-      packages.push({
-        name: childPkg.name,
-        version: childPkg.version || '0.0.0',
-        description: childPkg.description,
-        repoUrl,
-        dir: join(scanDir, entry.name),
-      })
-    }
-  }
-
-  return packages.length > 0 ? packages : null
-}
+import { selectLlmConfig } from './llm-prompts.ts'
+import { detectChangelog } from './sync-pipeline.ts'
 
 // ── Docs resolution ──
 
@@ -180,14 +63,13 @@ function walkMarkdownFiles(dir: string, base = ''): Array<{ path: string, conten
  * 5. README.md in package dir
  */
 function resolveLocalDocs(
+  cache: ReferenceCache,
   packageDir: string,
-  packageName: string,
-  version: string,
   monorepoRoot?: string,
 ): { docsType: 'docs' | 'llms.txt' | 'readme', docSource: string } {
   const cachedDocs: Array<{ path: string, content: string }> = []
 
-  const cacheChangelog = () => cacheLocalChangelog(packageDir, packageName, version, monorepoRoot)
+  const cacheChangelog = () => cacheLocalChangelog(cache, packageDir, monorepoRoot)
 
   // 1. Package-level docs/
   const docsDir = join(packageDir, 'docs')
@@ -196,7 +78,7 @@ function resolveLocalDocs(
     if (mdFiles.length > 0) {
       for (const f of mdFiles)
         cachedDocs.push({ path: `docs/${f.path}`, content: sanitizeMarkdown(f.content) })
-      writeToCache(packageName, version, cachedDocs)
+      cache.write(cachedDocs)
       cacheChangelog()
       return { docsType: 'docs', docSource: `local docs/ (${mdFiles.length} files)` }
     }
@@ -211,7 +93,7 @@ function resolveLocalDocs(
         if (mdFiles.length > 0) {
           for (const f of mdFiles)
             cachedDocs.push({ path: `docs/${f.path}`, content: sanitizeMarkdown(f.content) })
-          writeToCache(packageName, version, cachedDocs)
+          cache.write(cachedDocs)
           cacheChangelog()
           return { docsType: 'docs', docSource: `monorepo ${candidate}/ (${mdFiles.length} files)` }
         }
@@ -224,7 +106,7 @@ function resolveLocalDocs(
     const llmsPath = join(dir, 'llms.txt')
     if (existsSync(llmsPath)) {
       cachedDocs.push({ path: 'llms.txt', content: sanitizeMarkdown(readFileSync(llmsPath, 'utf-8')) })
-      writeToCache(packageName, version, cachedDocs)
+      cache.write(cachedDocs)
       cacheChangelog()
       const source = dir === packageDir ? 'local llms.txt' : 'monorepo llms.txt'
       return { docsType: 'llms.txt', docSource: source }
@@ -236,7 +118,7 @@ function resolveLocalDocs(
     const readmeFile = readdirSync(dir).find(f => /^readme\.md$/i.test(f))
     if (readmeFile) {
       cachedDocs.push({ path: 'docs/README.md', content: sanitizeMarkdown(readFileSync(join(dir, readmeFile), 'utf-8')) })
-      writeToCache(packageName, version, cachedDocs)
+      cache.write(cachedDocs)
       cacheChangelog()
       const source = dir === packageDir ? 'local README.md' : 'monorepo README.md'
       return { docsType: 'readme', docSource: source }
@@ -247,13 +129,13 @@ function resolveLocalDocs(
   return { docsType: 'readme', docSource: 'none' }
 }
 
-function cacheLocalChangelog(dir: string, packageName: string, version: string, monorepoRoot?: string): void {
+function cacheLocalChangelog(cache: ReferenceCache, dir: string, monorepoRoot?: string): void {
   const candidates = ['CHANGELOG.md', 'changelog.md']
   const changelogFile = candidates.find(f => existsSync(join(dir, f)))
     || (monorepoRoot ? candidates.find(f => existsSync(join(monorepoRoot, f))) : undefined)
   const changelogDir = changelogFile && existsSync(join(dir, changelogFile)) ? dir : monorepoRoot
   if (changelogFile && changelogDir) {
-    writeToCache(packageName, version, [{
+    cache.write([{
       path: `releases/${changelogFile}`,
       content: sanitizeMarkdown(readFileSync(join(changelogDir, changelogFile), 'utf-8')),
     }])
@@ -263,13 +145,12 @@ function cacheLocalChangelog(dir: string, packageName: string, version: string, 
 // ── Remote supplements ──
 
 async function fetchRemoteSupplements(opts: {
-  packageName: string
-  version: string
+  cache: ReferenceCache
   repoUrl?: string
   features: FeaturesConfig
   onProgress: (msg: string) => void
 }): Promise<{ hasIssues: boolean, hasDiscussions: boolean }> {
-  const { packageName, version, repoUrl, features, onProgress } = opts
+  const { cache, repoUrl, features, onProgress } = opts
 
   if (!repoUrl || !isGhAvailable())
     return { hasIssues: false, hasDiscussions: false }
@@ -278,20 +159,18 @@ async function fetchRemoteSupplements(opts: {
   if (!gh)
     return { hasIssues: false, hasDiscussions: false }
 
-  const cacheDir = getCacheDir(packageName, version)
-
   let hasIssues = false
-  const issuesDir = join(cacheDir, 'issues')
+  const issuesDir = join(cache.dir, 'issues')
   if (features.issues && !existsSync(issuesDir)) {
     onProgress('Fetching issues via GitHub API')
     const issues = await fetchGitHubIssues(gh.owner, gh.repo, 30).catch(() => [])
     if (issues.length > 0) {
       onProgress(`Caching ${issues.length} issues`)
-      writeToCache(packageName, version, issues.map(issue => ({
+      cache.write(issues.map(issue => ({
         path: `issues/issue-${issue.number}.md`,
         content: formatIssueAsMarkdown(issue),
       })))
-      writeToCache(packageName, version, [{
+      cache.write([{
         path: 'issues/_INDEX.md',
         content: generateIssueIndex(issues),
       }])
@@ -303,17 +182,17 @@ async function fetchRemoteSupplements(opts: {
   }
 
   let hasDiscussions = false
-  const discussionsDir = join(cacheDir, 'discussions')
+  const discussionsDir = join(cache.dir, 'discussions')
   if (features.discussions && !existsSync(discussionsDir)) {
     onProgress('Fetching discussions via GitHub API')
     const discussions = await fetchGitHubDiscussions(gh.owner, gh.repo, 20).catch(() => [])
     if (discussions.length > 0) {
       onProgress(`Caching ${discussions.length} discussions`)
-      writeToCache(packageName, version, discussions.map(d => ({
+      cache.write(discussions.map(d => ({
         path: `discussions/discussion-${d.number}.md`,
         content: formatDiscussionAsMarkdown(d),
       })))
-      writeToCache(packageName, version, [{
+      cache.write([{
         path: 'discussions/_INDEX.md',
         content: generateDiscussionIndex(discussions),
       }])
@@ -383,8 +262,10 @@ async function authorSinglePackage(opts: {
     rmSync(outDir, { recursive: true, force: true })
   mkdirSync(outDir, { recursive: true })
 
+  const cache = createReferenceCache(packageName, version)
+
   if (opts.force) {
-    forceClearCache(packageName, version)
+    cache.clearForce()
   }
 
   ensureCacheDir()
@@ -392,15 +273,14 @@ async function authorSinglePackage(opts: {
 
   // Resolve local docs
   spin.start('Resolving local docs')
-  const { docsType, docSource } = resolveLocalDocs(packageDir, packageName, version, opts.monorepoRoot)
+  const { docsType, docSource } = resolveLocalDocs(cache, packageDir, opts.monorepoRoot)
   spin.stop(`Resolved docs: ${docSource}`)
 
   // Fetch remote supplements (issues/discussions)
   const supSpin = timedSpinner()
   supSpin.start('Checking remote supplements')
   const { hasIssues, hasDiscussions } = await fetchRemoteSupplements({
-    packageName,
-    version,
+    cache,
     repoUrl: opts.repoUrl,
     features,
     onProgress: msg => supSpin.message(msg),
@@ -413,12 +293,11 @@ async function authorSinglePackage(opts: {
   supSpin.stop(supParts.length > 0 ? `Fetched ${supParts.join(', ')}` : 'No remote supplements')
 
   // Create temporary .skilld/ symlinks (LLM needs these to read docs)
-  linkAllReferences(outDir, packageName, packageDir, version, docsType, undefined, features)
+  cache.linkInto(outDir, packageDir, docsType, { features })
 
   // Detect changelog + releases
-  const cacheDir = getCacheDir(packageName, version)
-  const hasChangelog = detectChangelog(packageDir, cacheDir)
-  const hasReleases = existsSync(join(cacheDir, 'releases'))
+  const hasChangelog = detectChangelog(packageDir, cache.dir)
+  const hasReleases = existsSync(join(cache.dir, 'releases'))
 
   // Generate base SKILL.md
   writeGeneratedSkillMd(outDir, {
@@ -441,53 +320,46 @@ async function authorSinglePackage(opts: {
   p.log.success(`Created base skill: ${relative(packageDir, outDir)}`)
 
   // LLM enhancement (config resolved by caller)
-  const skilldDir = join(outDir, '.skilld')
+  const skilldDir = skillInternalDir(outDir)
   try {
     const llmConfig = opts.llmConfig
-    if (llmConfig?.promptOnly) {
-      writePromptFiles({
-        packageName,
-        skillDir: outDir,
-        version,
+    const baseCtx = {
+      packageName,
+      version,
+      skillDir: outDir,
+      dirName: sanitizedName,
+      references: {
+        docsType,
+        hasShippedDocs: false,
+        pkgFiles: [],
         hasIssues,
         hasDiscussions,
         hasReleases,
         hasChangelog,
-        docsType,
-        hasShippedDocs: false,
-        pkgFiles: [],
+      },
+      resolved: { repoUrl: opts.repoUrl },
+      relatedSkills: [],
+      features,
+    }
+    if (llmConfig?.promptOnly) {
+      writePromptFiles(baseCtx, {
         sections: llmConfig.sections,
         customPrompt: llmConfig.customPrompt,
-        features,
       })
     }
     else if (llmConfig) {
       p.log.step(getModelLabel(llmConfig.model))
-      await enhanceSkillWithLLM({
-        packageName,
-        version,
-        skillDir: outDir,
-        dirName: sanitizedName,
+      await enhanceSkillWithLLM(baseCtx, {
         model: llmConfig.model,
-        resolved: { repoUrl: opts.repoUrl },
-        relatedSkills: [],
-        hasIssues,
-        hasDiscussions,
-        hasReleases,
-        hasChangelog,
-        docsType,
-        hasShippedDocs: false,
-        pkgFiles: [],
         force: opts.force,
         debug: opts.debug,
         sections: llmConfig.sections,
         customPrompt: llmConfig.customPrompt,
-        features,
         eject: true,
       })
     }
 
-    ejectReferences(outDir, packageName, packageDir, version, docsType, features)
+    cache.eject(outDir, packageDir, docsType, { features })
   }
   finally {
     // Always clean up .skilld/ symlinks, even if LLM enhancement fails

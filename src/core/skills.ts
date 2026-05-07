@@ -7,7 +7,8 @@ import { agents } from '../agent/index.ts'
 import { getShippedSkills } from '../cache/storage.ts'
 import { readLocalDependencies } from '../sources/index.ts'
 import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile.ts'
-import { getSharedSkillsDir, semverGt, semverValid } from './shared.ts'
+import { getSharedSkillsDir, LOCK_FILENAME, skillInternalFile } from './paths.ts'
+import { semverGt, semverValid } from './semver.ts'
 
 export interface SkillEntry {
   name: string
@@ -56,7 +57,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
   if (sharedDir && (scope === 'local' || scope === 'all')) {
     yieldedLocal = true
     const lock = readLock(sharedDir)
-    const entries = readdirSync(sharedDir).filter(f => !f.startsWith('.') && f !== 'skilld-lock.yaml')
+    const entries = readdirSync(sharedDir).filter(f => !f.startsWith('.') && f !== LOCK_FILENAME)
     // Use first detected agent as the representative
     const firstAgent = agentTypes[0] ?? (Object.keys(agents) as AgentType[])[0]!
     for (const name of entries) {
@@ -65,7 +66,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
         yield { name, dir, agent: firstAgent, info: lock.skills[name], scope: 'local' }
       }
       else {
-        const info = parseSkillFrontmatter(join(dir, '.skilld', '_SKILL.md'))
+        const info = parseSkillFrontmatter(skillInternalFile(dir))
         if (info?.generator === 'skilld') {
           yield { name, dir, agent: firstAgent, info, scope: 'local' }
         }
@@ -81,7 +82,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
       const localDir = join(cwd, agent.skillsDir)
       if (existsSync(localDir)) {
         const lock = readLock(localDir)
-        const entries = readdirSync(localDir).filter(f => !f.startsWith('.') && f !== 'skilld-lock.yaml')
+        const entries = readdirSync(localDir).filter(f => !f.startsWith('.') && f !== LOCK_FILENAME)
         for (const name of entries) {
           const dir = join(localDir, name)
           // Only track skills in lockfile OR with generator: "skilld"
@@ -89,7 +90,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
             yield { name, dir, agent: agentType, info: lock.skills[name], scope: 'local' }
           }
           else {
-            const info = parseSkillFrontmatter(join(dir, '.skilld', '_SKILL.md'))
+            const info = parseSkillFrontmatter(skillInternalFile(dir))
             if (info?.generator === 'skilld') {
               yield { name, dir, agent: agentType, info, scope: 'local' }
             }
@@ -103,7 +104,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
       const globalDir = agent.globalSkillsDir
       if (existsSync(globalDir)) {
         const lock = readLock(globalDir)
-        const entries = readdirSync(globalDir).filter(f => !f.startsWith('.') && f !== 'skilld-lock.yaml')
+        const entries = readdirSync(globalDir).filter(f => !f.startsWith('.') && f !== LOCK_FILENAME)
         for (const name of entries) {
           const dir = join(globalDir, name)
           // Only track skills in lockfile OR with generator: "skilld"
@@ -111,7 +112,7 @@ export function* iterateSkills(opts: IterateSkillsOptions = {}): Generator<Skill
             yield { name, dir, agent: agentType, info: lock.skills[name], scope: 'global' }
           }
           else {
-            const info = parseSkillFrontmatter(join(dir, '.skilld', '_SKILL.md'))
+            const info = parseSkillFrontmatter(skillInternalFile(dir))
             if (info?.generator === 'skilld') {
               yield { name, dir, agent: agentType, info, scope: 'global' }
             }

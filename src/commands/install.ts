@@ -12,7 +12,7 @@
 import type { AgentType, CustomPrompt, SkillSection } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import type { SkillInfo } from '../core/lockfile.ts'
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
@@ -21,30 +21,27 @@ import { agents, createToolProgress, getModelLabel, linkSkillToAgents, optimizeD
 import { writeGeneratedSkillMd, writeSkillMd } from '../agent/prompts/skill.ts'
 import {
   hasShippedDocs as checkShippedDocs,
+  classifyCachedDoc,
+  createReferenceCache,
   ensureCacheDir,
   getCacheDir,
   getPackageDbPath,
   getPkgKeyFiles,
-  getRepoCacheDir,
   getShippedSkills,
   inferDocsTypeFromCache,
-  isCached,
-  isReadmeOnlyCache,
-  linkPkgNamed,
   linkShippedSkill,
   listReferenceFiles,
-  readCachedDocs,
   resolvePkgDir,
-  writeToCache,
 } from '../cache/index.ts'
 import { promptForAgent, resolveAgent, sharedArgs } from '../cli-helpers.ts'
 import { defaultFeatures, readConfig } from '../core/config.ts'
 import { timedSpinner } from '../core/formatting.ts'
 import { mergeLocks, parsePackageNames, parsePackages, readLock, syncLockfilesToDirs, writeLock } from '../core/lockfile.ts'
 import { readPackageJsonSafe } from '../core/package-json.ts'
+import { getSharedSkillsDir, skillInternalDir } from '../core/paths.ts'
 import { toStoragePackageName } from '../core/prefix.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
-import { getSharedSkillsDir } from '../core/shared.ts'
+import { indexResources } from '../retriv/index-pipeline.ts'
 import { createIndex, SearchDepsUnavailableError } from '../retriv/index.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
 import { fetchGitSkills } from '../sources/git-skills.ts'
@@ -61,7 +58,6 @@ import {
   resolveEntryFiles,
   resolvePackageDocs,
 } from '../sources/index.ts'
-import { classifyCachedDoc, indexResources } from './sync-shared.ts'
 import { selectLlmConfig, writePromptFiles } from './sync.ts'
 
 export interface InstallOptions {
@@ -114,7 +110,7 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     }
 
     const skillDir = join(skillsDir, name)
-    const referencesPath = join(skillDir, '.skilld')
+    const referencesPath = skillInternalDir(skillDir)
     const skillMdPath = join(skillDir, 'SKILL.md')
 
     // Check skill dir, SKILL.md, and all internal .skilld/ references
@@ -187,68 +183,24 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     }
 
     const skillDir = join(skillsDir, name)
-    const referencesPath = join(skillDir, '.skilld')
-    const globalCachePath = getCacheDir(pkgName, version)
+    const cache = createReferenceCache(pkgName, version)
     const spin = timedSpinner()
 
     // Check if already in global cache - just create symlinks
-    if (isCached(pkgName, version)) {
+    if (cache.has()) {
       spin.start(`Linking ${name}`)
       mkdirSync(skillDir, { recursive: true })
-      mkdirSync(referencesPath, { recursive: true })
-      linkPkgSymlink(referencesPath, pkgName, cwd, version)
-      // Restore named symlinks for all tracked packages
-      for (const pkg of parsePackages(info.packages))
-        linkPkgNamed(skillDir, pkg.name, cwd, pkg.version)
-      // Only link external docs if package doesn't ship its own and has more than just README
-      if (!pkgHasShippedDocs(pkgName, cwd, version) && !isReadmeOnlyCache(globalCachePath)) {
-        const docsLink = join(referencesPath, 'docs')
-        const cachedDocs = join(globalCachePath, 'docs')
-        if (existsSync(docsLink))
-          unlinkSync(docsLink)
-        if (existsSync(cachedDocs))
-          symlinkSync(cachedDocs, docsLink, 'junction')
-      }
-      // Link issues, discussions, and releases (try repo cache first, fall back to package cache)
       const repoGh = info.repo ? parseGitHubUrl(`https://github.com/${info.repo}`) : null
-      const repoCachePath = repoGh ? getRepoCacheDir(repoGh.owner, repoGh.repo) : null
-      if (features.issues) {
-        const issuesLink = join(referencesPath, 'issues')
-        const repoIssues = repoCachePath ? join(repoCachePath, 'issues') : null
-        const cachedIssues = (repoIssues && existsSync(repoIssues)) ? repoIssues : join(globalCachePath, 'issues')
-        if (existsSync(issuesLink))
-          unlinkSync(issuesLink)
-        if (existsSync(cachedIssues))
-          symlinkSync(cachedIssues, issuesLink, 'junction')
-      }
-      if (features.discussions) {
-        const discussionsLink = join(referencesPath, 'discussions')
-        const repoDiscussions = repoCachePath ? join(repoCachePath, 'discussions') : null
-        const cachedDiscussions = (repoDiscussions && existsSync(repoDiscussions)) ? repoDiscussions : join(globalCachePath, 'discussions')
-        if (existsSync(discussionsLink))
-          unlinkSync(discussionsLink)
-        if (existsSync(cachedDiscussions))
-          symlinkSync(cachedDiscussions, discussionsLink, 'junction')
-      }
-      if (features.releases) {
-        const releasesLink = join(referencesPath, 'releases')
-        const repoReleases = repoCachePath ? join(repoCachePath, 'releases') : null
-        const cachedReleases = (repoReleases && existsSync(repoReleases)) ? repoReleases : join(globalCachePath, 'releases')
-        if (existsSync(releasesLink))
-          unlinkSync(releasesLink)
-        if (existsSync(cachedReleases))
-          symlinkSync(cachedReleases, releasesLink, 'junction')
-      }
-      const sectionsLink = join(referencesPath, 'sections')
-      const cachedSections = join(globalCachePath, 'sections')
-      if (existsSync(sectionsLink))
-        unlinkSync(sectionsLink)
-      if (existsSync(cachedSections))
-        symlinkSync(cachedSections, sectionsLink, 'junction')
+      const docsType = inferDocsTypeFromCache(cache.dir, info.source)
+      cache.linkInto(skillDir, cwd, docsType, {
+        extraPackages: parsePackages(info.packages),
+        features,
+        repoInfo: repoGh ? { owner: repoGh.owner, repo: repoGh.repo } : undefined,
+      })
       // Create search index from cached docs if missing
       if (features.search && !existsSync(getPackageDbPath(pkgName, version))) {
         spin.message(`Indexing ${name}`)
-        const cached = readCachedDocs(pkgName, version)
+        const cached = cache.readDocs()
         const docsToIndex = cached.map(d => ({
           id: d.path,
           content: d.content,
@@ -362,22 +314,15 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
     }
 
     if (cachedDocs.length > 0) {
-      writeToCache(pkgName, version, cachedDocs)
+      cache.write(cachedDocs)
 
-      mkdirSync(referencesPath, { recursive: true })
-      linkPkgSymlink(referencesPath, pkgName, cwd, version)
-      // Restore named symlinks for all tracked packages
-      for (const pkg of parsePackages(info.packages))
-        linkPkgNamed(skillDir, pkg.name, cwd, pkg.version)
-      // Link fetched docs unless it's just a README (already in pkg/)
-      if (!isReadmeOnlyCache(globalCachePath)) {
-        const docsLink = join(referencesPath, 'docs')
-        const cachedDocsDir = join(globalCachePath, 'docs')
-        if (existsSync(docsLink))
-          unlinkSync(docsLink)
-        if (existsSync(cachedDocsDir))
-          symlinkSync(cachedDocsDir, docsLink, 'junction')
-      }
+      const repoGh = info.repo ? parseGitHubUrl(`https://github.com/${info.repo}`) : null
+      const docsType = inferDocsTypeFromCache(cache.dir, info.source)
+      cache.linkInto(skillDir, cwd, docsType, {
+        extraPackages: parsePackages(info.packages),
+        features,
+        repoInfo: repoGh ? { owner: repoGh.owner, repo: repoGh.repo } : undefined,
+      })
 
       if (features.search) {
         try {
@@ -423,18 +368,23 @@ export async function installCommand(opts: InstallOptions): Promise<void> {
         const globalCachePath = getCacheDir(pkgName, version)
         writePromptFiles({
           packageName: pkgName,
-          skillDir,
           version,
-          hasIssues: existsSync(join(globalCachePath, 'issues')),
-          hasDiscussions: existsSync(join(globalCachePath, 'discussions')),
-          hasReleases: existsSync(join(globalCachePath, 'releases')),
-          hasChangelog: false,
-          docsType: 'docs',
-          hasShippedDocs: false,
-          pkgFiles: getPkgKeyFiles(pkgName, process.cwd(), version),
+          skillDir,
+          references: {
+            docsType: 'docs',
+            hasShippedDocs: false,
+            pkgFiles: getPkgKeyFiles(pkgName, process.cwd(), version),
+            hasIssues: existsSync(join(globalCachePath, 'issues')),
+            hasDiscussions: existsSync(join(globalCachePath, 'discussions')),
+            hasReleases: existsSync(join(globalCachePath, 'releases')),
+            hasChangelog: false,
+          },
+          resolved: {},
+          relatedSkills: [],
+          features,
+        }, {
           sections: llmConfig.sections,
           customPrompt: llmConfig.customPrompt,
-          features,
         })
       }
     }
@@ -502,33 +452,6 @@ function unsanitizeName(sanitized: string, source?: string): string {
     return `@vueuse/${sanitized.slice(7)}`
 
   return sanitized
-}
-
-/** Create pkg symlink inside references dir (links to entire package or cached dist) */
-function linkPkgSymlink(referencesDir: string, name: string, cwd: string, version?: string): void {
-  const pkgPath = resolvePkgDir(name, cwd, version)
-  if (!pkgPath)
-    return
-
-  const pkgLink = join(referencesDir, 'pkg')
-  if (existsSync(pkgLink))
-    unlinkSync(pkgLink)
-  symlinkSync(pkgPath, pkgLink, 'junction')
-}
-
-/** Check if package ships its own docs folder */
-function pkgHasShippedDocs(name: string, cwd: string, version?: string): boolean {
-  const pkgPath = resolvePkgDir(name, cwd, version)
-  if (!pkgPath)
-    return false
-
-  const docsCandidates = ['docs', 'documentation', 'doc']
-  for (const candidate of docsCandidates) {
-    const docsPath = join(pkgPath, candidate)
-    if (existsSync(docsPath))
-      return true
-  }
-  return false
 }
 
 /** Run LLM enhancement on a regenerated SKILL.md */

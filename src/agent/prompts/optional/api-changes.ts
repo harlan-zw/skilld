@@ -1,5 +1,5 @@
 import type { PromptSection, ReferenceWeight, SectionContext, SectionValidationWarning } from './types.ts'
-import { resolveSkilldCommand } from '../../../core/shared.ts'
+import { resolveSkilldCommand } from '../../../core/skilld-command.ts'
 import { maxItems, maxLines, releaseBoost } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 

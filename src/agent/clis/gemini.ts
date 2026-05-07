@@ -1,20 +1,14 @@
 /**
- * Gemini CLI — turn-level streaming via -o stream-json
- * Write scoping: relies on cwd being set to .skilld/ (no native --writeable-dirs)
+ * Gemini CLI — turn-level streaming via -o stream-json.
+ * Write scoping: relies on cwd being set to .skilld/ (no native --writeable-dirs).
  */
 
-import type { CliModelEntry, ParsedEvent } from './types.ts'
-import { resolveSkilldCommand } from '../../core/shared.ts'
+import type { CliAdapter, CliEvent } from './types.ts'
+import { resolveSkilldCommand } from '../../core/skilld-command.ts'
+import { buildModels } from './model-registry.ts'
+import { extractToolHint } from './types.ts'
 
-export const cli = 'gemini' as const
-export const agentId = 'gemini-cli' as const
-
-export const models: Record<string, CliModelEntry> = {
-  'gemini-3.1-pro': { model: 'gemini-3.1-pro', name: 'Gemini 3.1 Pro', hint: 'Most capable' },
-  'gemini-3-flash': { model: 'gemini-3-flash', name: 'Gemini 3 Flash', hint: 'Balanced', recommended: true },
-}
-
-export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]): string[] {
+function buildArgs(model: string, skillDir: string, symlinkDirs: string[]): string[] {
   return [
     '-o',
     'stream-json',
@@ -28,38 +22,43 @@ export function buildArgs(model: string, skillDir: string, symlinkDirs: string[]
   ]
 }
 
-/** Parse gemini stream-json events — turn level (full message per event) */
-export function parseLine(line: string): ParsedEvent {
+function parseEvent(line: string): CliEvent {
   try {
     const obj = JSON.parse(line)
 
-    // Text message (delta or full)
     if (obj.type === 'message' && obj.role === 'assistant' && obj.content) {
-      return obj.delta ? { textDelta: obj.content } : { fullText: obj.content }
+      return obj.delta ? { kind: 'text', delta: obj.content } : { kind: 'text', full: obj.content }
     }
 
-    // Tool invocation
     if (obj.type === 'tool_use' || obj.type === 'tool_call') {
-      const name = obj.tool_name || obj.name || obj.tool || 'tool'
+      const tool = obj.tool_name || obj.name || obj.tool || 'tool'
       const params = obj.parameters || obj.args || obj.input || {}
-      const hint = params.file_path || params.path || params.dir_path || params.pattern || params.query || params.command || ''
-      // Capture write_file content as fallback (matches Claude's Write tool behavior)
-      if (name === 'write_file' && params.content) {
-        return { toolName: name, toolHint: hint || undefined, writeContent: params.content }
-      }
-      return { toolName: name, toolHint: hint || undefined }
+      const hint = extractToolHint(params)
+      const writeContent = tool === 'write_file' && typeof params.content === 'string' ? params.content : undefined
+      return { kind: 'tool-call', tool, hint, writeContent }
     }
 
-    // Final result
     if (obj.type === 'result') {
       const s = obj.stats
       return {
-        done: true,
+        kind: 'done',
         usage: s ? { input: s.input_tokens ?? s.input ?? 0, output: s.output_tokens ?? s.output ?? 0 } : undefined,
         turns: s?.tool_calls,
       }
     }
   }
   catch {}
-  return {}
+  return { kind: 'noop' }
+}
+
+export const adapter: CliAdapter = {
+  cli: 'gemini',
+  agentId: 'gemini-cli',
+  providerName: 'Google',
+  models: buildModels([
+    { provider: 'google', prefix: 'gemini-', contains: 'pro', exclude: ['flash', 'live', 'gemma'], hint: 'Most capable' },
+    { provider: 'google', prefix: 'gemini-', contains: 'flash', exclude: ['lite', 'live', 'preview'], hint: 'Balanced', recommended: true },
+  ]),
+  buildArgs,
+  parseEvent,
 }

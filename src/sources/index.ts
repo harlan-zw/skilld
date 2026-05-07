@@ -1,31 +1,38 @@
 /**
- * Doc resolver - resolves documentation for NPM packages
+ * Doc resolution: turning a Package into Reference content.
+ *
+ * Two stages, per CONTEXT.md:
+ *
+ *   1. URL resolution — npm/crates/registry → ResolvedPackage with discovered URLs.
+ *      Cascade-stateful, lives in `npm.ts` / `crates.ts` / `resolve-package.ts`.
+ *
+ *   2. Content resolution — ResolvedPackage → in-memory docs.
+ *      Pure (no fs), lives in `content-resolver.ts`. Persistence is the caller's job.
+ *
+ * Everything below `// ─ Content fetching` is stage-2 input fetchers and helpers.
  */
 
-export { fetchBlogReleases } from './blog-releases.ts'
+// ─ Stage 1: URL resolution ───────────────────────────────────────────────
 
-// Crates (crates.io)
+export { fetchBlogReleases } from './blog-releases.ts'
 export { resolveCrateDocsWithAttempts } from './crates.ts'
 
-// Crawl
 export { fetchCrawledDocs, toCrawlPattern } from './crawl.ts'
 
-// Discussions
 export type { GitHubDiscussion } from './discussions.ts'
-
 export {
   fetchGitHubDiscussions,
   formatDiscussionAsMarkdown,
   generateDiscussionIndex,
 } from './discussions.ts'
-// Docs
+
 export { generateDocsIndex } from './docs.ts'
 
-// Entries
 export type { EntryFile } from './entries.ts'
 export { resolveEntryFiles } from './entries.ts'
 
-// Git skills
+// ─ Stage 2: Content fetching (inputs to content-resolver) ────────────────
+
 export type { GitSkillSource, RemoteSkill } from './git-skills.ts'
 export {
   fetchGitSkills,
@@ -33,7 +40,6 @@ export {
   parseSkillFrontmatterName,
 } from './git-skills.ts'
 
-// GitHub
 export type { GitDocsResult } from './github.ts'
 
 export {
@@ -47,7 +53,7 @@ export {
   resolveGitHubRepo,
   validateGitDocsWithLlms,
 } from './github.ts'
-// Issues
+
 export type { GitHubIssue } from './issues.ts'
 
 export {
@@ -56,8 +62,6 @@ export {
   generateIssueIndex,
   isGhAvailable,
 } from './issues.ts'
-
-// llms.txt
 export {
   downloadLlmsDocs,
   extractSections,
@@ -66,9 +70,12 @@ export {
   normalizeLlmsLinks,
   parseMarkdownLinks,
 } from './llms.ts'
-// NPM
-export type { LocalPackageInfo, ResolveOptions, ResolveStep } from './npm.ts'
 
+export { resolveLocalDep } from './local-dep.ts'
+
+// ─ GitHub timeline (issues, discussions, releases) ───────────────────────
+
+export type { LocalPackageInfo, ResolveOptions, ResolveStep } from './npm.ts'
 export {
   fetchLatestVersion,
   fetchNpmPackage,
@@ -84,17 +91,29 @@ export {
   resolvePackageDocsWithAttempts,
   searchNpmPackages,
 } from './npm.ts'
-// Package registry
+
 export type { BlogPreset, BlogRelease, DocOverride } from './package-registry.ts'
+export {
+  getBlogPreset,
+  getCrawlUrl,
+  getDocOverride,
+  getFilePatterns,
+  getPrereleaseChangelogRef,
+  getRelatedPackages,
+  getRepoEntry,
+  getRepoKeyForPackage,
+} from './package-registry.ts'
 
-export { getBlogPreset, getCrawlUrl, getDocOverride, getFilePatterns, getPrereleaseChangelogRef, getRelatedPackages, getRepoEntry, getRepoKeyForPackage } from './package-registry.ts'
-
-// Releases
 export type { GitHubRelease, ReleaseIndexOptions, SemVer } from './releases.ts'
-
 export { compareSemver, fetchReleaseNotes, generateReleaseIndex, isPrerelease, parseSemver } from './releases.ts'
 
-// Types
+// ─ Pre-authored skills from git repos (separate flow) ────────────────────
+
+export type { PackageResolution, ResolvePackageOptions } from './resolve-package.ts'
+export { resolvePackageOrCrate } from './resolve-package.ts'
+
+// ─ Shared types and utilities ────────────────────────────────────────────
+
 export type {
   FetchedDoc,
   LlmsContent,
@@ -105,7 +124,7 @@ export type {
   ResolvedPackage,
   ResolveResult,
 } from './types.ts'
-// Utils
+
 export {
   $fetch,
   extractBranchHint,

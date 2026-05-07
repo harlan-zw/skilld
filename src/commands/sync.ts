@@ -2,82 +2,56 @@ import type { AgentType, OptimizeModel, SkillSection } from '../agent/index.ts'
 import type { ProjectState } from '../core/skills.ts'
 import type { GitSkillSource } from '../sources/git-skills.ts'
 import type { ResolveAttempt } from '../sources/index.ts'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import type { RunBaseConfig } from './sync-runner.ts'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
 import {
-  agents,
   buildAllSectionPrompts,
   computeSkillDirName,
   detectImportedPackages,
-  getAvailableModels,
-  getModelLabel,
-  linkSkillToAgents,
   portabilizePrompt,
-  sanitizeName,
-  SECTION_MERGE_ORDER,
   SECTION_OUTPUT_FILES,
-  wrapSection,
   writeGeneratedSkillMd,
 } from '../agent/index.ts'
+import { ensureGitignore, ensureProjectFiles, installSkill, resolveBaseDir } from '../agent/skill-installer.ts'
 import {
-  ensureCacheDir,
-  getCacheDir,
-  getPkgKeyFiles,
-  getVersionKey,
-  hasShippedDocs,
-  isCached,
-  linkPkgNamed,
+  createReferenceCache,
   listReferenceFiles,
-  readCachedSection,
-  resolvePkgDir,
 } from '../cache/index.ts'
 import { getInstalledGenerators, introLine, isInteractive, promptForAgent, resolveAgent, sharedArgs, suggestPrepareHook } from '../cli-helpers.ts'
-import { defaultFeatures, hasCompletedWizard, readConfig, registerProject } from '../core/config.ts'
+import { getActiveFeatures, hasCompletedWizard, readConfig } from '../core/config.ts'
 import { timedSpinner, todayIsoDate } from '../core/formatting.ts'
-import { parsePackageNames, parsePackages, readLock, removeLockEntry, writeLock } from '../core/lockfile.ts'
-import { parseFrontmatter } from '../core/markdown.ts'
-import { parseSkillInput, resolveSkillName, toStoragePackageName } from '../core/prefix.ts'
-import { getSharedSkillsDir, SHARED_SKILLS_DIR } from '../core/shared.ts'
+import { writeLock } from '../core/lockfile.ts'
+import { isCrateSpec, parseSkillInput, resolveSkillName } from '../core/prefix.ts'
 import { getProjectState } from '../core/skills.ts'
 import { shutdownWorker } from '../retriv/pool.ts'
 import {
   fetchPkgDist,
-  isPrerelease,
   parseGitHubRepoSlug,
-  parsePackageSpec,
-  readLocalDependencies,
-  resolveCrateDocsWithAttempts,
-  resolvePackageDocsWithAttempts,
+  resolvePackageOrCrate,
   searchNpmPackages,
 } from '../sources/index.ts'
+import { DEFAULT_SECTIONS, resolveAutoModel, selectLlmConfig } from './llm-prompts.ts'
 import { syncGitSkills } from './sync-git.ts'
+import { handleMerge } from './sync-merge.ts'
 import { syncPackagesParallel } from './sync-parallel.ts'
 import {
-  DEFAULT_SECTIONS,
-  detectChangelog,
-  ejectReferences,
-  enhanceSkillWithLLM,
-  ensureAgentInstructions,
-  ensureGitignore,
   fetchAndCacheResources,
-  findRelatedSkills,
-  forceClearCache,
-  handleShippedSkills,
-  indexResources,
-  linkAllReferences,
-  RESOLVE_STEP_LABELS,
-  resolveBaseDir,
-  resolveLocalDep,
-  selectLlmConfig,
-  writePromptFiles,
-} from './sync-shared.ts'
+  prepareSkillReferences,
+} from './sync-pipeline.ts'
+import { npmResolver } from './sync-resolvers.ts'
+import { runBaseSync, runEnhancePhase } from './sync-runner.ts'
+import { createClackUi } from './sync-ui-clack.ts'
 import { runWizard } from './wizard.ts'
 
 // Re-export for external consumers
-export { DEFAULT_SECTIONS, enhanceSkillWithLLM, ensureAgentInstructions, ensureGitignore, selectLlmConfig, selectModel, selectSkillSections, SKILLD_MARKER_END, SKILLD_MARKER_START, writePromptFiles } from './sync-shared.ts'
-export type { EnhanceOptions, LlmConfig, UpdateContext } from './sync-shared.ts'
+export { enhanceSkillWithLLM, writePromptFiles } from '../agent/skill-builder.ts'
+export type { EnhanceRunOptions, PromptRunOptions, SkillContext } from '../agent/skill-builder.ts'
+export { ensureAgentInstructions, ensureGitignore, SKILLD_MARKER_END, SKILLD_MARKER_START } from '../agent/skill-installer.ts'
+export { isCrateSpec } from '../core/prefix.ts'
+export { DEFAULT_SECTIONS, selectLlmConfig, selectModel, selectSkillSections } from './llm-prompts.ts'
 
 const RESOLVE_SOURCE_LABELS: Record<string, string> = {
   'npm': 'npm registry',
@@ -104,13 +78,7 @@ function showResolveAttempts(attempts: ResolveAttempt[]): void {
   }
 }
 
-export function isCrateSpec(spec: string): boolean {
-  return spec.startsWith('crate:')
-}
-
-function toCrateIdentity(crateName: string): string {
-  return `crate:${crateName}`
-}
+export type { LlmConfig, UpdateContext } from './llm-prompts.ts'
 
 export interface SyncOptions {
   packages?: string[]
@@ -282,488 +250,84 @@ interface SyncConfig {
   noSearch?: boolean
 }
 
-async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promise<void> {
-  const isCrate = isCrateSpec(packageSpec)
-  const normalizedSpec = isCrate ? packageSpec.slice('crate:'.length).trim() : packageSpec
-  if (isCrate && !normalizedSpec) {
-    p.log.error('Invalid crate spec. Use format: crate:<name>')
+/**
+ * Sequential sync via the unified runner. Handles npm/crate, add/update mode,
+ * eject mode, merge, shipped skills, and "did-you-mean" suggestions.
+ */
+async function runSimpleSync(packageSpec: string, config: SyncConfig): Promise<void> {
+  const cwd = process.cwd()
+  const ui = createClackUi({ cwd })
+  const isEject = !!config.eject
+
+  const baseConfig: RunBaseConfig = {
+    agent: config.agent,
+    global: config.global,
+    mode: config.mode,
+    force: config.force,
+    noSearch: config.noSearch,
+    name: config.name,
+    from: config.from,
+    eject: config.eject,
+  }
+
+  const result = await runBaseSync(packageSpec, baseConfig, ui, npmResolver, cwd, DEFAULT_SECTIONS)
+
+  if (result.kind === 'shipped') {
+    p.outro(`Synced ${packageSpec}`)
     return
   }
 
-  // Parse dist-tag/version from spec: "vue@beta" → name="vue", tag="beta"
-  const { name: parsedName, tag: requestedTag } = parsePackageSpec(normalizedSpec)
-  const packageName = isCrate ? parsedName.toLowerCase() : parsedName
-  const identityPackageName = isCrate ? toCrateIdentity(packageName) : packageName
-  const storagePackageName = toStoragePackageName(identityPackageName)
-
-  const spin = timedSpinner()
-  spin.start(`Resolving ${packageSpec}`)
-
-  const cwd = process.cwd()
-  const localDeps = isCrate ? [] : await readLocalDependencies(cwd).catch(() => [])
-  const localVersion = isCrate ? undefined : localDeps.find(d => d.name === packageName)?.version
-
-  const resolveResult = isCrate
-    ? await resolveCrateDocsWithAttempts(packageName, {
-        version: requestedTag,
-        onProgress: step => spin.message(`${identityPackageName}: ${step}`),
-      })
-    : await resolvePackageDocsWithAttempts(requestedTag ? normalizedSpec : packageName, {
-        version: localVersion,
-        cwd,
-        onProgress: step => spin.message(`${packageName}: ${RESOLVE_STEP_LABELS[step]}`),
-      })
-  let resolved = resolveResult.package
-
-  // If npm fails, check if it's a link: dep and try local resolution (skip for crates)
-  if (!resolved && !isCrate) {
-    spin.message(`Resolving local package: ${packageName}`)
-    resolved = await resolveLocalDep(packageName, cwd)
-  }
-
-  if (!resolved) {
-    if (!isCrate) {
-      // Even without docs, the package may ship its own skills (skills-npm convention)
-      const shippedVersion = localVersion || resolveResult.registryVersion || 'latest'
-      const earlyShipped = handleShippedSkills(packageName, shippedVersion, cwd, config.agent, config.global)
-      if (earlyShipped) {
-        const shared = !config.global && getSharedSkillsDir(cwd)
-        for (const shipped of earlyShipped.shipped) {
-          if (shared)
-            linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
-          p.log.success(`Using published SKILL.md: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
-        }
-        spin.stop(`Using published SKILL.md(s) from ${packageName}`)
-        return
-      }
-
-      // Search npm for alternatives before giving up
-      spin.message(`Searching npm for "${packageName}"...`)
-      const suggestions = await searchNpmPackages(packageName)
-
+  if (result.kind === 'unresolved') {
+    const { unresolved } = result
+    // Suggestion picker: only meaningful for npm specs (not crates).
+    if (!isCrateSpec(packageSpec)) {
+      const suggestions = await searchNpmPackages(unresolved.identityName)
       if (suggestions.length > 0) {
-        spin.stop(`Package "${packageName}" not found on npm`)
-        showResolveAttempts(resolveResult.attempts)
-
+        showResolveAttempts(unresolved.attempts)
         const selected = await p.select({
           message: 'Did you mean one of these?',
           options: [
-            ...suggestions.map(s => ({
-              label: s.name,
-              value: s.name,
-              hint: s.description,
-            })),
+            ...suggestions.map(s => ({ label: s.name, value: s.name, hint: s.description })),
             { label: 'None of these', value: '_none_' as const },
           ],
         })
-
         if (!p.isCancel(selected) && selected !== '_none_')
           return syncSinglePackage(selected as string, config)
-
         return
       }
     }
-
-    spin.stop(`Could not find docs for: ${identityPackageName}`)
-    showResolveAttempts(resolveResult.attempts)
+    showResolveAttempts(unresolved.attempts)
     return
   }
 
-  const version = isCrate
-    ? (resolved.version || requestedTag || 'latest')
-    : (localVersion || resolved.version || 'latest')
-  const versionKey = getVersionKey(version)
-
-  // Force: nuke cached references + search index so all existsSync guards re-fetch
-  if (config.force) {
-    forceClearCache(storagePackageName, version)
-  }
-
-  const useCache = isCached(storagePackageName, version)
-
-  // Download npm dist if not in node_modules (crates don't have a dist)
-  if (!isCrate && !existsSync(join(cwd, 'node_modules', packageName))) {
-    spin.message(`Downloading ${packageName}@${version} dist`)
-    await fetchPkgDist(packageName, version)
-  }
-
-  // Shipped skills: symlink directly, skip all doc fetching/caching/LLM (crates don't ship skills)
-  const shippedResult = isCrate ? null : handleShippedSkills(packageName, version, cwd, config.agent, config.global)
-  if (shippedResult) {
-    const shared = !config.global && getSharedSkillsDir(cwd)
-    for (const shipped of shippedResult.shipped) {
-      if (shared)
-        linkSkillToAgents(shipped.skillName, shared, cwd, config.agent)
-      p.log.success(`Using published SKILL.md: ${shipped.skillName} → ${relative(cwd, shipped.skillDir)}`)
-    }
-    spin.stop(`Using published SKILL.md(s) from ${packageName}`)
+  if (result.kind === 'merge-needed') {
+    await handleMerge(result.state, { agent: config.agent, global: config.global }, cwd)
     return
   }
 
-  spin.stop(`Resolved ${identityPackageName}@${useCache ? versionKey : version}${config.force ? ' (force)' : useCache ? ' (cached)' : ''}`)
-
-  // Warn when no local dep and resolved to stable latest — prerelease releases won't be fetched
-  if (!isCrate && !localVersion && !requestedTag && !isPrerelease(version)) {
-    const nextTag = resolved.distTags?.next ?? resolved.distTags?.beta ?? resolved.distTags?.alpha
-    if (nextTag && (!resolved.releasedAt || !nextTag.releasedAt || nextTag.releasedAt > resolved.releasedAt)) {
-      p.log.warn(`\x1B[33mNo local dependency found — using latest stable (${version}). Prerelease ${nextTag.version} available: skilld add ${packageName}@beta\x1B[0m`)
-    }
-  }
-
-  ensureCacheDir()
-
-  const baseDir = resolveBaseDir(cwd, config.agent, config.global)
-  // In update mode, find the existing skill dir name for this package (may differ from computed name)
-  let skillDirName = config.name ? sanitizeName(config.name) : computeSkillDirName(storagePackageName)
-  if (config.mode === 'update' && !config.name) {
-    const lock = readLock(baseDir)
-    if (lock) {
-      for (const [name, info] of Object.entries(lock.skills)) {
-        if (info.packageName === identityPackageName || parsePackages(info.packages).some(p => p.name === identityPackageName)) {
-          skillDirName = name
-          break
-        }
-      }
-    }
-  }
-  // Eject path override: default to ./skills/<name>, or use specified directory
-  const skillDir = config.eject
-    ? typeof config.eject === 'string'
-      ? join(resolve(cwd, config.eject), skillDirName)
-      : join(cwd, 'skills', skillDirName)
-    : join(baseDir, skillDirName)
-  mkdirSync(skillDir, { recursive: true })
-
-  // ── Merge mode: skill dir already exists with a different primary package (skip in eject) ──
-  const existingLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
-  const isMerge = existingLock && existingLock.packageName && existingLock.packageName !== identityPackageName
-
-  // Capture update context before lockfile gets overwritten
-  const updateCtx = config.mode === 'update' && existingLock
-    ? {
-        oldVersion: existingLock.version,
-        newVersion: version,
-        syncedAt: existingLock.syncedAt,
-        wasEnhanced: (() => {
-          const skillMdPath = join(skillDir, 'SKILL.md')
-          if (!existsSync(skillMdPath))
-            return false
-          const fm = parseFrontmatter(readFileSync(skillMdPath, 'utf-8'))
-          return !!fm.generated_by
-        })(),
-      }
-    : undefined
-
-  if (isMerge) {
-    spin.stop(`Merging ${identityPackageName} into ${skillDirName}`)
-
-    // Create named symlink for this package
-    linkPkgNamed(skillDir, storagePackageName, cwd, version)
-
-    // Merge into lockfile
-    const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
-    writeLock(baseDir, skillDirName, {
-      packageName: identityPackageName,
-      version,
-      repo: repoSlug,
-      source: existingLock.source,
-      syncedAt: todayIsoDate(),
-      generator: 'skilld',
-    })
-
-    // Regenerate SKILL.md with all packages listed
-    const updatedLock = readLock(baseDir)?.skills[skillDirName]
-    const allPackages = parsePackageNames(updatedLock?.packages)
-    const relatedSkills = await findRelatedSkills(storagePackageName, baseDir)
-    const existingStorageName = toStoragePackageName(existingLock.packageName!)
-    const pkgFiles = getPkgKeyFiles(existingStorageName, cwd, existingLock.version)
-    const shippedDocs = hasShippedDocs(existingStorageName, cwd, existingLock.version)
-
-    const mergeFeatures = readConfig().features ?? defaultFeatures
-    writeGeneratedSkillMd(skillDir, {
-      name: existingLock.packageName!,
-      version: existingLock.version,
-      relatedSkills,
-      hasIssues: mergeFeatures.issues && existsSync(join(skillDir, '.skilld', 'issues')),
-      hasDiscussions: mergeFeatures.discussions && existsSync(join(skillDir, '.skilld', 'discussions')),
-      hasReleases: mergeFeatures.releases && existsSync(join(skillDir, '.skilld', 'releases')),
-      docsType: (existingLock.source?.includes('llms.txt') ? 'llms.txt' : 'docs') as 'llms.txt' | 'readme' | 'docs',
-      hasShippedDocs: shippedDocs,
-      pkgFiles,
-      dirName: skillDirName,
-      packages: allPackages,
-      features: mergeFeatures,
-    })
-
-    const mergeShared = !config.global && getSharedSkillsDir(cwd)
-    if (mergeShared)
-      linkSkillToAgents(skillDirName, mergeShared, cwd, config.agent)
-
-    if (!config.global)
-      registerProject(cwd)
-
-    p.outro(`Merged ${identityPackageName} into ${skillDirName}`)
-    return
-  }
-
-  const features = { ...(readConfig().features ?? defaultFeatures) }
-  if (config.noSearch)
-    features.search = false
-
-  // ── Phase 1: Fetch & cache all resources ──
-  const resSpin = timedSpinner()
-  resSpin.start('Finding resources')
-  const resources = await fetchAndCacheResources({
-    packageName: storagePackageName,
-    resolved,
-    version,
-    useCache,
-    features,
-    from: config.from,
-    onProgress: msg => resSpin.message(msg),
-  })
-  const resParts: string[] = []
-  if (resources.docsToIndex.length > 0) {
-    const docCount = resources.docsToIndex.filter(d => d.metadata?.type === 'doc').length
-    if (docCount > 0)
-      resParts.push(`${docCount} docs`)
-  }
-  if (resources.hasIssues)
-    resParts.push('issues')
-  if (resources.hasDiscussions)
-    resParts.push('discussions')
-  if (resources.hasReleases)
-    resParts.push('releases')
-  resSpin.stop(resources.usedCache
-    ? `Loaded ${resParts.length > 0 ? resParts.join(', ') : 'resources'} (cached)`
-    : `Fetched ${resParts.length > 0 ? resParts.join(', ') : 'resources'}`,
-  )
-  for (const w of resources.warnings)
-    p.log.warn(`\x1B[33m${w}\x1B[0m`)
-
-  // Create symlinks (LLM needs .skilld/ to read docs, even in eject mode)
-  linkAllReferences(skillDir, storagePackageName, cwd, version, resources.docsType, undefined, features, resources.repoInfo)
-
-  // ── Phase 2: Search index (generated even in eject mode so LLM can use it) ──
-  if (features.search) {
-    const idxSpin = timedSpinner()
-    idxSpin.start('Creating search index')
-    await indexResources({
-      packageName: storagePackageName,
-      version,
-      cwd,
-      docsToIndex: resources.docsToIndex,
-      features,
-      onProgress: msg => idxSpin.message(msg),
-    })
-    idxSpin.stop('Search index ready')
-  }
-
-  const pkgDir = resolvePkgDir(storagePackageName, cwd, version)
-  const hasChangelog = detectChangelog(pkgDir, getCacheDir(storagePackageName, version))
-  const relatedSkills = await findRelatedSkills(storagePackageName, baseDir)
-  const shippedDocs = hasShippedDocs(storagePackageName, cwd, version)
-  const pkgFiles = getPkgKeyFiles(storagePackageName, cwd, version)
-
-  // Write base SKILL.md (no LLM needed)
-  const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
-
-  // Also create named symlink for this package (skip in eject mode)
-  if (!config.eject)
-    linkPkgNamed(skillDir, storagePackageName, cwd, version)
-
-  // Skip lockfile in eject mode — no agent skills dir to write to
-  if (!config.eject) {
-    writeLock(baseDir, skillDirName, {
-      packageName: identityPackageName,
-      version,
-      repo: repoSlug,
-      source: resources.docSource,
-      syncedAt: todayIsoDate(),
-      generator: 'skilld',
-    })
-
-    // Clean up duplicate lockfile entries for the same package (e.g. renamed skill dirs)
-    const lock = readLock(baseDir)
-    if (lock) {
-      for (const [name, info] of Object.entries(lock.skills)) {
-        if (name === skillDirName)
-          continue
-        if (info.packageName === identityPackageName || parsePackages(info.packages).some(p => p.name === identityPackageName)) {
-          removeLockEntry(baseDir, name)
-          const staleDir = join(baseDir, name)
-          if (existsSync(staleDir))
-            rmSync(staleDir, { recursive: true })
-        }
-      }
-    }
-  }
-
-  // Read back merged packages from lockfile for SKILL.md generation
-  const updatedLock = config.eject ? undefined : readLock(baseDir)?.skills[skillDirName]
-  const allPackages = parsePackageNames(updatedLock?.packages)
-
-  const isEject = !!config.eject
-  const baseSkillMd = writeGeneratedSkillMd(skillDir, {
-    name: identityPackageName,
-    version,
-    releasedAt: resolved.releasedAt,
-    description: resolved.description,
-
-    distTags: resolved.distTags,
-    relatedSkills,
-    hasIssues: resources.hasIssues,
-    hasDiscussions: resources.hasDiscussions,
-    hasReleases: resources.hasReleases,
-    hasChangelog,
-    docsType: resources.docsType,
-    hasShippedDocs: shippedDocs,
-    pkgFiles,
-    dirName: skillDirName,
-    packages: allPackages.length > 1 ? allPackages : undefined,
-    repoUrl: resolved.repoUrl,
-    features,
-    eject: isEject,
-  })
-  const overheadLines = baseSkillMd.split('\n').length
-
-  p.log.success(config.mode === 'update' ? `Updated skill: ${relative(cwd, skillDir)}` : `Created base skill: ${relative(cwd, skillDir)}`)
-
-  // Check if all default sections are already cached (skip prompt entirely if so)
-  const allSectionsCached = !config.force && DEFAULT_SECTIONS.every((s) => {
-    const outputFile = SECTION_OUTPUT_FILES[s]
-    return readCachedSection(storagePackageName, version, outputFile) !== null
-  })
-
-  if (allSectionsCached) {
-    // Silently apply cached LLM content without prompting
-    const cachedParts: string[] = []
-    for (const s of SECTION_MERGE_ORDER) {
-      if (!DEFAULT_SECTIONS.includes(s))
-        continue
-      const outputFile = SECTION_OUTPUT_FILES[s]
-      const content = readCachedSection(storagePackageName, version, outputFile)
-      if (content)
-        cachedParts.push(wrapSection(s, content))
-    }
-    const cachedBody = cachedParts.join('\n\n')
-
-    writeGeneratedSkillMd(skillDir, {
-      name: identityPackageName,
-      version,
-      releasedAt: resolved.releasedAt,
-      description: resolved.description,
-
-      distTags: resolved.distTags,
-      body: cachedBody,
-      relatedSkills,
-      hasIssues: resources.hasIssues,
-      hasDiscussions: resources.hasDiscussions,
-      hasReleases: resources.hasReleases,
-      hasChangelog,
-      docsType: resources.docsType,
-      hasShippedDocs: shippedDocs,
-      pkgFiles,
-      generatedBy: 'cached',
-      dirName: skillDirName,
-      packages: allPackages.length > 1 ? allPackages : undefined,
-      repoUrl: resolved.repoUrl,
-      features,
-      eject: isEject,
-    })
-    p.log.success('Applied cached SKILL.md sections')
-  }
-
-  // Ask about LLM optimization (skip if skipLlm config, sections cached)
-  // When -y without -m: auto-resolve model from config or available models
+  // result.kind === 'ready'
+  const { state } = result
   const globalConfig = readConfig()
-  let resolvedModel = config.model || (config.yes && !globalConfig.skipLlm ? globalConfig.model as OptimizeModel | undefined : undefined)
-  // Auto-resolve when -y, not skipping LLM, but no explicit model (e.g. user picked "Auto" in wizard)
-  if (!resolvedModel && config.yes && !globalConfig.skipLlm) {
-    const available = await getAvailableModels()
-    const auto = available.find(m => m.recommended)?.id ?? available[0]?.id
-    if (auto)
-      resolvedModel = auto as OptimizeModel
-  }
-  if (!allSectionsCached && !globalConfig.skipLlm && !(config.yes && !resolvedModel)) {
-    const llmConfig = await selectLlmConfig(resolvedModel, undefined, updateCtx)
-    if (llmConfig?.promptOnly) {
-      writePromptFiles({
-        packageName: storagePackageName,
-        skillDir,
-        version,
-        hasIssues: resources.hasIssues,
-        hasDiscussions: resources.hasDiscussions,
-        hasReleases: resources.hasReleases,
-        hasChangelog,
-        docsType: resources.docsType,
-        hasShippedDocs: shippedDocs,
-        pkgFiles,
-        sections: llmConfig.sections,
-        customPrompt: llmConfig.customPrompt,
-        features,
-        overheadLines,
-      })
-    }
-    else if (llmConfig) {
-      p.log.step(getModelLabel(llmConfig.model))
-      await enhanceSkillWithLLM({
-        packageName: identityPackageName,
-        cachePackageName: storagePackageName,
-        version,
-        skillDir,
-        dirName: skillDirName,
-        model: llmConfig.model,
-        resolved,
-        relatedSkills,
-        hasIssues: resources.hasIssues,
-        hasDiscussions: resources.hasDiscussions,
-        hasReleases: resources.hasReleases,
-        hasChangelog,
-        docsType: resources.docsType,
-        hasShippedDocs: shippedDocs,
-        pkgFiles,
-        force: config.force,
-        debug: config.debug,
-        sections: llmConfig.sections,
-        customPrompt: llmConfig.customPrompt,
-        packages: allPackages.length > 1 ? allPackages : undefined,
-        features,
-        eject: isEject,
-        overheadLines,
-      })
-    }
-  }
+  const resolvedModel = await resolveAutoModel(config.model, config.yes)
 
-  // Eject: clean up transient .skilld/ symlinks → copy as real files
-  if (isEject) {
-    const skilldDir = join(skillDir, '.skilld')
-    if (existsSync(skilldDir) && !config.debug)
-      rmSync(skilldDir, { recursive: true, force: true })
-    ejectReferences(skillDir, storagePackageName, cwd, version, resources.docsType, features, resources.repoInfo)
-  }
+  let llmConfig: import('./llm-prompts.ts').LlmConfig | null = null
+  if (!state.allSectionsCached && !globalConfig.skipLlm && !(config.yes && !resolvedModel))
+    llmConfig = await selectLlmConfig(resolvedModel, undefined, state.updateCtx)
 
-  // Skip agent integration in eject mode (no symlinks, no gitignore, no instructions)
-  if (!isEject) {
-    // Link shared dir to per-agent dirs
-    const shared = !config.global && getSharedSkillsDir(cwd)
-    if (shared)
-      linkSkillToAgents(skillDirName, shared, cwd, config.agent)
-
-    // Register project in global config (for uninstall tracking)
-    if (!config.global) {
-      registerProject(cwd)
-    }
-
-    await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[config.agent].skillsDir, cwd, config.global)
-    await ensureAgentInstructions(config.agent, cwd, config.global)
-  }
+  await runEnhancePhase(
+    state,
+    llmConfig,
+    { agent: config.agent, global: config.global, force: config.force, debug: config.debug, eject: config.eject },
+    ui,
+    cwd,
+  )
 
   await shutdownWorker()
-
   const ejectMsg = isEject ? ' (ejected)' : ''
-  const relDir = relative(cwd, skillDir)
-  p.outro(config.mode === 'update' ? `Updated ${identityPackageName}${ejectMsg}` : `Synced ${identityPackageName} → ${relDir}${ejectMsg}`)
+  const relDir = relative(cwd, state.skillDir)
+  p.outro(config.mode === 'update'
+    ? `Updated ${state.identityName}${ejectMsg}`
+    : `Synced ${state.identityName} → ${relDir}${ejectMsg}`)
 
   try {
     await suggestPrepareHook(cwd)
@@ -771,6 +335,14 @@ async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promi
   catch (err) {
     p.log.warn(`Failed to suggest prepare hook: ${err instanceof Error ? err.message : String(err)}`)
   }
+}
+
+async function syncSinglePackage(packageSpec: string, config: SyncConfig): Promise<void> {
+  if (isCrateSpec(packageSpec) && !packageSpec.slice('crate:'.length).trim()) {
+    p.log.error('Invalid crate spec. Use format: crate:<name>')
+    return
+  }
+  return runSimpleSync(packageSpec, config)
 }
 
 // ── Citty command definitions (lazy-loaded by cli.ts) ──
@@ -1113,36 +685,25 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
   force?: boolean
   agent?: AgentType | 'none'
 }): Promise<void> {
-  const { name: packageName } = parsePackageSpec(packageSpec)
   const sections = opts.sections ?? DEFAULT_SECTIONS
 
   const spin = timedSpinner()
   spin.start(`Resolving ${packageSpec}`)
-
   const cwd = process.cwd()
-  const localDeps = await readLocalDependencies(cwd).catch(() => [])
-  const localVersion = localDeps.find(d => d.name === packageName)?.version
 
-  const resolveResult = await resolvePackageDocsWithAttempts(packageName, {
-    version: localVersion,
+  const { packageName, localVersion, resolved } = await resolvePackageOrCrate(packageSpec, {
     cwd,
-    onProgress: step => spin.message(`${packageName}: ${RESOLVE_STEP_LABELS[step]}`),
+    onProgress: label => spin.message(`${packageSpec}: ${label}`),
   })
-  let resolved = resolveResult.package
 
   if (!resolved) {
-    spin.message(`Resolving local package: ${packageName}`)
-    resolved = await resolveLocalDep(packageName, cwd)
-  }
-
-  if (!resolved) {
-    spin.stop(`Could not find docs for: ${packageName}`)
+    spin.stop(`Could not find docs for: ${packageSpec}`)
     return
   }
 
   const version = localVersion || resolved.version || 'latest'
-  const versionKey = getVersionKey(version)
-  const useCache = !opts.force && isCached(packageName, version)
+  const cache = createReferenceCache(packageName, version)
+  const useCache = !opts.force && cache.has()
 
   // Download npm dist if not in node_modules
   if (!existsSync(join(cwd, 'node_modules', packageName))) {
@@ -1150,11 +711,11 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
     await fetchPkgDist(packageName, version)
   }
 
-  spin.stop(`Resolved ${packageName}@${useCache ? versionKey : version}`)
-  ensureCacheDir()
+  spin.stop(`Resolved ${packageName}@${useCache ? cache.versionKey : version}`)
+  cache.ensure()
 
   const skillDirName = computeSkillDirName(packageName)
-  const features = readConfig().features ?? defaultFeatures
+  const features = getActiveFeatures()
 
   // Resolve skill dir — detect agent unless explicitly 'none'
   const agent: AgentType | null = opts.agent === 'none'
@@ -1188,13 +749,16 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
   for (const w of resources.warnings)
     p.log.warn(`\x1B[33m${w}\x1B[0m`)
 
-  // Link references for prompt building
-  linkAllReferences(skillDir, packageName, cwd, version, resources.docsType, undefined, features, resources.repoInfo)
-
-  const pkgDir = resolvePkgDir(packageName, cwd, version)
-  const hasChangelog = detectChangelog(pkgDir, getCacheDir(packageName, version))
-  const shippedDocs = hasShippedDocs(packageName, cwd, version)
-  const pkgFiles = getPkgKeyFiles(packageName, cwd, version)
+  const prepared = await prepareSkillReferences({
+    packageName,
+    version,
+    cwd,
+    skillDir,
+    resources,
+    features,
+    baseDir: join(skillDir, '..'),
+  })
+  const { hasChangelog, shippedDocs, pkgFiles, relatedSkills } = prepared
   const docFiles = listReferenceFiles(skillDir)
 
   // Build prompts
@@ -1214,11 +778,8 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
     sections,
   })
 
-  // Eject references as real files, then remove .skilld/ symlinks
-  ejectReferences(skillDir, packageName, cwd, version, resources.docsType, features, resources.repoInfo)
-  const skilldDir = join(skillDir, '.skilld')
-  if (existsSync(skilldDir))
-    rmSync(skilldDir, { recursive: true, force: true })
+  cache.eject(skillDir, cwd, resources.docsType, { features, repoInfo: resources.repoInfo })
+  cache.clearSkillInternal(skillDir)
 
   // Write portable prompts
   for (const [section, prompt] of prompts) {
@@ -1227,7 +788,6 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
   }
 
   // Generate SKILL.md (ejected — uses ./references/ paths)
-  const relatedSkills = await findRelatedSkills(packageName, join(skillDir, '..'))
   writeGeneratedSkillMd(skillDir, {
     name: packageName,
     version,
@@ -1248,28 +808,35 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
     eject: true,
   })
 
-  // Write lockfile so skilld list/update/assemble can discover this skill
   const repoSlug = parseGitHubRepoSlug(resolved.repoUrl)
-  writeLock(baseDir, skillDirName, {
-    packageName,
-    version,
-    repo: repoSlug,
-    source: resources.docSource,
-    syncedAt: todayIsoDate(),
-    generator: 'skilld',
-  })
-
-  // Link to agent dirs + setup gitignore/instructions
   if (agent) {
-    const shared = getSharedSkillsDir(cwd)
-    if (shared)
-      linkSkillToAgents(skillDirName, shared, cwd, agent)
-    await ensureGitignore(shared ? SHARED_SKILLS_DIR : agents[agent].skillsDir, cwd, false)
-    await ensureAgentInstructions(agent, cwd, false)
-    registerProject(cwd)
+    const { shared } = installSkill({
+      cwd,
+      agent,
+      global: false,
+      baseDir,
+      skillDirName,
+      lock: {
+        packageName,
+        version,
+        repo: repoSlug,
+        source: resources.docSource,
+        syncedAt: todayIsoDate(),
+        generator: 'skilld',
+      },
+    })
+    await ensureProjectFiles({ cwd, agent, global: false, shared })
   }
   else {
-    // No agent — ensure gitignore for .claude/skills/ fallback dir
+    // No agent — write lockfile but skip agent linking; ensure gitignore for fallback dir
+    writeLock(baseDir, skillDirName, {
+      packageName,
+      version,
+      repo: repoSlug,
+      source: resources.docSource,
+      syncedAt: todayIsoDate(),
+      generator: 'skilld',
+    })
     await ensureGitignore('.claude/skills', cwd, false)
   }
 

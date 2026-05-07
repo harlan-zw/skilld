@@ -6,9 +6,9 @@ import type { CachedDoc, CachedPackage } from './types.ts'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'pathe'
 import { readPackageJsonSafe } from '../core/package-json.ts'
+import { getRepoCacheDir, REFERENCES_DIR, REPOS_DIR, skillInternalDir } from '../core/paths.ts'
 import { resolvePkgDir } from '../core/prepare.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
-import { getRepoCacheDir, REFERENCES_DIR, REPOS_DIR } from './config.ts'
 import { getCacheDir } from './version.ts'
 
 /** Safely create a symlink, validating target is under REFERENCES_DIR or REPOS_DIR */
@@ -28,6 +28,7 @@ function safeSymlink(target: string, linkPath: string): void {
 
 /**
  * Check if package is cached at given version
+ * @internal
  */
 export function isCached(name: string, version: string): boolean {
   return existsSync(getCacheDir(name, version))
@@ -58,6 +59,7 @@ export function ensureCacheDir(): void {
 
 /**
  * Write docs to cache
+ * @internal
  */
 export function writeToCache(
   name: string,
@@ -102,7 +104,7 @@ export function writeToRepoCache(
  */
 export function linkRepoCachedDir(skillDir: string, owner: string, repo: string, subdir: string): void {
   const repoDir = getRepoCacheDir(owner, repo)
-  const referencesDir = join(skillDir, '.skilld')
+  const referencesDir = skillInternalDir(skillDir)
   const linkPath = join(referencesDir, subdir)
   const cachedPath = join(repoDir, subdir)
 
@@ -124,7 +126,7 @@ export function linkRepoCachedDir(skillDir: string, owner: string, repo: string,
  */
 export function linkCachedDir(skillDir: string, name: string, version: string, subdir: string): void {
   const cacheDir = getCacheDir(name, version)
-  const referencesDir = join(skillDir, '.skilld')
+  const referencesDir = skillInternalDir(skillDir)
   const linkPath = join(referencesDir, subdir)
   const cachedPath = join(cacheDir, subdir)
 
@@ -156,7 +158,7 @@ export function linkPkg(skillDir: string, name: string, cwd: string, version?: s
   if (!pkgPath)
     return
 
-  const referencesDir = join(skillDir, '.skilld')
+  const referencesDir = skillInternalDir(skillDir)
   mkdirSync(referencesDir, { recursive: true })
 
   const pkgLinkPath = join(referencesDir, 'pkg')
@@ -181,7 +183,7 @@ export function linkPkgNamed(skillDir: string, name: string, cwd: string, versio
     return
 
   const shortName = name.split('/').pop()!.toLowerCase()
-  const referencesDir = join(skillDir, '.skilld')
+  const referencesDir = skillInternalDir(skillDir)
   mkdirSync(referencesDir, { recursive: true })
 
   const linkPath = join(referencesDir, `pkg-${shortName}`)
@@ -346,7 +348,7 @@ export function clearAllCache(): number {
  * Returns paths like ./.skilld/pkg/README.md, ./.skilld/docs/api.md
  */
 export function listReferenceFiles(skillDir: string, maxDepth = 3): string[] {
-  const referencesDir = join(skillDir, '.skilld')
+  const referencesDir = skillInternalDir(skillDir)
   if (!existsSync(referencesDir))
     return []
 

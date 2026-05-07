@@ -120,6 +120,31 @@ export function isKnownPrivateRepo(owner: string, repo: string): boolean {
   return _needsAuth.has(`${owner}/${repo}`)
 }
 
+/**
+ * Try `ungh()` first (skipped for repos already learned to be private);
+ * fall back to `api()` and mark the repo private when the API path produced
+ * the result. Both branches return `null` if they couldn't produce a value.
+ *
+ * Encapsulates the "ungh-or-api-with-private-learning" pattern so the
+ * mark-on-success bookkeeping lives in exactly one place.
+ */
+export async function fetchUnghOrApi<T>(
+  owner: string,
+  repo: string,
+  ungh: () => Promise<T | null>,
+  api: () => Promise<T | null>,
+): Promise<T | null> {
+  if (!isKnownPrivateRepo(owner, repo)) {
+    const r = await ungh().catch(() => null)
+    if (r)
+      return r
+  }
+  const r = await api()
+  if (r)
+    markRepoPrivate(owner, repo)
+  return r
+}
+
 // ── GitHub API (async, no process spawn) ──
 
 const GH_API = 'https://api.github.com'

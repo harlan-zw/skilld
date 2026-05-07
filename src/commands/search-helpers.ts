@@ -5,8 +5,8 @@ import { join } from 'pathe'
 import { agents, detectTargetAgent } from '../agent/index.ts'
 import { getPackageDbPath, REFERENCES_DIR } from '../cache/index.ts'
 import { readLock } from '../core/index.ts'
+import { getSharedSkillsDir } from '../core/paths.ts'
 import { toStoragePackageName } from '../core/prefix.ts'
-import { getSharedSkillsDir } from '../core/shared.ts'
 
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
 export function findPackageDbs(packageFilter?: string): string[] {

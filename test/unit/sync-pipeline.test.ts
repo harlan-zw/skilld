@@ -14,29 +14,64 @@ vi.mock('node:fs', async () => {
   }
 })
 
-vi.mock('../../src/cache', () => ({
-  CACHE_DIR: '/mock-cache',
-  REPOS_DIR: '/mock-cache/repos',
-  getCacheDir: vi.fn(() => '/mock-cache/references/test-pkg@1.0.0'),
-  getPackageDbPath: vi.fn(() => '/mock-cache/references/test-pkg@1.0.0/db'),
-  getRepoCacheDir: vi.fn((owner: string, repo: string) => `/mock-cache/repos/${owner}/${repo}`),
-  readCachedDocs: vi.fn(() => []),
-  writeToCache: vi.fn(),
-  writeToRepoCache: vi.fn(),
-  clearCache: vi.fn(),
-  getShippedSkills: vi.fn(() => []),
-  hasShippedDocs: vi.fn(() => false),
-  linkCachedDir: vi.fn(),
-  linkDiscussions: vi.fn(),
-  linkIssues: vi.fn(),
-  linkPkg: vi.fn(),
-  linkPkgNamed: vi.fn(),
-  linkReferences: vi.fn(),
-  linkReleases: vi.fn(),
-  linkRepoCachedDir: vi.fn(),
-  linkShippedSkill: vi.fn(),
-  resolvePkgDir: vi.fn(),
-}))
+vi.mock('../../src/cache', () => {
+  const writeToCache = vi.fn()
+  const readCachedDocs = vi.fn(() => [] as Array<{ path: string, content: string }>)
+  const loadCachedReferences = vi.fn(() => ({ docsToIndex: [] as any[], docSource: 'readme', docsType: 'readme' as const }))
+  const detectDocsType = vi.fn(() => ({ docsType: 'readme' as const }))
+  const linkAllReferences = vi.fn()
+  const ejectReferences = vi.fn()
+  const forceClearCache = vi.fn()
+  const writeSections = vi.fn()
+  const readCachedSection = vi.fn(() => null)
+  const isCached = vi.fn(() => false)
+  return {
+    CACHE_DIR: '/mock-cache',
+    REPOS_DIR: '/mock-cache/repos',
+    getCacheDir: vi.fn(() => '/mock-cache/references/test-pkg@1.0.0'),
+    getPackageDbPath: vi.fn(() => '/mock-cache/references/test-pkg@1.0.0/db'),
+    getRepoCacheDir: vi.fn((owner: string, repo: string) => `/mock-cache/repos/${owner}/${repo}`),
+    readCachedDocs,
+    writeToCache,
+    writeToRepoCache: vi.fn(),
+    clearCache: vi.fn(),
+    getShippedSkills: vi.fn(() => []),
+    hasShippedDocs: vi.fn(() => false),
+    linkCachedDir: vi.fn(),
+    linkDiscussions: vi.fn(),
+    linkIssues: vi.fn(),
+    linkPkg: vi.fn(),
+    linkPkgNamed: vi.fn(),
+    linkReferences: vi.fn(),
+    linkReleases: vi.fn(),
+    linkRepoCachedDir: vi.fn(),
+    linkShippedSkill: vi.fn(),
+    resolvePkgDir: vi.fn(),
+    loadCachedReferences,
+    detectDocsType,
+    linkAllReferences,
+    ejectReferences,
+    forceClearCache,
+    writeSections,
+    readCachedSection,
+    isCached,
+    createReferenceCache: vi.fn((name: string, version: string) => ({
+      packageName: name,
+      version,
+      dir: `/mock-cache/references/${name}@${version}`,
+      has: () => isCached(name, version),
+      write: (docs: any) => writeToCache(name, version, docs),
+      writeSections: (sections: any) => writeSections(name, version, sections),
+      readSection: (file: string) => readCachedSection(name, version, file),
+      readDocs: () => readCachedDocs(name, version),
+      detectDocs: (repoUrl?: string, llmsUrl?: string) => detectDocsType(name, version, repoUrl, llmsUrl),
+      load: (opts: any) => loadCachedReferences({ ...opts, packageName: name, version }),
+      linkInto: (skillDir: string, cwd: string, docsType: string, o: any) => linkAllReferences(skillDir, name, cwd, version, docsType, o?.extraPackages, o?.features, o?.repoInfo),
+      eject: (skillDir: string, cwd: string, docsType: string, o: any) => ejectReferences(skillDir, name, cwd, version, docsType, o?.features, o?.repoInfo),
+      clearForce: (repoInfo?: any) => forceClearCache(name, version, repoInfo),
+    })),
+  }
+})
 
 vi.mock('../../src/sources', () => ({
   $fetch: vi.fn(),
@@ -110,15 +145,16 @@ const { getShippedSkills, linkShippedSkill, resolvePkgDir } = await import('../.
 const {
   classifyCachedDoc,
   detectDocsType,
+  forceClearCache,
+  ejectReferences,
+} = await import('../../src/cache/references')
+const {
   detectChangelog,
   resolveLocalDep,
   fetchAndCacheResources,
-  indexResources,
-  forceClearCache,
-  handleShippedSkills,
-  resolveBaseDir,
-  ejectReferences,
-} = await import('../../src/commands/sync-shared')
+} = await import('../../src/commands/sync-pipeline')
+const { indexResources } = await import('../../src/retriv/index-pipeline')
+const { handleShippedSkills, resolveBaseDir } = await import('../../src/agent/skill-installer')
 const { clearPackageJsonCache } = await import('../../src/core/package-json')
 
 describe('sync-shared', () => {
@@ -400,8 +436,12 @@ describe('sync-shared', () => {
       const result = await fetchAndCacheResources({ ...baseOpts, resolved })
 
       expect(result.docsType).toBe('docs')
-      // writeToCache called for git docs + supplementary
-      expect(writeToCache).toHaveBeenCalledTimes(2)
+      // Single cache write seam: git docs + supplementary llms in one call
+      const calls = vi.mocked(writeToCache).mock.calls
+      expect(calls.length).toBeGreaterThanOrEqual(1)
+      const allPaths = calls.flatMap(c => (c[2] as Array<{ path: string }>).map(d => d.path))
+      expect(allPaths).toContain('llms.txt')
+      expect(allPaths.some(p => p.startsWith('docs/'))).toBe(true)
     })
 
     // 5d: llms.txt with linked docs
@@ -550,6 +590,14 @@ describe('sync-shared', () => {
       vi.mocked(readCachedDocs).mockReturnValue([
         { path: 'docs/guide.md', content: 'cached guide' },
       ])
+      const { loadCachedReferences } = await import('../../src/cache')
+      vi.mocked(loadCachedReferences).mockReturnValue({
+        docsToIndex: [
+          { id: 'docs/guide.md', content: 'cached guide', metadata: { package: 'test-pkg', source: 'docs/guide.md', type: 'doc' } },
+        ],
+        docSource: 'readme',
+        docsType: 'readme',
+      })
       const resolved = { name: 'test-pkg' }
 
       const result = await fetchAndCacheResources({
@@ -559,7 +607,7 @@ describe('sync-shared', () => {
         features: { search: true, issues: false, discussions: false, releases: false },
       })
 
-      expect(readCachedDocs).toHaveBeenCalled()
+      expect(loadCachedReferences).toHaveBeenCalled()
       expect(result.docsToIndex).toHaveLength(1)
       expect(result.docsToIndex[0].metadata.type).toBe('doc')
     })
