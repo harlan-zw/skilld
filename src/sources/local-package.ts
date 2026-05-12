@@ -188,3 +188,20 @@ export function getInstalledSkillVersion(skillDir: string): string | null {
   const match = content.match(/^version:\s*"?([^"\n]+)"?/m)
   return match?.[1] || null
 }
+
+/** Try resolving a `link:` dependency to local package docs. Returns null if not a link dep or resolution fails. */
+export async function resolveLocalDep(packageName: string, cwd: string): Promise<ResolvedPackage | null> {
+  const result = readPackageJsonSafe(join(cwd, 'package.json'))
+  if (!result)
+    return null
+
+  const pkg = result.parsed
+  const deps = { ...pkg.dependencies as Record<string, string>, ...pkg.devDependencies as Record<string, string> }
+  const depVersion = deps[packageName]
+
+  if (!depVersion?.startsWith('link:'))
+    return null
+
+  const localPath = resolve(cwd, depVersion.slice(5))
+  return resolveLocalPackageDocs(localPath)
+}

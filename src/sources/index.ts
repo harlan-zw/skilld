@@ -71,7 +71,7 @@ export {
   parseMarkdownLinks,
 } from './llms.ts'
 
-export { resolveLocalDep } from './local-dep.ts'
+export { resolveLocalDep } from './local-package.ts'
 
 // ─ GitHub timeline (issues, discussions, releases) ───────────────────────
 
@@ -116,13 +116,12 @@ export { resolvePackageOrCrate } from './resolve-package.ts'
 export type {
   ContentResolver,
   ResolveCtx,
+  ResolveOptions,
   Resolver,
   ResolverOutcome,
+  ResolveStep,
 } from './resolver-registry.ts'
-export { createContentResolver, defineResolver } from './resolver-registry.ts'
-
-export type { ResolveOptions, ResolveStep } from './resolver.ts'
-export { resolvePackageDocs, resolvePackageDocsWithAttempts } from './resolver.ts'
+export { createContentResolver, defineResolver, resolvePackageDocs, resolvePackageDocsWithAttempts } from './resolver-registry.ts'
 
 export { crawlUrlResolver } from './resolvers/crawl-url.ts'
 export { defaultResolvers } from './resolvers/default.ts'

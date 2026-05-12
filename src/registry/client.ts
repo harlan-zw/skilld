@@ -44,21 +44,6 @@ export interface RegistrySkill {
   updatedAt?: string
 }
 
-export interface RegistrySearchHit {
-  name: string
-  packageName: string
-  displayName?: string
-  owner: string
-  repo: string
-  installs?: number
-  official?: boolean
-}
-
-export interface RegistrySearchResult {
-  skills: RegistrySearchHit[]
-  total: number
-}
-
 interface ResolveResponseEntry {
   owner: string
   repo: string
@@ -75,20 +60,6 @@ interface SkillDetailResponse {
   skillPath?: string | null
   raw?: string | null
   pushedAt?: string | null
-}
-
-interface SkillListItem {
-  name: string
-  owner: string
-  repo: string
-  displayName: string
-  installs: number
-  official: boolean
-}
-
-interface SkillListResponse {
-  items: SkillListItem[]
-  total: number
 }
 
 export interface FetchRegistrySkillOptions {
@@ -134,54 +105,4 @@ export async function fetchRegistrySkill(
     skillPath: detail.skillPath ?? undefined,
     updatedAt: detail.pushedAt ?? undefined,
   }
-}
-
-/**
- * Search the registry for skills matching a query.
- */
-export async function searchRegistry(
-  query: string,
-  opts: { limit?: number, owner?: string, official?: boolean } = {},
-): Promise<RegistrySearchResult> {
-  const base = getRegistryBase()
-  const result = await ofetch<SkillListResponse>(`${base}/skills`, {
-    query: {
-      q: query,
-      limit: opts.limit ?? 20,
-      owner: opts.owner,
-      official: opts.official ? 'true' : undefined,
-    },
-  }).catch(() => null)
-
-  if (!result)
-    return { skills: [], total: 0 }
-
-  return {
-    skills: result.items.map(i => ({
-      name: i.name,
-      packageName: i.name,
-      displayName: i.displayName,
-      owner: i.owner,
-      repo: `${i.owner}/${i.repo}`,
-      installs: i.installs,
-      official: i.official,
-    })),
-    total: result.total,
-  }
-}
-
-/**
- * Check whether the registry has a newer SKILL.md than the local copy.
- * Returns the new `updatedAt` timestamp if newer, else null.
- */
-export async function checkRegistryUpdate(
-  packageName: string,
-  currentUpdatedAt: string | undefined,
-): Promise<string | null> {
-  const skill = await fetchRegistrySkill(packageName)
-  if (!skill?.updatedAt)
-    return null
-  if (!currentUpdatedAt || skill.updatedAt > currentUpdatedAt)
-    return skill.updatedAt
-  return null
 }

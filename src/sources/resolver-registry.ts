@@ -11,6 +11,7 @@
  */
 
 import type { NpmPackageInfo, ResolveAttempt, ResolvedPackage, ResolveResult } from './types.ts'
+import { defaultResolvers } from './resolvers/default.ts'
 
 export type ResolveStep
   = | 'npm'
@@ -115,4 +116,15 @@ export function createContentResolver(opts: { resolvers: Resolver[] }): ContentR
       return { package: r, attempts: ctx.attempts, registryVersion }
     },
   }
+}
+
+const defaultContentResolver = createContentResolver({ resolvers: defaultResolvers })
+
+export async function resolvePackageDocs(packageName: string, options: ResolveOptions = {}): Promise<ResolvedPackage | null> {
+  const result = await defaultContentResolver.resolve(packageName, options)
+  return result.package
+}
+
+export async function resolvePackageDocsWithAttempts(packageName: string, options: ResolveOptions = {}): Promise<ResolveResult> {
+  return defaultContentResolver.resolve(packageName, options)
 }

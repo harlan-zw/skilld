@@ -12,9 +12,8 @@ import type { ResolveAttempt, ResolvedPackage } from './index.ts'
 import { isCrateSpec, toCrateIdentity, toStoragePackageName } from '../core/prefix.ts'
 import { parsePackageSpec } from '../core/url.ts'
 import { resolveCrateDocsWithAttempts } from './crates.ts'
-import { resolveLocalDep } from './local-dep.ts'
-import { readLocalDependencies } from './local-package.ts'
-import { resolvePackageDocsWithAttempts } from './resolver.ts'
+import { readLocalDependencies, resolveLocalDep } from './local-package.ts'
+import { resolvePackageDocsWithAttempts } from './resolver-registry.ts'
 
 const RESOLVE_STEP_LABELS: Record<string, string> = {
   'npm': 'npm registry',

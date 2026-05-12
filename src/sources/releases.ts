@@ -287,17 +287,6 @@ export function isStubRelease(release: GitHubRelease): boolean {
 }
 
 /**
- * Detect if releases are just short stubs redirecting to CHANGELOG.md.
- * Samples up to 3 releases — if all are stubs, it's a redirect pattern.
- */
-export function isChangelogRedirectPattern(releases: GitHubRelease[]): boolean {
-  const sample = releases.slice(0, 3)
-  if (sample.length === 0)
-    return false
-  return sample.every(isStubRelease)
-}
-
-/**
  * Fetch CHANGELOG.md from a GitHub repo at a specific ref as fallback.
  * For monorepos, also checks packages/{shortName}/CHANGELOG.md.
  */

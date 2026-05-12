@@ -1,5 +1,4 @@
 import type { SearchSnippet } from '../retriv/index.ts'
-import type { ProjectState } from './skills.ts'
 import * as p from '@clack/prompts'
 
 export function todayIsoDate(): string {
@@ -57,17 +56,6 @@ export function timedSpinner() {
       spin.stop(elapsed ? `${msg} \x1B[90m[${elapsed}]\x1B[0m` : msg)
     },
   }
-}
-
-export function formatSkillStatus(state: ProjectState): void {
-  const { missing, outdated, synced } = state
-
-  if (synced.length > 0)
-    p.log.success(`${synced.length} synced`)
-  if (outdated.length > 0)
-    p.log.warn(`${outdated.length} outdated: ${outdated.map(s => s.name).join(', ')}`)
-  if (missing.length > 0)
-    p.log.info(`${missing.length} missing: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? '...' : ''}`)
 }
 
 export function highlightTerms(content: string, terms: string[]): string {

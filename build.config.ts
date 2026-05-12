@@ -9,7 +9,6 @@ export default defineBuildConfig({
         './src/cli-entry.ts',
         './src/cli.ts',
         './src/prepare.ts',
-        './src/types.ts',
         './src/retriv/worker.ts',
       ],
     },

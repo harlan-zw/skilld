@@ -27,10 +27,8 @@ export { optimizeDocs } from './llm-enhancer.ts'
 export { extractMarkedSections, generateSkillMd, getSectionValidator, portabilizePrompt, wrapSection, writeGeneratedSkillMd, writeSkillMd } from './prompts/index.ts'
 
 export type { SkillOptions } from './prompts/index.ts'
-// Registry
-export { agents } from './registry.ts'
-
 // Targets
+export { agents } from './targets/index.ts'
 export type { AgentTarget, FrontmatterField } from './targets/index.ts'
 
 // Types

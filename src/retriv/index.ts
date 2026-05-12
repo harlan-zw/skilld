@@ -82,21 +82,6 @@ export async function getDb(config: Pick<IndexConfig, 'dbPath'>) {
 }
 
 /**
- * Index documents in-process (no worker thread).
- * Preferred for tests and environments where worker_threads is unreliable.
- */
-export async function createIndexDirect(
-  documents: Document[],
-  config: IndexConfig & { removeIds?: string[] },
-): Promise<void> {
-  const db = await getDb(config)
-  if (config.removeIds?.length)
-    await db.remove?.(config.removeIds)
-  await db.index(documents, { onProgress: config.onProgress })
-  await db.close?.()
-}
-
-/**
  * Index documents in a background worker thread.
  * Falls back to direct indexing if worker fails to spawn.
  */
@@ -129,20 +114,6 @@ export async function listIndexIds(
   finally {
     db.close()
   }
-}
-
-/**
- * Remove documents by ID from an existing index.
- */
-export async function removeFromIndex(
-  ids: string[],
-  config: Pick<IndexConfig, 'dbPath'>,
-): Promise<void> {
-  if (ids.length === 0)
-    return
-  const db = await getDb(config)
-  await db.remove?.(ids)
-  await db.close?.()
 }
 
 export async function search(

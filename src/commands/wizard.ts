@@ -2,8 +2,11 @@ import type { AgentType, OptimizeModel } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import { execSync } from 'node:child_process'
 import * as p from '@clack/prompts'
+import { defineCommand } from 'citty'
 import { getOAuthProviderList, loginOAuthProvider } from '../agent/clis/pi-ai.ts'
 import { agents, getAvailableModels, getModelName } from '../agent/index.ts'
+import { resolveAgent } from '../cli/agent-prompt.ts'
+import { sharedArgs } from '../cli/args.ts'
 import { isInteractive } from '../cli/env.ts'
 import { NO_MODELS_MESSAGE, OAUTH_NOTE, pickModel } from '../cli/model-picker.ts'
 import { defaultFeatures, updateConfig } from '../core/config.ts'
@@ -259,3 +262,19 @@ async function wizardConnectProvider(): Promise<void> {
     p.log.success(`Connected to ${name}`)
   }
 }
+
+export const setupCommandDef = defineCommand({
+  meta: {
+    name: 'setup',
+    description: 'Re-run the setup wizard to configure features and model',
+  },
+  args: {
+    agent: sharedArgs.agent,
+  },
+  async run({ args }) {
+    const agent = resolveAgent(args.agent)
+    await runWizard({
+      agent: agent && agent !== 'none' ? agent as AgentType : undefined,
+    })
+  },
+})

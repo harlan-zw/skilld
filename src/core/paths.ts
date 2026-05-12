@@ -47,15 +47,6 @@ export const REPOS_DIR: string = join(CACHE_DIR, 'repos')
 /** LLM output cache: `~/.skilld/llm-cache/<sha256>.json` */
 export const LLM_CACHE_DIR: string = join(CACHE_DIR, 'llm-cache')
 
-/** Global skill installs (skilld install --global) */
-export const GLOBAL_SKILLS_DIR: string = join(CACHE_DIR, 'skills')
-
-/** Cloned git skills repos */
-export const GIT_SKILLS_DIR: string = join(CACHE_DIR, 'git-skills')
-
-/** sqlite-vec embedding cache */
-export const EMBEDDINGS_DB_PATH: string = join(CACHE_DIR, 'embeddings.db')
-
 /** Global config file */
 export const CONFIG_PATH: string = join(CACHE_DIR, CONFIG_FILENAME)
 

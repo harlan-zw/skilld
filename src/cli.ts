@@ -80,9 +80,9 @@ const main = defineCommand({
     uninstall: () => import('./commands/uninstall.ts').then(m => m.uninstallCommandDef),
     search: () => import('./commands/search.ts').then(m => m.searchCommandDef),
     cache: () => import('./commands/cache.ts').then(m => m.cacheCommandDef),
-    setup: () => import('./commands/setup.ts').then(m => m.setupCommandDef),
+    setup: () => import('./commands/wizard.ts').then(m => m.setupCommandDef),
     // Author group (nested subcommands)
-    author: () => import('./commands/author-group.ts').then(m => m.authorGroupDef),
+    author: () => import('./commands/author.ts').then(m => m.authorGroupDef),
     // Deprecated forwarders (old top-level commands → skilld author <subcommand>)
     eject: deprecatedForwarder('eject', 'author eject', () => import('./commands/sync/eject.ts').then(m => m.ejectCommandDef)),
     validate: deprecatedForwarder('validate', 'author validate', () => import('./commands/validate.ts').then(m => m.validateCommandDef)),

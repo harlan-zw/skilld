@@ -8,7 +8,7 @@ import { join, relative } from 'pathe'
 import { skillInternalDir } from '../core/paths.ts'
 import { repairMarkdown, sanitizeMarkdown } from '../core/sanitize.ts'
 import { detectInstalledAgents } from './detect.ts'
-import { agents } from './registry.ts'
+import { agents } from './targets/index.ts'
 
 /**
  * Sanitize skill name for filesystem

@@ -11,11 +11,6 @@ import { frontmatter } from 'micromark-extension-frontmatter'
 import { visit } from 'unist-util-visit'
 import { yamlParseKV } from './yaml.ts'
 
-export interface MdHeading {
-  depth: number
-  text: string
-}
-
 export interface MdLink {
   title: string
   url: string
@@ -98,18 +93,6 @@ export function extractDescription(content: string): string | null {
   })
 
   return desc
-}
-
-/** Extract all headings with depth and text */
-export function extractHeadings(content: string): MdHeading[] {
-  const { tree } = parseMd(content)
-  const headings: MdHeading[] = []
-
-  visit(tree, 'heading', (node) => {
-    headings.push({ depth: node.depth, text: stripHeadingAnchors(toString(node)) })
-  })
-
-  return headings
 }
 
 /** Extract all links (deduped by url) */

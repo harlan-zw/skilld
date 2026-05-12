@@ -50,28 +50,6 @@ export interface SyncHooks {
   'warn': (info: { spec?: string, message: string }) => void
 }
 
-export const SYNC_HOOK_NAMES: ReadonlyArray<keyof SyncHooks> = [
-  'resolve:start',
-  'resolve:progress',
-  'resolve:done',
-  'resolve:failed',
-  'dist:downloading',
-  'fetch:start',
-  'fetch:progress',
-  'fetch:done',
-  'index:start',
-  'index:progress',
-  'index:done',
-  'base:done',
-  'sections:cached',
-  'enhance:start',
-  'enhance:progress',
-  'enhance:done',
-  'enhance:failed',
-  'shipped:installed',
-  'warn',
-]
-
 export interface CreateSyncRunOptions {
   cwd: string
   resolver: PackageResolver

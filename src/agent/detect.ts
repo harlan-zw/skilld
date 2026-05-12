@@ -5,7 +5,7 @@
 import type { AgentType } from './types.ts'
 import { spawnSync } from 'node:child_process'
 import { isWindows } from 'std-env'
-import { agents } from './registry.ts'
+import { agents } from './targets/index.ts'
 
 /**
  * Detect which agents are installed on the system

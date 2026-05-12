@@ -86,13 +86,6 @@ export function parseSkillInput(input: string): SkillSource {
 }
 
 /**
- * Parse multiple CLI input tokens, classifying each.
- */
-export function parseSkillInputs(inputs: string[]): SkillSource[] {
-  return inputs.map(parseSkillInput)
-}
-
-/**
  * Resolve a CLI input to the bare package/skill name used for lookup in the lockfile.
  * Strips `npm:` / `gh:` prefixes. Returns null for curator/collection (not addressable
  * as a single skill name).

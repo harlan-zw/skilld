@@ -9,10 +9,10 @@ import type { ResolvedPackage } from './types.ts'
 import { spawnSync } from 'node:child_process'
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { extractBranchHint, parseGitHubUrl } from '../core/url.ts'
+import { parseGitHubUrl } from '../core/url.ts'
 import { getGitHubToken, ghApi, isKnownPrivateRepo, markRepoPrivate } from './github-common.ts'
 import { fetchGitDocs } from './github-docs.ts'
-import { fetchUnghReleases, findGitTag } from './github-tags.ts'
+import { fetchUnghReleases } from './github-tags.ts'
 import { isGhAvailable } from './issues.ts'
 import { fetchLlmsUrl } from './llms.ts'
 import { getDocOverride } from './package-registry.ts'
@@ -172,72 +172,6 @@ export async function fetchReadme(owner: string, repo: string, subdir?: string, 
   }
 
   return null
-}
-
-export interface GitSourceResult {
-  /** URL pattern for fetching source */
-  baseUrl: string
-  /** Git ref (tag) used */
-  ref: string
-  /** List of source file paths relative to repo root */
-  files: string[]
-}
-
-const SOURCE_EXTENSIONS = new Set([
-  '.ts',
-  '.tsx',
-  '.mts',
-  '.cts',
-  '.js',
-  '.jsx',
-  '.mjs',
-  '.cjs',
-  '.vue',
-  '.svelte',
-  '.astro',
-])
-
-const EXCLUDE_PATTERNS = [
-  /\.test\./,
-  /\.spec\./,
-  /\.d\.ts$/,
-  /__tests__/,
-  /__mocks__/,
-  /\.config\./,
-  /fixtures?\//,
-]
-
-function filterSourceFiles(files: string[]): string[] {
-  return files.filter((path) => {
-    if (!path.startsWith('src/'))
-      return false
-
-    const ext = path.slice(path.lastIndexOf('.'))
-    if (!SOURCE_EXTENSIONS.has(ext))
-      return false
-    if (EXCLUDE_PATTERNS.some(p => p.test(path)))
-      return false
-
-    return true
-  })
-}
-
-/** Fetch source files from GitHub repo's src/ folder */
-export async function fetchGitSource(owner: string, repo: string, version: string, packageName?: string, repoUrl?: string): Promise<GitSourceResult | null> {
-  const branchHint = repoUrl ? extractBranchHint(repoUrl) : undefined
-  const tag = await findGitTag(owner, repo, version, packageName, branchHint)
-  if (!tag)
-    return null
-
-  const files = filterSourceFiles(tag.files)
-  if (files.length === 0)
-    return null
-
-  return {
-    baseUrl: `https://raw.githubusercontent.com/${owner}/${repo}/${tag.ref}`,
-    ref: tag.ref,
-    files,
-  }
 }
 
 /** Fetch README content from ungh:// pseudo-URL, file:// URL, or regular URL */

@@ -51,13 +51,6 @@ export function invalidatePackageJson(pkgPath: string): void {
   cache.delete(pkgPath)
 }
 
-/**
- * Clear all cached entries. Useful in tests.
- */
-export function clearPackageJsonCache(): void {
-  cache.clear()
-}
-
 // ── JSON editing helpers ───────────────────────────────────────
 
 /**
@@ -69,14 +62,6 @@ export function editJsonProperty(raw: string, path: (string | number)[], value: 
   const edits = modify(raw, path, value, {
     formattingOptions: { tabSize: opts.tabSize!, insertSpaces: opts.insertSpaces! },
   })
-  return applyEdits(raw, edits)
-}
-
-/**
- * Remove a value at a JSON path, preserving all surrounding formatting.
- */
-export function removeJsonProperty(raw: string, path: (string | number)[]): string {
-  const edits = modify(raw, path, undefined, {})
   return applyEdits(raw, edits)
 }
 

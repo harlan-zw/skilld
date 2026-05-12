@@ -1,7 +1,7 @@
 import type { SkillContext } from '../../agent/skill-builder.ts'
 import type { FeaturesConfig } from '../../core/config.ts'
 import type { IndexDoc } from '../../sources/content-resolver.ts'
-import type { ResolvedPackage, ResolveStep } from '../../sources/index.ts'
+import type { ResolvedPackage } from '../../sources/index.ts'
 import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'pathe'
 import { createReferenceCache } from '../../cache/index.ts'
@@ -16,17 +16,6 @@ import {
 import { resolveTimelineReferences } from '../../sources/timeline-resolver.ts'
 
 export type { IndexDoc } from '../../sources/content-resolver.ts'
-
-export const RESOLVE_STEP_LABELS: Record<ResolveStep, string> = {
-  'npm': 'npm registry',
-  'github-docs': 'GitHub docs',
-  'github-meta': 'GitHub meta',
-  'github-search': 'GitHub search',
-  'readme': 'README',
-  'llms.txt': 'llms.txt',
-  'crawl': 'website crawl',
-  'local': 'node_modules',
-}
 
 export async function findRelatedSkills(packageName: string, skillsDir: string): Promise<string[]> {
   const related: string[] = []
@@ -196,8 +185,6 @@ export async function prepareSkillReferences(opts: {
 
   return { hasChangelog, shippedDocs, pkgFiles, relatedSkills }
 }
-
-export { resolveLocalDep } from '../../sources/local-dep.ts'
 
 export interface BuildSkillContextOpts {
   packageName: string
