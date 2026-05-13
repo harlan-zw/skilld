@@ -1,5 +1,6 @@
 import type { OptimizeModel } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { getOAuthProviderList, loginOAuthProvider, logoutOAuthProvider } from '../agent/clis/pi-ai.ts'
@@ -14,7 +15,7 @@ import { getProjectState } from '../core/skills.ts'
 export async function configCommand(): Promise<void> {
   const initConfig = readConfig()
   const agentId = initConfig.agent || detectTargetAgent() || undefined
-  const cyan = (s: string) => `\x1B[36m${s}\x1B[90m`
+  const cyan = (s: string) => styleText('cyan', s)
   const modelLabel = initConfig.skipLlm
     ? 'skip'
     : initConfig.model
@@ -23,7 +24,7 @@ export async function configCommand(): Promise<void> {
   const agentLabel = agentId && agents[agentId as keyof typeof agents]
     ? cyan(agents[agentId as keyof typeof agents].displayName)
     : 'auto-detect'
-  p.note(`\x1B[90mFetch docs → Enhance with ${modelLabel} → Install to ${agentLabel}\x1B[0m`, 'How skilld works')
+  p.note(styleText('gray', `Fetch docs → Enhance with ${modelLabel} → Install to ${agentLabel}`), 'How skilld works')
 
   await menuLoop({
     message: 'Settings',
@@ -124,7 +125,7 @@ async function configureOAuth(): Promise<void> {
       return providers.map(pr => ({
         label: pr.name,
         value: pr.id,
-        hint: pr.loggedIn ? '\x1B[32mconnected\x1B[0m' : 'not connected',
+        hint: pr.loggedIn ? styleText('green', 'connected') : 'not connected',
       }))
     },
     onSelect: async (providerId) => {
@@ -154,9 +155,9 @@ async function configureOAuth(): Promise<void> {
       const success = await loginOAuthProvider(providerId as string, {
         onAuth: (url, instructions) => {
           spinner.stop('Open this URL in your browser:')
-          p.log.info(`  \x1B[36m${url}\x1B[0m`)
+          p.log.info(`  ${styleText('cyan', url)}`)
           if (instructions)
-            p.log.info(`  \x1B[90m${instructions}\x1B[0m`)
+            p.log.info(`  ${styleText('gray', instructions)}`)
           spinner.start('Waiting for authentication...')
         },
         onPrompt: async (message, placeholder) => {

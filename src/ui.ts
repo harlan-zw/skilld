@@ -87,6 +87,7 @@
 // minMs=1500   Minimum animation duration before work result shows
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { styleText } from 'node:util'
 import logUpdate from 'log-update'
 import { version } from './version.ts'
 
@@ -192,8 +193,8 @@ export async function brandLoader<T>(work: () => Promise<T>, minMs = 1500): Prom
     return work()
 
   const name = '\x1B[1m\x1B[38;2;255;255;255mskilld\x1B[0m'
-  const verStr = `\x1B[2mv${version}\x1B[0m`
-  const status = '\x1B[2mSetting up your environment\x1B[0m'
+  const verStr = styleText('dim', `v${version}`)
+  const status = styleText('dim', 'Setting up your environment')
   const start = Date.now()
 
   const sub = (raw: string) => raw.replace('%NAME%', name).replace('%VER%', verStr)

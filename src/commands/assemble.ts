@@ -6,6 +6,7 @@
 
 import type { SkillSection } from '../agent/index.ts'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
@@ -120,7 +121,7 @@ function assembleDir(targetDir: string, cwd: string): void {
   }
 
   for (const w of warnings)
-    p.log.warn(`\x1B[33m${w}\x1B[0m`)
+    p.log.warn(styleText('yellow', w))
 
   // Wrap each section with comment markers
   const wrappedSections: Array<{ section: SkillSection, wrapped: string }> = []

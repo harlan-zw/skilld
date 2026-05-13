@@ -195,18 +195,9 @@ describe('normalizeScores', () => {
 })
 
 describe('scoreLabel', () => {
-  it('returns green for >= 70', () => {
+  it('returns score with percent suffix', () => {
     expect(scoreLabel(100)).toContain('100%')
-    expect(scoreLabel(100)).toContain('\x1B[32m')
-  })
-
-  it('returns yellow for >= 40', () => {
     expect(scoreLabel(50)).toContain('50%')
-    expect(scoreLabel(50)).toContain('\x1B[33m')
-  })
-
-  it('returns dim for < 40', () => {
     expect(scoreLabel(20)).toContain('20%')
-    expect(scoreLabel(20)).toContain('\x1B[90m')
   })
 })

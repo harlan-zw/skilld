@@ -1,4 +1,5 @@
 import type { OptimizeModel } from '../../agent/index.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { promptForAgent, resolveAgent } from '../../cli/agent-prompt.ts'
@@ -84,7 +85,7 @@ export const updateCommandDef = defineCommand({
       for (const r of raw) {
         const name = resolveSkillName(r)
         if (!name) {
-          p.log.warn(`Cannot update \x1B[36m${r}\x1B[0m: curator/collection inputs are not addressable here.`)
+          p.log.warn(`Cannot update ${styleText('cyan', r)}: curator/collection inputs are not addressable here.`)
           continue
         }
         packages.push(name)

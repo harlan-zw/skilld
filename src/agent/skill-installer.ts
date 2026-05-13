@@ -15,6 +15,7 @@
 import type { SkillInfo } from '../core/lockfile.ts'
 import type { AgentType } from './index.ts'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { join, relative } from 'pathe'
 import { isInteractive } from '../cli/env.ts'
@@ -212,10 +213,10 @@ export async function ensureGitignore(skillsDir: string, cwd: string, isGlobal: 
 
   const relSkillsDir = relative(cwd, skillsDir) || '.'
   p.log.info(
-    `\x1B[1mGit guidance:\x1B[0m\n`
-    + `  \x1B[32m✓\x1B[0m Commit: \x1B[36m${relSkillsDir}/*/SKILL.md\x1B[0m\n`
-    + `  \x1B[32m✓\x1B[0m Commit: \x1B[36m${relSkillsDir}/skilld-lock.yaml\x1B[0m\n`
-    + `  \x1B[31m✗\x1B[0m Ignore: \x1B[36m${pattern}\x1B[0m \x1B[90m(recreated by \`skilld install\`)\x1B[0m`,
+    `${styleText('bold', 'Git guidance:')}\n`
+    + `  ${styleText('green', '✓')} Commit: ${styleText('cyan', `${relSkillsDir}/*/SKILL.md`)}\n`
+    + `  ${styleText('green', '✓')} Commit: ${styleText('cyan', `${relSkillsDir}/skilld-lock.yaml`)}\n`
+    + `  ${styleText('red', '✗')} Ignore: ${styleText('cyan', pattern)} ${styleText('gray', '(recreated by `skilld install`)')}`,
   )
 
   const add = await p.confirm({
@@ -285,8 +286,8 @@ export async function ensureAgentInstructions(agent: AgentType, cwd: string, isG
       `This tells your agent to check installed skills before making\n`
       + `code changes. Without it, skills are available but may not\n`
       + `activate automatically.\n`
-      + `\n`
-      + `\x1B[90m${getMdcSkillInstructions(agent)}\x1B[0m`,
+      + `\n${
+        styleText('gray', getMdcSkillInstructions(agent))}`,
       `Create ${agentConfig.instructionFile}`,
     )
 
@@ -328,8 +329,8 @@ export async function ensureAgentInstructions(agent: AgentType, cwd: string, isG
     `This tells your agent to check installed skills before making\n`
     + `code changes. Without it, skills are available but may not\n`
     + `activate automatically.\n`
-    + `\n`
-    + `\x1B[90m${getSkillInstructions(agent).replace(/\n/g, '\n')}\x1B[0m`,
+    + `\n${
+      styleText('gray', getSkillInstructions(agent).replace(/\n/g, '\n'))}`,
     `${action} ${agentConfig.instructionFile}`,
   )
 

@@ -1,5 +1,6 @@
 import type { AgentType, OptimizeModel } from '../../agent/index.ts'
 import type { GitSkillSource } from '../../sources/git-skills.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { promptForAgent, resolveAgent } from '../../cli/agent-prompt.ts'
@@ -73,7 +74,7 @@ export const addCommandDef = defineCommand({
           crateSpecs.push(source.version ? `crate:${source.package}@${source.version}` : `crate:${source.package}`)
           break
         case 'bare':
-          p.log.warn(`Bare names are deprecated. Use \x1B[36mnpm:${source.package}\x1B[0m instead.`)
+          p.log.warn(`Bare names are deprecated. Use ${styleText('cyan', `npm:${source.package}`)} instead.`)
           npmEntries.push({ name: source.package, spec: source.tag ? `${source.package}@${source.tag}` : source.package })
           break
         case 'curator':
@@ -117,7 +118,7 @@ export const addCommandDef = defineCommand({
       for (const entry of dedupedEntries) {
         const result = await syncRegistrySkill({ packageName: entry.name, agent, cwd })
         if (result) {
-          p.log.success(`Installed \x1B[36m${result.name}\x1B[0m from registry`)
+          p.log.success(`Installed ${styleText('cyan', result.name)} from registry`)
         }
         else {
           fallbackPackages.push(entry.spec)

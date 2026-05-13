@@ -1,5 +1,6 @@
 import type { AgentType } from '../agent/index.ts'
 import type { ProjectState } from '../core/skills.ts'
+import { styleText } from 'node:util'
 import { join } from 'pathe'
 import { agents, detectInstalledAgents, getAgentVersion, getModelName } from '../agent/index.ts'
 import { readPackageJsonSafe } from '../core/package-json.ts'
@@ -54,10 +55,10 @@ export function getLastSynced(state: ProjectState): string | null {
 }
 
 export function introLine({ state, generators, modelId, agentId }: IntroOptions): string {
-  const name = '\x1B[1m\x1B[35mskilld\x1B[0m'
-  const ver = `\x1B[90mv${version}\x1B[0m`
+  const name = styleText(['bold', 'magenta'], 'skilld')
+  const ver = styleText('gray', `v${version}`)
   const lastSynced = getLastSynced(state)
-  const synced = lastSynced ? ` · \x1B[90msynced ${lastSynced}\x1B[0m` : ''
+  const synced = lastSynced ? ` · ${styleText('gray', `synced ${lastSynced}`)}` : ''
 
   const parts: string[] = []
   if (modelId)
@@ -67,7 +68,7 @@ export function introLine({ state, generators, modelId, agentId }: IntroOptions)
   if (agentId && agents[agentId as AgentType])
     parts.push(agents[agentId as AgentType].displayName)
   const statusLine = parts.length > 0
-    ? `\n\x1B[90m↳ ${parts.join(' → ')}\x1B[0m`
+    ? `\n${styleText('gray', `↳ ${parts.join(' → ')}`)}`
     : ''
 
   return `${name} ${ver}${synced}${statusLine}`
@@ -76,9 +77,9 @@ export function introLine({ state, generators, modelId, agentId }: IntroOptions)
 export function formatStatus(synced: number, outdated: number): string {
   const parts: string[] = []
   if (synced > 0)
-    parts.push(`\x1B[32m${synced} synced\x1B[0m`)
+    parts.push(styleText('green', `${synced} synced`))
   if (outdated > 0)
-    parts.push(`\x1B[33m${outdated} outdated\x1B[0m`)
+    parts.push(styleText('yellow', `${outdated} outdated`))
   return `Skills: ${parts.join(' · ')}`
 }
 

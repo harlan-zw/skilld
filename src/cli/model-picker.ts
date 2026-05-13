@@ -1,23 +1,23 @@
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 
 export const OAUTH_NOTE
-  = '\x1B[33m⚠\x1B[0m  OAuth providers are disabled.\n'
-    + '\n'
-    + 'Consumer subscription OAuth impersonates official CLI clients and\n'
-    + 'violates provider Terms of Service, risking account bans.\n'
-    + '\n'
-    + 'Use API keys or native CLI tools instead:\n'
-    + '  \x1B[36mANTHROPIC_API_KEY\x1B[0m / \x1B[36mclaude\x1B[0m CLI\n'
-    + '  \x1B[36mOPENAI_API_KEY\x1B[0m   / \x1B[36mcodex\x1B[0m CLI\n'
-    + '  \x1B[36mGEMINI_API_KEY\x1B[0m   / \x1B[36mgemini\x1B[0m CLI'
+  = `${styleText('yellow', '⚠')}  OAuth providers are disabled.\n`
+    + `\n`
+    + `Consumer subscription OAuth impersonates official CLI clients and\n`
+    + `violates provider Terms of Service, risking account bans.\n`
+    + `\n`
+    + `Use API keys or native CLI tools instead:\n`
+    + `  ${styleText('cyan', 'ANTHROPIC_API_KEY')} / ${styleText('cyan', 'claude')} CLI\n`
+    + `  ${styleText('cyan', 'OPENAI_API_KEY')}   / ${styleText('cyan', 'codex')} CLI\n`
+    + `  ${styleText('cyan', 'GEMINI_API_KEY')}   / ${styleText('cyan', 'gemini')} CLI`
 
-export const NO_MODELS_MESSAGE = 'No enhancement models detected.\n'
-  + '  \x1B[90mSkills work fine without this, you get raw docs, issues, and types.\n'
-  + '  Enhancement compresses them into a concise cheat sheet with gotchas.\x1B[0m\n'
-  + '\n'
-  + '  To connect a model (optional):\n'
-  + '  1. Set an env var: ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY\n'
-  + '  2. Install a CLI tool: \x1B[36mclaude\x1B[0m, \x1B[36mgemini\x1B[0m, or \x1B[36mcodex\x1B[0m (restart wizard after)'
+export const NO_MODELS_MESSAGE = `No enhancement models detected.\n`
+  + `  ${styleText('gray', 'Skills work fine without this, you get raw docs, issues, and types.\n  Enhancement compresses them into a concise cheat sheet with gotchas.')}\n`
+  + `\n`
+  + `  To connect a model (optional):\n`
+  + `  1. Set an env var: ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY\n`
+  + `  2. Install a CLI tool: ${styleText('cyan', 'claude')}, ${styleText('cyan', 'gemini')}, or ${styleText('cyan', 'codex')} (restart wizard after)`
 
 export function groupModelsByProvider<T extends { provider: string, providerName: string, vendorGroup?: string }>(models: T[]): Map<string, { name: string, models: T[] }> {
   const byVendor = new Map<string, { name: string, models: T[] }>()

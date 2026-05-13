@@ -1,6 +1,7 @@
 import type { AgentType, OptimizeModel } from '../agent/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import { execSync } from 'node:child_process'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { getOAuthProviderList, loginOAuthProvider } from '../agent/clis/pi-ai.ts'
@@ -37,26 +38,23 @@ export async function runWizard(opts: WizardOptions = {}): Promise<boolean> {
   const agentLabel = opts.agent ? agents[opts.agent].displayName : null
   const skillsDir = opts.agent ? agents[opts.agent].skillsDir : '.claude/skills'
   const agentLine = agentLabel
-    ? `\n\x1B[90mTarget agent: ${agentLabel}\x1B[0m`
+    ? `\n${styleText('gray', `Target agent: ${agentLabel}`)}`
     : ''
 
   p.note(
     `Your AI agent reads docs from its training data - but APIs change,\n`
     + `versions drift, and patterns go stale. Skilld fixes this.\n`
     + `\n`
-    + `It generates a \x1B[1mSKILL.md\x1B[0m - a markdown reference card built from\n`
-    + `the \x1B[1mactual docs, issues, and release notes\x1B[0m for the exact\n`
+    + `It generates a ${styleText('bold', 'SKILL.md')} - a markdown reference card built from\n`
+    + `the ${styleText('bold', 'actual docs, issues, and release notes')} for the exact\n`
     + `package versions in your project. Your agent reads this file\n`
     + `every session - no hallucinated APIs.\n`
     + `\n`
-    + `\x1B[1mHow it works:\x1B[0m\n`
+    + `${styleText('bold', 'How it works:')}\n`
     + `  1. Fetch docs, issues, and types for your packages\n`
     + `  2. Optionally compress with an LLM into a concise cheat sheet\n`
     + `\n`
-    + `\x1B[90mExample: \`skilld add vue\` creates ${skillsDir}/vue-skilld/SKILL.md\n`
-    + `Your agent then knows the right APIs, gotchas, and patterns\n`
-    + `for your exact version.\x1B[0m${
-      agentLine}`,
+    + `${styleText('gray', `Example: \`skilld add vue\` creates ${skillsDir}/vue-skilld/SKILL.md\nYour agent then knows the right APIs, gotchas, and patterns\nfor your exact version.`)}${agentLine}`,
     'Welcome to skilld',
   )
 
@@ -69,8 +67,8 @@ export async function runWizard(opts: WizardOptions = {}): Promise<boolean> {
   }
   else {
     p.log.info(
-      '\x1B[90mGitHub CLI not installed — issues and discussions disabled.\n'
-      + '  Install later to enable: \x1B[36mhttps://cli.github.com\x1B[0m',
+      `${styleText('gray', 'GitHub CLI not installed — issues and discussions disabled.')}\n`
+      + `  Install later to enable: ${styleText('cyan', 'https://cli.github.com')}`,
     )
   }
 
@@ -106,17 +104,16 @@ export async function runWizard(opts: WizardOptions = {}): Promise<boolean> {
 
   // Enhancement model - optional, independent of target agent
   p.note(
-    'An LLM can optionally summarize raw docs into a focused reference\n'
-    + 'highlighting best practices, gotchas, and migrations.\n'
-    + '\n'
-    + '\x1B[1mWithout LLM:\x1B[0m  ~2 KB skill with package metadata, types, and links\n'
-    + '\x1B[1mWith LLM:\x1B[0m     ~5 KB skill with curated gotchas, patterns, and migration notes\n'
-    + '\n'
-    + '\x1B[1mThis is a one-time build step\x1B[0m - it generates the SKILL.md, then your\n'
-    + 'coding agent reads the result every session. Can be a different model.\n'
-    + '\n'
-    + '\x1B[90mWorks with API keys (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY)\n'
-    + 'or CLI tools (claude, gemini, codex).\x1B[0m',
+    `An LLM can optionally summarize raw docs into a focused reference\n`
+    + `highlighting best practices, gotchas, and migrations.\n`
+    + `\n`
+    + `${styleText('bold', 'Without LLM:')}  ~2 KB skill with package metadata, types, and links\n`
+    + `${styleText('bold', 'With LLM:')}     ~5 KB skill with curated gotchas, patterns, and migration notes\n`
+    + `\n`
+    + `${styleText('bold', 'This is a one-time build step')} - it generates the SKILL.md, then your\n`
+    + `coding agent reads the result every session. Can be a different model.\n`
+    + `\n`
+    + `${styleText('gray', 'Works with API keys (ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENAI_API_KEY)\nor CLI tools (claude, gemini, codex).')}`,
     'Enhancement model (optional)',
   )
 
@@ -207,9 +204,9 @@ export async function runWizard(opts: WizardOptions = {}): Promise<boolean> {
 
   if (opts.showOutro !== false) {
     p.note(
-      'Run \x1B[36mskilld add <pkg>\x1B[0m to generate skills for specific packages\n'
-      + 'Run \x1B[36mskilld\x1B[0m to scan your project and pick packages interactively\n'
-      + 'Run \x1B[36mskilld config\x1B[0m to change settings later',
+      `Run ${styleText('cyan', 'skilld add <pkg>')} to generate skills for specific packages\n`
+      + `Run ${styleText('cyan', 'skilld')} to scan your project and pick packages interactively\n`
+      + `Run ${styleText('cyan', 'skilld config')} to change settings later`,
       'Setup complete',
     )
   }
@@ -238,9 +235,9 @@ async function wizardConnectProvider(): Promise<void> {
   const success = await loginOAuthProvider(provider as string, {
     onAuth: (url, instructions) => {
       spinner.stop('Open this URL in your browser:')
-      p.log.info(`  \x1B[36m${url}\x1B[0m`)
+      p.log.info(`  ${styleText('cyan', url)}`)
       if (instructions)
-        p.log.info(`  \x1B[90m${instructions}\x1B[0m`)
+        p.log.info(`  ${styleText('gray', instructions)}`)
       spinner.start('Waiting for authentication...')
     },
     onPrompt: async (message, placeholder) => {

@@ -10,6 +10,7 @@
 import type { AgentType, OptimizeModel } from '../agent/index.ts'
 import type { ReadyState } from './sync/phases.ts'
 import type { PackageState, ParallelRender } from './sync/ui/parallel.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import logUpdate from 'log-update'
 import pLimit from 'p-limit'
@@ -148,7 +149,7 @@ export async function syncPackagesParallel(config: ParallelSyncConfig): Promise<
   p.log.success(`${pastVerb} ${ready.length} base skills${shippedCount.length > 0 ? ` (${shippedCount.length} shipped)` : ''}`)
 
   for (const w of aggregatedWarnings)
-    p.log.warn(`\x1B[33m${w}\x1B[0m`)
+    p.log.warn(styleText('yellow', w))
   for (const { spec, reason } of errors)
     p.log.error(`  ${spec}: ${reason}`)
 

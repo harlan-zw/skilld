@@ -1,4 +1,5 @@
 import type { AgentType } from '../agent/index.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { agents, detectInstalledAgents, detectProjectAgents, detectTargetAgent } from '../agent/index.ts'
 import { readConfig, updateConfig } from '../core/config.ts'
@@ -95,7 +96,7 @@ export async function promptForAgent(): Promise<AgentType | 'none' | null> {
         ? `Found ${installed.map(t => agents[t].displayName).join(', ')} but couldn't determine which to use`
         : 'No agents auto-detected'
     const crossNote = sharedIds.length > 1
-      ? `\n  \x1B[90mTip: Picking Claude Code shares skills with ${sharedIds.filter(id => id !== 'claude-code').map(id => agents[id].displayName).join(', ')} automatically.\x1B[0m`
+      ? `\n  ${styleText('gray', `Tip: Picking Claude Code shares skills with ${sharedIds.filter(id => id !== 'claude-code').map(id => agents[id].displayName).join(', ')} automatically.`)}`
       : ''
     p.log.warn(`${hint}\n  Pick the agent you actively code with.${crossNote}`)
   }

@@ -1,4 +1,5 @@
 import type { StreamProgress } from './types.ts'
+import { styleText } from 'node:util'
 import { TOOL_NAMES } from './types.ts'
 
 const STATIC_REGEX_1 = /^\[(?:starting|retrying|cached)/
@@ -20,7 +21,7 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
   function emit(msg: string) {
     if (msg === lastMsg) {
       repeatCount++
-      log.message(`${msg} \x1B[90m(+${repeatCount})\x1B[0m`)
+      log.message(`${msg} ${styleText('gray', `(+${repeatCount})`)}`)
     }
     else {
       lastMsg = msg
@@ -37,10 +38,10 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       if (now - last < TEXT_THROTTLE_MS)
         return
       lastTextEmit.set(key, now)
-      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+      const prefix = section ? `${styleText('gray', `[${section}]`)} ` : ''
       // Count bullet items in accumulated text for meaningful progress
       const items = text ? (text.match(/^- (?:BREAKING|DEPRECATED|NEW|CHANGED|REMOVED|Use |Do |Set |Add |Avoid |Always |Never |Prefer |Check |Ensure )/gm)?.length ?? 0) : 0
-      emit(items > 0 ? `${prefix}Writing... \x1B[90m(${items} items)\x1B[0m` : `${prefix}Writing...`)
+      emit(items > 0 ? `${prefix}Writing... ${styleText('gray', `(${items} items)`)}` : `${prefix}Writing...`)
       return
     }
     if (type !== 'reasoning' || !chunk.startsWith('['))
@@ -48,7 +49,7 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
 
     // Handle status messages like [starting...], [retrying...], [cached]
     if (STATIC_REGEX_1.test(chunk)) {
-      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+      const prefix = section ? `${styleText('gray', `[${section}]`)} ` : ''
       emit(`${prefix}${chunk.slice(1, -1)}`)
       return
     }
@@ -65,12 +66,12 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       const rawName = names[i]!
       const hint = hints[i] ?? hints[0] ?? ''
       const verb = TOOL_NAMES[rawName]?.verb ?? rawName
-      const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
+      const prefix = section ? `${styleText('gray', `[${section}]`)} ` : ''
 
       if ((rawName === 'Bash' || rawName === 'run_shell_command') && hint) {
         const searchMatch = hint.match(STATIC_REGEX_3)
         if (searchMatch) {
-          emit(`${prefix}Searching \x1B[36m"${searchMatch[1]}"\x1B[0m`)
+          emit(`${prefix}Searching ${styleText('cyan', `"${searchMatch[1]}"`)}`)
         }
         else if (hint.includes('skilld validate')) {
           emit(`${prefix}Validating...`)
@@ -82,7 +83,7 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       }
       else {
         const path = shortenPath(hint || '...')
-        emit(`${prefix}${verb} \x1B[90m${path}\x1B[0m`)
+        emit(`${prefix}${verb} ${styleText('gray', path)}`)
       }
     }
   }

@@ -5,6 +5,7 @@
 
 import type { Hookable } from 'hookable'
 import type { SyncHooks } from '../run.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { relative } from 'pathe'
 import { timedSpinner } from '../../../core/formatting.ts'
@@ -64,7 +65,7 @@ export function bindClackUi(hooks: Hookable<SyncHooks>, { cwd }: ClackUiOptions)
     indexSpinner = null
   })
   hooks.hook('warn', ({ message }) => {
-    p.log.warn(`\x1B[33m${message}\x1B[0m`)
+    p.log.warn(styleText('yellow', message))
   })
   hooks.hook('base:done', ({ skillDir, mode }) => {
     p.log.success(mode === 'update' ? `Updated skill: ${skillDir}` : `Created base skill: ${skillDir}`)
@@ -98,10 +99,10 @@ export function bindClackUi(hooks: Hookable<SyncHooks>, { cwd }: ClackUiOptions)
     if (info.debugLogsDir)
       p.log.info(`Debug logs: ${relative(cwd, info.debugLogsDir)}`)
     if (info.error)
-      p.log.warn(`\x1B[33mPartial failure: ${info.error}\x1B[0m`)
+      p.log.warn(styleText('yellow', `Partial failure: ${info.error}`))
     if (info.warnings) {
       for (const w of info.warnings)
-        p.log.warn(`\x1B[33m${w}\x1B[0m`)
+        p.log.warn(styleText('yellow', w))
     }
   })
   hooks.hook('enhance:failed', ({ error, rateLimited }) => {

@@ -1,6 +1,7 @@
 import type { AgentType } from '../agent/index.ts'
 import type { SkillInfo } from '../core/lockfile.ts'
 import { existsSync, readdirSync, statSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
@@ -105,10 +106,9 @@ function countRefDocs(skillDir: string): number {
   return count
 }
 
-// dim helper
-const dim = (s: string) => `\x1B[90m${s}\x1B[0m`
-const bold = (s: string) => `\x1B[1m${s}\x1B[0m`
-const green = (s: string) => `\x1B[32m${s}\x1B[0m`
+const dim = (s: string) => styleText('gray', s)
+const bold = (s: string) => styleText('bold', s)
+const green = (s: string) => styleText('green', s)
 
 function getLastSynced(): string | null {
   let latest: Date | null = null

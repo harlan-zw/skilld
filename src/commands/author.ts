@@ -3,6 +3,7 @@ import type { ReferenceCache } from '../cache/index.ts'
 import type { FeaturesConfig } from '../core/config.ts'
 import type { LlmConfig } from './llm-prompts.ts'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
@@ -403,7 +404,7 @@ async function authorCommand(opts: {
   const monoPackages = detectMonorepoPackages(cwd)
 
   if (monoPackages && monoPackages.length > 0) {
-    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m author \x1B[90m(monorepo: ${monoPackages.length} packages)\x1B[0m`)
+    p.intro(`${styleText(['bold', 'magenta'], 'skilld')} author ${styleText('gray', `(monorepo: ${monoPackages.length} packages)`)}`)
 
     if (opts.out) {
       p.log.error('--out is not supported in monorepo mode (each package gets its own skills/ directory)')
@@ -439,7 +440,7 @@ async function authorCommand(opts: {
     const results: Array<{ name: string, outDir: string }> = []
 
     for (const pkg of selected) {
-      p.log.step(`\x1B[36m${pkg.name}\x1B[0m@${pkg.version}`)
+      p.log.step(`${styleText('cyan', pkg.name)}@${pkg.version}`)
       const outDir = await authorSinglePackage({
         packageDir: pkg.dir,
         packageName: pkg.name,
@@ -476,7 +477,7 @@ async function authorCommand(opts: {
 
   const { name: packageName, version, repoUrl } = pkgInfo
 
-  p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m author \x1B[36m${packageName}\x1B[0m@${version}`)
+  p.intro(`${styleText(['bold', 'magenta'], 'skilld')} author ${styleText('cyan', packageName)}@${version}`)
 
   const llmConfig = await resolveLlmConfig(opts.model, opts.yes)
   if (llmConfig === null) {
@@ -505,9 +506,9 @@ async function authorCommand(opts: {
 function printConsumerGuidance(packageNames: string[]): void {
   const names = packageNames.join(', ')
   p.log.info(
-    `\x1B[90mConsumers get ${packageNames.length > 1 ? 'these skills' : 'this skill'} automatically:\x1B[0m\n`
-    + `  \x1B[90m1. Install ${names} as a dependency\x1B[0m\n`
-    + `  \x1B[90m2. Run \x1B[36mskilld prepare\x1B[90m (or add to package.json: \x1B[36m"prepare": "skilld prepare"\x1B[90m)\x1B[0m`,
+    `${styleText('gray', `Consumers get ${packageNames.length > 1 ? 'these skills' : 'this skill'} automatically:`)}\n`
+    + `  ${styleText('gray', `1. Install ${names} as a dependency`)}\n`
+    + `  ${styleText('gray', '2. Run ')}${styleText('cyan', 'skilld prepare')}${styleText('gray', ' (or add to package.json: ')}${styleText('cyan', '"prepare": "skilld prepare"')}${styleText('gray', ')')}`,
   )
 }
 

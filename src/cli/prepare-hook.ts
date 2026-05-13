@@ -1,3 +1,4 @@
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { parseTree } from 'jsonc-parser'
 import { join } from 'pathe'
@@ -31,15 +32,15 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
 
   if (!isInteractive()) {
     p.log.info(
-      `\x1B[90mAdd to package.json scripts:\n`
-      + `  \x1B[36m"prepare": "${prepareCmd}"\x1B[0m\n`
-      + `  \x1B[90mRestores references and shipped skills on install.\x1B[0m`,
+      `${styleText('gray', 'Add to package.json scripts:')}\n`
+      + `  ${styleText('cyan', `"prepare": "${prepareCmd}"`)}\n`
+      + `  ${styleText('gray', 'Restores references and shipped skills on install.')}`,
     )
     return false
   }
 
   const confirmed = await p.confirm({
-    message: `Add \x1B[36m"prepare": "${prepareCmd}"\x1B[0m to package.json?`,
+    message: `Add ${styleText('cyan', `"prepare": "${prepareCmd}"`)} to package.json?`,
     initialValue: true,
   })
   if (p.isCancel(confirmed) || !confirmed)
@@ -57,7 +58,7 @@ export async function suggestPrepareHook(cwd: string = process.cwd()): Promise<b
 
     return editJsonProperty(patched, ['scripts', 'prepare'], prepareCmd)
   })
-  p.log.success('Added \x1B[36mskilld prepare\x1B[0m to package.json')
+  p.log.success(`Added ${styleText('cyan', 'skilld prepare')} to package.json`)
   return true
 }
 

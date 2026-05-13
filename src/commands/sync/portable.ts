@@ -1,5 +1,6 @@
 import type { AgentType, SkillSection } from '../../agent/index.ts'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { join, relative, resolve } from 'pathe'
 import {
@@ -89,7 +90,7 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
   })
   resSpin.stop('Resources ready')
   for (const w of resources.warnings)
-    p.log.warn(`\x1B[33m${w}\x1B[0m`)
+    p.log.warn(styleText('yellow', w))
 
   const prepared = await prepareSkillReferences({
     packageName,
@@ -183,5 +184,5 @@ export async function exportPortablePrompts(packageSpec: string, opts: {
 
   const promptFiles = sectionList.map(s => `PROMPT_${s}.md`).join(', ')
   const outputFileList = sectionList.map(s => SECTION_OUTPUT_FILES[s]).join(', ')
-  p.log.info(`Have your agent enhance the skill. Give it this prompt:\n\x1B[2m\x1B[3m  Read each prompt file (${promptFiles}) in ${relDir}/, read the\n  referenced files, then write your output to the matching file (${outputFileList}).\n  When done, run: skilld assemble\x1B[0m`)
+  p.log.info(`Have your agent enhance the skill. Give it this prompt:\n${styleText(['dim', 'italic'], `  Read each prompt file (${promptFiles}) in ${relDir}/, read the\n  referenced files, then write your output to the matching file (${outputFileList}).\n  When done, run: skilld assemble`)}`)
 }

@@ -4,6 +4,7 @@
 
 import type { Dirent } from 'node:fs'
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
@@ -104,7 +105,7 @@ function fmtBytes(n: number): string {
 }
 
 export function cacheStatsCommand(): void {
-  const dim = (s: string) => `\x1B[90m${s}\x1B[0m`
+  const dim = (s: string) => styleText('gray', s)
 
   const refs = dirEntries(REFERENCES_DIR)
   const repos = dirEntries(REPOS_DIR)
@@ -153,17 +154,17 @@ export const cacheCommandDef = defineCommand({
   },
   async run({ args }) {
     if (args.stats) {
-      p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m cache stats`)
+      p.intro(`${styleText(['bold', 'magenta'], 'skilld')} cache stats`)
       cacheStatsCommand()
       return
     }
     if (args.clean) {
-      p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m cache clean`)
+      p.intro(`${styleText(['bold', 'magenta'], 'skilld')} cache clean`)
       await cacheCleanCommand()
       return
     }
     // No flag: show usage
-    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m cache`)
+    p.intro(`${styleText(['bold', 'magenta'], 'skilld')} cache`)
     p.log.message('Usage:\n  skilld cache --clean   Remove expired cache entries\n  skilld cache --stats   Show cache disk usage')
   },
 })

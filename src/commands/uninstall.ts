@@ -1,5 +1,6 @@
 import type { AgentType } from '../agent/index.ts'
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join } from 'pathe'
@@ -326,7 +327,7 @@ export const uninstallCommandDef = defineCommand({
     ...sharedArgs,
   },
   async run({ args }) {
-    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m uninstall`)
+    p.intro(`${styleText(['bold', 'magenta'], 'skilld')} uninstall`)
     return uninstallCommand({
       scope: args.global ? 'all' : undefined,
       agent: args.agent as AgentType | undefined,

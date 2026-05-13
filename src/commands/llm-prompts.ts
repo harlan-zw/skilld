@@ -12,6 +12,7 @@
  */
 
 import type { CustomPrompt, OptimizeModel, SkillSection } from '../agent/index.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { getAvailableModels, getModelName } from '../agent/index.ts'
 import { maxItems, maxLines } from '../agent/prompts/optional/budget.ts'
@@ -59,7 +60,7 @@ export async function selectModel(skipPrompt: boolean): Promise<OptimizeModel | 
     if (config.model && available.some(m => m.id === config.model))
       return config.model
     if (config.model)
-      p.log.warn(`Configured model \x1B[36m${config.model}\x1B[0m is unavailable — using auto-selected fallback`)
+      p.log.warn(`Configured model ${styleText('cyan', config.model)} is unavailable — using auto-selected fallback`)
     return available.find(m => m.recommended)?.id ?? available[0]!.id
   }
 
@@ -181,7 +182,7 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
   }
   else {
     if (config.model)
-      p.log.warn(`Configured model \x1B[36m${config.model}\x1B[0m is unavailable — using auto-selected fallback`)
+      p.log.warn(`Configured model ${styleText('cyan', config.model)} is unavailable — using auto-selected fallback`)
     defaultModel = (available.find(m => m.recommended)?.id ?? available[0]!.id) as OptimizeModel
   }
 
@@ -216,7 +217,7 @@ export async function selectLlmConfig(presetModel?: OptimizeModel, message?: str
       : null
     const hint = [versionHint, ...ageParts].filter(Boolean).join(' · ')
     if (hint)
-      enhanceMessage = `Enhance SKILL.md? \x1B[90m(${hint})\x1B[0m`
+      enhanceMessage = `Enhance SKILL.md? ${styleText('gray', `(${hint})`)}`
 
     if (updateCtx.wasEnhanced && isSmallBump)
       defaultToSkip = true

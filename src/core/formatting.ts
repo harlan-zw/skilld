@@ -1,4 +1,5 @@
 import type { SearchSnippet } from '../retriv/index.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 
 const STATIC_REGEX_1 = /https?:\/\/github\.com\//
@@ -56,7 +57,7 @@ export function timedSpinner() {
     },
     stop(msg: string) {
       const elapsed = startedAt ? formatDuration(Date.now() - startedAt) : ''
-      spin.stop(elapsed ? `${msg} \x1B[90m[${elapsed}]\x1B[0m` : msg)
+      spin.stop(elapsed ? `${msg} ${styleText('gray', `[${elapsed}]`)}` : msg)
     },
   }
 }
@@ -67,13 +68,13 @@ export function highlightTerms(content: string, terms: string[]): string {
   // Sort by length desc to match longer terms first
   const sorted = terms.toSorted((a, b) => b.length - a.length)
   const pattern = new RegExp(`(${sorted.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi')
-  return content.replace(pattern, '\x1B[33m$1\x1B[0m')
+  return content.replace(pattern, (m: string) => styleText('yellow', m))
 }
 
 /** Format a normalized score (0-100) with color */
 export function scoreLabel(pct: number): string {
-  const color = pct >= 70 ? '\x1B[32m' : pct >= 40 ? '\x1B[33m' : '\x1B[90m'
-  return `${color}${pct}%\x1B[0m`
+  const color = pct >= 70 ? 'green' : pct >= 40 ? 'yellow' : 'gray'
+  return styleText(color, `${pct}%`)
 }
 
 /** Normalize raw cosine similarity scores to 0-100 relative to the best match */
@@ -88,7 +89,7 @@ export function normalizeScores(results: SearchSnippet[]): Map<SearchSnippet, nu
 export function formatSnippet(r: SearchSnippet, versions?: Map<string, string>, pct?: number): string {
   const refPath = `.claude/skills/${r.package}/.skilld/${r.source}`
   const lineRange = r.lineStart === r.lineEnd ? `L${r.lineStart}` : `L${r.lineStart}-${r.lineEnd}`
-  const score = pct != null ? scoreLabel(pct) : `\x1B[90m${r.score.toFixed(2)}\x1B[0m`
+  const score = pct != null ? scoreLabel(pct) : styleText('gray', r.score.toFixed(2))
   const version = versions?.get(r.package)
   const pkgLabel = version ? `${r.package}@${version}` : r.package
 
@@ -97,8 +98,8 @@ export function formatSnippet(r: SearchSnippet, versions?: Map<string, string>, 
   const highlighted = highlightTerms(r.content, r.highlights)
 
   return [
-    `${pkgLabel} ${score}${entityStr ? `  \x1B[36m${scopeStr}${entityStr}\x1B[0m` : ''}`,
-    `\x1B[90m${refPath}:${lineRange}\x1B[0m`,
+    `${pkgLabel} ${score}${entityStr ? `  ${styleText('cyan', `${scopeStr}${entityStr}`)}` : ''}`,
+    styleText('gray', `${refPath}:${lineRange}`),
     `  ${highlighted.replace(/\n/g, '\n  ')}`,
   ].join('\n')
 }

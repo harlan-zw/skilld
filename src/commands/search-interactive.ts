@@ -1,4 +1,5 @@
 import type { SearchFilter, SearchSnippet } from '../retriv/index.ts'
+import { styleText } from 'node:util'
 import { createLogUpdate } from 'log-update'
 import { formatCompactSnippet, highlightTerms, normalizeScores, sanitizeMarkdown, scoreLabel } from '../core/index.ts'
 import { closePool, openPool, SearchDepsUnavailableError, searchPooled } from '../retriv/index.ts'
@@ -33,7 +34,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
     else {
       msg = 'No docs indexed yet. Run `skilld add <package>` first.'
     }
-    process.stderr.write(`\x1B[33m${msg}\x1B[0m\n`)
+    process.stderr.write(`${styleText('yellow', msg)}\n`)
     return
   }
 
@@ -44,7 +45,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
   }
   catch (err) {
     if (err instanceof SearchDepsUnavailableError) {
-      process.stderr.write('\x1B[31mSearch requires native dependencies (sqlite-vec) that are not installed.\nInstall skilld globally or in a project to use search: npm i -g skilld\x1B[0m\n')
+      process.stderr.write(`${styleText('red', 'Search requires native dependencies (sqlite-vec) that are not installed.\nInstall skilld globally or in a project to use search: npm i -g skilld')}\n`)
       return
     }
     throw err
@@ -70,7 +71,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
     const f = FILTER_CYCLE[filterIndex]
     if (!f)
       return ''
-    return `\x1B[36m${f}:\x1B[0m`
+    return styleText('cyan', `${f}:`)
   }
 
   function render() {
@@ -78,39 +79,39 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
 
     // Title
     lines.push('')
-    lines.push(`  \x1B[1m${titleLabel}\x1B[0m`)
+    lines.push(`  ${styleText('bold', titleLabel)}`)
     lines.push('')
 
     // Input line
     const filterPrefix = getFilterLabel()
     const prefix = filterPrefix ? `${filterPrefix}` : ''
-    lines.push(`  \x1B[36m❯\x1B[0m ${prefix}${query}\x1B[7m \x1B[0m`)
+    lines.push(`  ${styleText('cyan', '❯')} ${prefix}${query}${styleText('inverse', ' ')}`)
 
     // Separator / spinner
     if (isSearching) {
-      const frame = SPINNER_FRAMES[spinFrame % SPINNER_FRAMES.length]
-      lines.push(`  \x1B[36m${frame}\x1B[0m \x1B[90mSearching…\x1B[0m`)
+      const frame = SPINNER_FRAMES[spinFrame % SPINNER_FRAMES.length]!
+      lines.push(`  ${styleText('cyan', frame)} ${styleText('gray', 'Searching…')}`)
     }
     else {
-      lines.push(`  \x1B[90m${'─'.repeat(Math.min(cols - 4, 40))}\x1B[0m`)
+      lines.push(`  ${styleText('gray', '─'.repeat(Math.min(cols - 4, 40)))}`)
     }
 
     // Results or empty state
     if (error) {
       lines.push('')
-      lines.push(`  \x1B[31m${error}\x1B[0m`)
+      lines.push(`  ${styleText('red', error)}`)
     }
     else if (query.length === 0) {
       lines.push('')
-      lines.push('  \x1B[90mType to search…\x1B[0m')
+      lines.push(`  ${styleText('gray', 'Type to search…')}`)
     }
     else if (query.length < 2 && !isSearching) {
       lines.push('')
-      lines.push('  \x1B[90mKeep typing…\x1B[0m')
+      lines.push(`  ${styleText('gray', 'Keep typing…')}`)
     }
     else if (results.length === 0 && !isSearching) {
       lines.push('')
-      lines.push('  \x1B[90mNo results\x1B[0m')
+      lines.push(`  ${styleText('gray', 'No results')}`)
     }
     else {
       lines.push('')
@@ -119,7 +120,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
       for (let i = 0; i < shown.length; i++) {
         const r = shown[i]!
         const selected = i === selectedIndex
-        const bullet = selected ? '\x1B[36m●\x1B[0m' : '\x1B[90m○\x1B[0m'
+        const bullet = selected ? styleText('cyan', '●') : styleText('gray', '○')
         const sc = scoreLabel(scores.get(r) ?? 0)
         const { title, path, preview } = formatCompactSnippet(r, cols)
         const highlighted = highlightTerms(preview, r.highlights)
@@ -128,12 +129,12 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
         const pkgLabel = ver ? `${r.package}@${ver}` : r.package
 
         if (selected) {
-          lines.push(`  ${bullet} \x1B[1m${pkgLabel}\x1B[0m ${sc}  \x1B[36m${title}\x1B[0m`)
-          lines.push(`    \x1B[90m${path}\x1B[0m`)
+          lines.push(`  ${bullet} ${styleText('bold', pkgLabel)} ${sc}  ${styleText('cyan', title)}`)
+          lines.push(`    ${styleText('gray', path)}`)
           lines.push(`    ${highlighted}`)
         }
         else {
-          lines.push(`  ${bullet} \x1B[90m${pkgLabel}\x1B[0m ${sc}  \x1B[90m${title}\x1B[0m`)
+          lines.push(`  ${bullet} ${styleText('gray', pkgLabel)} ${sc}  ${styleText('gray', title)}`)
         }
       }
     }
@@ -146,7 +147,7 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
     if (elapsed > 0 && !isSearching)
       parts.push(`${elapsed.toFixed(2)}s`)
     const footer = parts.length > 0 ? `${parts.join(' · ')}    ` : ''
-    lines.push(`  \x1B[90m${footer}↑↓ navigate  ↵ select  tab filter  esc quit\x1B[0m`)
+    lines.push(`  ${styleText('gray', `${footer}↑↓ navigate  ↵ select  tab filter  esc quit`)}`)
     lines.push('')
 
     logUpdate(lines.join('\n'))
@@ -245,8 +246,8 @@ export async function interactiveSearch(packageFilter?: string): Promise<void> {
       const rScores = normalizeScores(results)
       const out = [
         '',
-        `  \x1B[1m${rLabel}\x1B[0m ${scoreLabel(rScores.get(r) ?? 0)}`,
-        `  \x1B[90m${refPath}:${lineRange}\x1B[0m`,
+        `  ${styleText('bold', rLabel)} ${scoreLabel(rScores.get(r) ?? 0)}`,
+        `  ${styleText('gray', `${refPath}:${lineRange}`)}`,
         '',
         `  ${highlighted.replace(/\n/g, '\n  ')}`,
         '',

@@ -1,6 +1,7 @@
 import type { AgentType } from '../agent/index.ts'
 import type { ProjectState, SkillEntry } from '../core/skills.ts'
 import { existsSync, rmSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { unlinkSkillFromAgents } from '../agent/index.ts'
@@ -141,7 +142,7 @@ export const removeCommandDef = defineCommand({
             .map((s) => {
               const name = resolveSkillName(s)
               if (!name) {
-                p.log.warn(`Cannot remove \x1B[36m${s}\x1B[0m: curator/collection inputs are not addressable here.`)
+                p.log.warn(`Cannot remove ${styleText('cyan', s)}: curator/collection inputs are not addressable here.`)
                 return null
               }
               return name

@@ -5,6 +5,7 @@
 
 import type { Hookable } from 'hookable'
 import type { SyncHooks } from '../run.ts'
+import { styleText } from 'node:util'
 import logUpdate from 'log-update'
 import { formatDuration } from '../../../core/formatting.ts'
 
@@ -32,16 +33,17 @@ const STATUS_ICONS: Record<PackageStatus, string> = {
   error: '✗',
 }
 
-const STATUS_COLORS: Record<PackageStatus, string> = {
-  pending: '\x1B[90m',
-  resolving: '\x1B[36m',
-  downloading: '\x1B[36m',
-  embedding: '\x1B[36m',
-  exploring: '\x1B[34m',
-  thinking: '\x1B[35m',
-  generating: '\x1B[33m',
-  done: '\x1B[32m',
-  error: '\x1B[31m',
+type StyleColor = Parameters<typeof styleText>[0]
+const STATUS_COLORS: Record<PackageStatus, StyleColor> = {
+  pending: 'gray',
+  resolving: 'cyan',
+  downloading: 'cyan',
+  embedding: 'cyan',
+  exploring: 'blue',
+  thinking: 'magenta',
+  generating: 'yellow',
+  done: 'green',
+  error: 'red',
 }
 
 export interface ParallelRender {
@@ -53,22 +55,19 @@ export interface ParallelRender {
 export function renderParallel(r: ParallelRender): void {
   const maxNameLen = Math.max(...[...r.states.keys()].map(n => n.length), 20)
   const lines = [...r.states.values()].map((s) => {
-    const icon = STATUS_ICONS[s.status]
-    const color = STATUS_COLORS[s.status]
-    const reset = '\x1B[0m'
-    const dim = '\x1B[90m'
+    const icon = styleText(STATUS_COLORS[s.status], STATUS_ICONS[s.status])
     const name = s.name.padEnd(maxNameLen)
-    const version = s.version ? `${dim}${s.version}${reset} ` : ''
+    const version = s.version ? `${styleText('gray', s.version)} ` : ''
     const elapsed = (s.status === 'done' || s.status === 'error') && s.startedAt && s.completedAt
-      ? ` ${dim}(${formatDuration(s.completedAt - s.startedAt)})${reset}`
+      ? ` ${styleText('gray', `(${formatDuration(s.completedAt - s.startedAt)})`)}`
       : ''
-    const preview = s.streamPreview ? ` ${dim}${s.streamPreview}${reset}` : ''
-    return `  ${color}${icon}${reset} ${name} ${version}${s.message}${elapsed}${preview}`
+    const preview = s.streamPreview ? ` ${styleText('gray', s.streamPreview)}` : ''
+    return `  ${icon} ${name} ${version}${s.message}${elapsed}${preview}`
   })
 
   const doneCount = [...r.states.values()].filter(s => s.status === 'done').length
   const errorCount = [...r.states.values()].filter(s => s.status === 'error').length
-  const header = `\x1B[1m${r.verb} ${r.total} packages\x1B[0m (${doneCount} done${errorCount > 0 ? `, ${errorCount} failed` : ''})\n`
+  const header = `${styleText('bold', `${r.verb} ${r.total} packages`)} (${doneCount} done${errorCount > 0 ? `, ${errorCount} failed` : ''})\n`
 
   logUpdate(header + lines.join('\n'))
 }

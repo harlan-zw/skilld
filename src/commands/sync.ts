@@ -1,6 +1,7 @@
 import type { AgentType, OptimizeModel } from '../agent/index.ts'
 import type { ProjectState } from '../core/skills.ts'
 import type { ResolveAttempt } from '../sources/index.ts'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { relative } from 'pathe'
 import { detectImportedPackages } from '../agent/index.ts'
@@ -32,12 +33,12 @@ function showResolveAttempts(attempts: ResolveAttempt[]): void {
   if (attempts.length === 0)
     return
 
-  p.log.message('\x1B[90mDoc resolution:\x1B[0m')
+  p.log.message(styleText('gray', 'Doc resolution:'))
   for (const attempt of attempts) {
-    const icon = attempt.status === 'success' ? '\x1B[32m✓\x1B[0m' : '\x1B[90m✗\x1B[0m'
+    const icon = attempt.status === 'success' ? styleText('green', '✓') : styleText('gray', '✗')
     const label = RESOLVE_SOURCE_LABELS[attempt.source] ?? attempt.source
-    const source = `\x1B[90m${label}\x1B[0m`
-    const msg = attempt.message ? ` \x1B[90m— ${attempt.message}\x1B[0m` : ''
+    const source = styleText('gray', label)
+    const msg = attempt.message ? ` ${styleText('gray', `— ${attempt.message}`)}` : ''
     p.log.message(`  ${icon} ${source}${msg}`)
   }
 }

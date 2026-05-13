@@ -16,6 +16,7 @@ import type { SkillInfo } from '../core/lockfile.ts'
 import type { ResolvedPackage } from '../sources/index.ts'
 import { copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { dirname, join } from 'pathe'
@@ -338,7 +339,7 @@ export const installCommandDef = defineCommand({
       agent = picked
     }
 
-    p.intro(`\x1B[1m\x1B[35mskilld\x1B[0m install`)
+    p.intro(`${styleText(['bold', 'magenta'], 'skilld')} install`)
     return installCommand({ global: args.global, agent })
   },
 })

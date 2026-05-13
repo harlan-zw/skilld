@@ -6,6 +6,7 @@
 import type { AgentType, OptimizeModel } from '../agent/index.ts'
 import type { GitSkillSource } from '../sources/git-skills.ts'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { dirname, join, relative } from 'pathe'
 import { agents, writeSkillMd } from '../agent/index.ts'
@@ -147,9 +148,9 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
   for (const skill of selected) {
     const skillRel = relative(cwd, join(baseDir, skill.name))
     const fileLines = ['SKILL.md', ...skill.files.map(f => f.path)]
-      .map(f => `  \x1B[90m└\x1B[0m ${f}`)
+      .map(f => `  ${styleText('gray', '└')} ${f}`)
       .join('\n')
-    p.log.success(`Installed \x1B[36m${skill.name}\x1B[0m \x1B[90m→ ${skillRel}\x1B[0m\n${fileLines}`)
+    p.log.success(`Installed ${styleText('cyan', skill.name)} ${styleText('gray', `→ ${skillRel}`)}\n${fileLines}`)
   }
 }
 

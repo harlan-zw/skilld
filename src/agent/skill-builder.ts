@@ -14,6 +14,7 @@
 import type { FeaturesConfig } from '../core/config.ts'
 import type { CustomPrompt, OptimizeModel, OptimizeResult, SkillSection, StreamProgress } from './index.ts'
 import { mkdirSync, writeFileSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { join, relative } from 'pathe'
 import { createReferenceCache, listReferenceFiles } from '../cache/index.ts'
@@ -176,10 +177,10 @@ export async function enhanceSkillWithLLM(ctx: SkillContext, run: EnhanceRunOpti
     if (debugLogsDir)
       p.log.info(`Debug logs: ${relative(process.cwd(), debugLogsDir)}`)
     if (error)
-      p.log.warn(`\x1B[33mPartial failure: ${error}\x1B[0m`)
+      p.log.warn(styleText('yellow', `Partial failure: ${error}`))
     if (warnings?.length) {
       for (const w of warnings)
-        p.log.warn(`\x1B[33m${w}\x1B[0m`)
+        p.log.warn(styleText('yellow', w))
     }
   }
   else {
@@ -294,7 +295,7 @@ export function writePromptFiles(ctx: SkillContext, run: PromptRunOptions): Skil
     const relDir = relative(process.cwd(), skillDir)
     const promptFiles = written.map(s => `PROMPT_${s}.md`).join(', ')
     const outputFileList = written.map(s => SECTION_OUTPUT_FILES[s]).join(', ')
-    p.log.info(`Prompt files written to ${relDir}/.skilld/\n\x1B[2m\x1B[3m  Read each prompt file (${promptFiles}) in ${relDir}/.skilld/, read the\n  referenced files, then write your output to the matching file (${outputFileList}).\n  When done, run: skilld assemble\x1B[0m`)
+    p.log.info(`Prompt files written to ${relDir}/.skilld/\n${styleText(['dim', 'italic'], `  Read each prompt file (${promptFiles}) in ${relDir}/.skilld/, read the\n  referenced files, then write your output to the matching file (${outputFileList}).\n  When done, run: skilld assemble`)}`)
   }
 
   return written

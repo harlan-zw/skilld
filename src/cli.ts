@@ -2,6 +2,7 @@
 import type { PackageUsage } from './agent/detect-imports.ts'
 import type { AgentType } from './agent/index.ts'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { styleText } from 'node:util'
 import * as p from '@clack/prompts'
 import { defineCommand, runMain } from 'citty'
 import pLimit from 'p-limit'
@@ -49,7 +50,7 @@ function deprecatedForwarder(
       ...cmd,
       meta: { ...cmd.meta, name: oldName },
       async run(ctx: any) {
-        console.warn(`\x1B[33m⚠ \`skilld ${oldName}\` is deprecated. Use \`skilld ${newName}\` instead.\x1B[0m`)
+        console.warn(styleText('yellow', `⚠ \`skilld ${oldName}\` is deprecated. Use \`skilld ${newName}\` instead.`))
         return original(ctx)
       },
     })
@@ -128,8 +129,8 @@ const main = defineCommand({
       }
       p.log.info(
         'No agent selected - skills export as portable PROMPT_*.md files.\n'
-        + '  Run \x1B[36mskilld add <pkg>\x1B[0m to generate prompts for any package.\n'
-        + '  Run \x1B[36mskilld config\x1B[0m to set a target agent later.',
+        + `  Run ${styleText('cyan', 'skilld add <pkg>')} to generate prompts for any package.\n`
+        + `  Run ${styleText('cyan', 'skilld config')} to set a target agent later.`,
       )
       return
     }
@@ -181,14 +182,14 @@ const main = defineCommand({
 
     // Show self-update notification
     if (selfUpdate) {
-      const released = selfUpdate.releasedAt ? `\x1B[90m · ${relativeTime(new Date(selfUpdate.releasedAt))}\x1B[0m` : ''
+      const released = selfUpdate.releasedAt ? styleText('gray', ` · ${relativeTime(new Date(selfUpdate.releasedAt))}`) : ''
       const binPath = realpathSync(process.argv[1]!)
       const isLocal = binPath.startsWith(resolve(cwd, 'node_modules'))
       const flag = isLocal ? '' : ' -g'
       const cmd = `npx nypm add${flag} skilld@${selfUpdate.latest}`
       p.note(
-        `\x1B[90m${version}\x1B[0m → \x1B[1m\x1B[32m${selfUpdate.latest}\x1B[0m${released}\n\x1B[36m${cmd}\x1B[0m`,
-        '\x1B[33mUpdate available\x1B[0m',
+        `${styleText('gray', version)} → ${styleText(['bold', 'green'], selfUpdate.latest)}${released}\n${styleText('cyan', cmd)}`,
+        styleText('yellow', 'Update available'),
       )
     }
 
@@ -208,7 +209,7 @@ const main = defineCommand({
       const hasPkgJson = !!projectPkg
       const projectName = projectPkg?.parsed.name as string | undefined
       const projectLabel = projectName
-        ? `Generating skills for \x1B[36m${projectName}\x1B[0m`
+        ? `Generating skills for ${styleText('cyan', projectName)}`
         : 'Generating skills for current directory'
       p.log.step(projectLabel)
 
@@ -219,7 +220,7 @@ const main = defineCommand({
       if (state.shipped.length > 0) {
         const totalShipped = state.shipped.reduce((sum, s) => sum + s.skills.length, 0)
         const names = state.shipped.map(s => s.packageName).join(', ')
-        p.log.info(`\x1B[36m${totalShipped} ready-to-use skill${totalShipped > 1 ? 's' : ''}\x1B[0m shipped by your dependencies: ${names}`)
+        p.log.info(`${styleText('cyan', `${totalShipped} ready-to-use skill${totalShipped > 1 ? 's' : ''}`)} shipped by your dependencies: ${names}`)
       }
 
       p.log.info('Tip: Add skills for packages with complex APIs or frequent breaking changes - not every dependency needs one.')
@@ -228,7 +229,7 @@ const main = defineCommand({
       let setupComplete = false
       while (!setupComplete) {
         const shippedOption = state.shipped.length > 0
-          ? [{ label: 'Install shipped skills', value: 'shipped' as const, hint: `\x1B[36m${state.shipped.reduce((sum, s) => sum + s.skills.length, 0)} ready to use\x1B[0m` }]
+          ? [{ label: 'Install shipped skills', value: 'shipped' as const, hint: styleText('cyan', `${state.shipped.reduce((sum, s) => sum + s.skills.length, 0)} ready to use`) }]
           : []
 
         const source = hasPkgJson
@@ -250,7 +251,7 @@ const main = defineCommand({
         }
 
         if (source === 'skip') {
-          p.log.info('Run \x1B[36mskilld add <pkg>\x1B[0m or \x1B[36mskilld\x1B[0m anytime to add skills.')
+          p.log.info(`Run ${styleText('cyan', 'skilld add <pkg>')} or ${styleText('cyan', 'skilld')} anytime to add skills.`)
           return
         }
 
@@ -344,7 +345,7 @@ const main = defineCommand({
               const hint = sourceMap.get(name) === 'preset' ? 'nuxt module' : undefined
               const pad = ' '.repeat(maxLen - name.length + 2)
               const meta = [ver, hint, repo].filter(Boolean).join('  ')
-              return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
+              return { label: meta ? `${name}${pad}${styleText('gray', meta)}` : name, value: name }
             }),
             initialValues: preselect,
           })
@@ -384,7 +385,7 @@ const main = defineCommand({
           const previewLines = previewContent.split('\n').slice(0, 20).join('\n').replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').replace(/\x1B\].*?(?:\x07|\x1B\\)/g, '')
           const fileSize = (Buffer.byteLength(previewContent) / 1024).toFixed(1)
           p.note(
-            `\x1B[90m${previewLines}\n...\x1B[0m`,
+            styleText('gray', `${previewLines}\n...`),
             `${agents[agent].skillsDir}/${previewSkill.name}/SKILL.md (${fileSize} KB)`,
           )
         }
@@ -408,18 +409,18 @@ const main = defineCommand({
       }
       const verifyLine = agentInstalled
         ? (verifyTips[agent] ?? '')
-        : `Skills are ready in ${agents[agent].skillsDir}/.\n\x1B[90m${agentName} was not detected on this machine.\nInstall it to use these skills, or run \`skilld config\` to change agents.\x1B[0m`
+        : `Skills are ready in ${agents[agent].skillsDir}/.\n${styleText('gray', `${agentName} was not detected on this machine.\nInstall it to use these skills, or run \`skilld config\` to change agents.`)}`
 
       // Build a "try it" suggestion that tests skill-specific knowledge
       const firstPkg = previewSkill?.info?.packageName || previewSkill?.name
       const trySuggestion = firstPkg
-        ? `\n\n\x1B[36mTry it:\x1B[0m ask your agent "What are the gotchas or breaking changes in ${firstPkg}?"`
+        ? `\n\n${styleText('cyan', 'Try it:')} ask your agent "What are the gotchas or breaking changes in ${firstPkg}?"`
         : ''
 
       p.note(
         `${verifyLine}${trySuggestion}\n\n`
-        + `Run \x1B[36mskilld info\x1B[0m to see installed skills.\n`
-        + `Run \x1B[36mskilld\x1B[0m again to add more, update, or search.`,
+        + `Run ${styleText('cyan', 'skilld info')} to see installed skills.\n`
+        + `Run ${styleText('cyan', 'skilld')} again to add more, update, or search.`,
         `${agentName} - next steps`,
       )
 
@@ -439,13 +440,13 @@ const main = defineCommand({
 
     let needsPrepareHook = !hasPrepareHook(cwd)
     if (needsPrepareHook) {
-      p.log.warn(`\x1B[33mNo prepare hook.\x1B[0m Skills won't auto-restore on \x1B[36mnpm install\x1B[0m.`)
+      p.log.warn(`${styleText('yellow', 'No prepare hook.')} Skills won't auto-restore on ${styleText('cyan', 'npm install')}.`)
     }
 
     if (state.shipped.length > 0) {
       const totalSkills = state.shipped.reduce((sum, s) => sum + s.skills.length, 0)
       const names = state.shipped.map(s => s.packageName).join(', ')
-      p.log.info(`\x1B[36m${totalSkills} ready-to-use skill${totalSkills > 1 ? 's' : ''}\x1B[0m shipped by your dependencies: ${names}`)
+      p.log.info(`${styleText('cyan', `${totalSkills} ready-to-use skill${totalSkills > 1 ? 's' : ''}`)} shipped by your dependencies: ${names}`)
     }
 
     const refreshState = async () => {
@@ -459,14 +460,14 @@ const main = defineCommand({
         const opts: Array<{ label: string, value: string, hint?: string }> = []
         if (state.shipped.length > 0) {
           const total = state.shipped.reduce((sum, s) => sum + s.skills.length, 0)
-          opts.push({ label: 'Install shipped skills', value: 'shipped', hint: `\x1B[36m${total} available\x1B[0m` })
+          opts.push({ label: 'Install shipped skills', value: 'shipped', hint: styleText('cyan', `${total} available`) })
         }
         opts.push({ label: 'Add new skills', value: 'install' })
         if (state.outdated.length > 0) {
-          opts.push({ label: 'Update skills', value: 'update', hint: `\x1B[33m${state.outdated.length} outdated\x1B[0m` })
+          opts.push({ label: 'Update skills', value: 'update', hint: styleText('yellow', `${state.outdated.length} outdated`) })
         }
         if (needsPrepareHook) {
-          opts.push({ label: 'Setup prepare hook', value: 'prepare-hook', hint: '\x1B[33mrecommended\x1B[0m' })
+          opts.push({ label: 'Setup prepare hook', value: 'prepare-hook', hint: styleText('yellow', 'recommended') })
         }
         opts.push(
           { label: 'Remove skills', value: 'remove' },
@@ -595,7 +596,7 @@ const main = defineCommand({
                           : undefined
                   const pad = ' '.repeat(maxLen - name.length + 2)
                   const meta = [ver, hint, repo].filter(Boolean).join('  ')
-                  return { label: meta ? `${name}${pad}\x1B[90m${meta}\x1B[39m` : name, value: name }
+                  return { label: meta ? `${name}${pad}${styleText('gray', meta)}` : name, value: name }
                 }),
                 initialValues: [],
               }))
