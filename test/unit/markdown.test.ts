@@ -5,32 +5,8 @@ import {
   extractLinks,
   extractTitle,
   parseFrontmatter,
-  parseMd,
   stripFrontmatter,
 } from '../../src/core/markdown.ts'
-
-describe('parseMd', () => {
-  it('parses empty string', () => {
-    const { tree, frontmatter } = parseMd('')
-    expect(tree.type).toBe('root')
-    expect(frontmatter).toEqual({})
-  })
-
-  it('parses frontmatter + body', () => {
-    const { frontmatter } = parseMd('---\ntitle: Hello\nversion: 1.0\n---\n\n# Hello')
-    expect(frontmatter).toEqual({ title: 'Hello', version: '1.0' })
-  })
-
-  it('handles quoted frontmatter values', () => {
-    const { frontmatter } = parseMd('---\ntitle: "Hello: World"\n---\n\nBody')
-    expect(frontmatter.title).toBe('Hello: World')
-  })
-
-  it('handles no frontmatter', () => {
-    const { frontmatter } = parseMd('# Just a heading')
-    expect(frontmatter).toEqual({})
-  })
-})
 
 describe('parseFrontmatter', () => {
   it('returns key-value pairs', () => {

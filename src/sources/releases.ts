@@ -2,9 +2,14 @@
  * GitHub release notes fetching via GitHub API (preferred) with ungh.cc fallback
  */
 
+import { NPM_SCOPE_PREFIX_RE, NPM_SCOPE_WITH_SLASH_RE, V_PREFIX_RE } from '../core/regex.ts'
 import { yamlEscape } from '../core/yaml.ts'
 import { ghApiPaginated, isoDate } from './github-common.ts'
 import { $fetch, fetchGitHubRaw } from './utils.ts'
+
+const STATIC_REGEX_2 = /^(\d+)(?:\.(\d+))?(?:\.(\d+))?/
+const STATIC_REGEX_3 = /^\d+\.\d+\.\d+-.+/
+const STATIC_REGEX_4 = /changelog\.md/i
 
 export interface GitHubRelease {
   id: number
@@ -33,8 +38,8 @@ export interface SemVer {
 }
 
 export function parseSemver(version: string): SemVer | null {
-  const clean = version.replace(/^v/, '')
-  const match = clean.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/)
+  const clean = version.replace(V_PREFIX_RE, '')
+  const match = clean.match(STATIC_REGEX_2)
   if (!match)
     return null
   return {
@@ -63,7 +68,7 @@ function extractVersion(tag: string, packageName?: string): string | null {
       return dashMatch[1]!
   }
   // Standard: v1.2.3 or 1.2.3
-  return tag.replace(/^v/, '')
+  return tag.replace(V_PREFIX_RE, '')
 }
 
 function escapeRegex(str: string): string {
@@ -82,7 +87,7 @@ function tagMatchesPackage(tag: string, packageName: string): boolean {
  * Check if a version string contains a prerelease suffix (e.g. 6.0.0-beta, 1.2.3-rc.1)
  */
 export function isPrerelease(version: string): boolean {
-  return /^\d+\.\d+\.\d+-.+/.test(version.replace(/^v/, ''))
+  return STATIC_REGEX_3.test(version.replace(V_PREFIX_RE, ''))
 }
 
 export function compareSemver(a: SemVer, b: SemVer): number {
@@ -283,7 +288,7 @@ export function generateReleaseIndex(releasesOrOpts: GitHubRelease[] | ReleaseIn
  */
 export function isStubRelease(release: GitHubRelease): boolean {
   const body = (release.markdown || '').trim()
-  return body.length < 500 && /changelog\.md/i.test(body)
+  return body.length < 500 && STATIC_REGEX_4.test(body)
 }
 
 /**
@@ -295,8 +300,8 @@ async function fetchChangelog(owner: string, repo: string, ref: string, packageN
 
   // Monorepo: try package-specific paths first (e.g. packages/pinia/CHANGELOG.md)
   if (packageName) {
-    const shortName = packageName.replace(/^@.*\//, '')
-    const scopeless = packageName.replace(/^@/, '').replace('/', '-')
+    const shortName = packageName.replace(NPM_SCOPE_WITH_SLASH_RE, '')
+    const scopeless = packageName.replace(NPM_SCOPE_PREFIX_RE, '').replace('/', '-')
     const candidates = [...new Set([shortName, scopeless])]
     for (const name of candidates) {
       paths.push(`packages/${name}/CHANGELOG.md`)

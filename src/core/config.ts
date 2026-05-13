@@ -3,6 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { CACHE_DIR, CONFIG_PATH } from './paths.ts'
 import { yamlEscape, yamlParseKV, yamlUnescape } from './yaml.ts'
 
+const STATIC_REGEX_1 = /^ {2}(\w+):\s*(.+)/
+
 export interface FeaturesConfig {
   search: boolean
   issues: boolean
@@ -83,7 +85,7 @@ export function readConfig(): SkilldConfig {
       inBlock = null
     }
     if (inBlock === 'features') {
-      const m = line.match(/^ {2}(\w+):\s*(.+)/)
+      const m = line.match(STATIC_REGEX_1)
       if (m) {
         const key = m[1] as keyof FeaturesConfig
         if (key in defaultFeatures)

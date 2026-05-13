@@ -10,9 +10,12 @@ import { tmpdir } from 'node:os'
 import { downloadTemplate } from 'giget'
 import { join, resolve } from 'pathe'
 import { parseFrontmatter } from '../core/markdown.ts'
+import { GIT_SUFFIX_RE, LEADING_SLASH_RE } from '../core/regex.ts'
 import { normalizeRepoUrl, parseGitHubUrl } from '../core/url.ts'
 import { getGitHubToken } from './github-common.ts'
 import { $fetch, fetchGitHubRaw } from './utils.ts'
+
+const STATIC_REGEX_1 = /^[\w.-]+\/[\w.-]+$/
 
 export interface GitSkillSource {
   type: 'github' | 'gitlab' | 'git-ssh' | 'local'
@@ -73,7 +76,7 @@ export function parseGitSkillInput(input: string): GitSkillSource | null {
   }
 
   // GitHub shorthand: owner/repo (exactly one slash, no spaces, no commas)
-  if (/^[\w.-]+\/[\w.-]+$/.test(trimmed)) {
+  if (STATIC_REGEX_1.test(trimmed)) {
     return { type: 'github', owner: trimmed.split('/')[0], repo: trimmed.split('/')[1] }
   }
 
@@ -86,7 +89,7 @@ function parseGitUrl(url: string): GitSkillSource | null {
     const parsed = new URL(url)
 
     if (parsed.hostname === 'github.com' || parsed.hostname === 'www.github.com') {
-      const parts = parsed.pathname.replace(/^\//, '').replace(/\.git$/, '').split('/')
+      const parts = parsed.pathname.replace(LEADING_SLASH_RE, '').replace(GIT_SUFFIX_RE, '').split('/')
       const owner = parts[0]
       const repo = parts[1]
       if (!owner || !repo)
@@ -103,7 +106,7 @@ function parseGitUrl(url: string): GitSkillSource | null {
     }
 
     if (parsed.hostname === 'gitlab.com') {
-      const parts = parsed.pathname.replace(/^\//, '').replace(/\.git$/, '').split('/')
+      const parts = parsed.pathname.replace(LEADING_SLASH_RE, '').replace(GIT_SUFFIX_RE, '').split('/')
       const owner = parts[0]
       const repo = parts[1]
       if (!owner || !repo)

@@ -7,6 +7,7 @@ import { sharedArgs } from '../../cli/args.ts'
 import { introLine } from '../../cli/intro.ts'
 import { hasCompletedWizard } from '../../core/config.ts'
 import { parseSkillInput } from '../../core/prefix.ts'
+import { COMMA_OR_WHITESPACE_RE } from '../../core/regex.ts'
 import { getProjectState } from '../../core/skills.ts'
 import { syncGitSkills } from '../sync-git.ts'
 import { syncCommand } from '../sync.ts'
@@ -45,7 +46,7 @@ export const addCommandDef = defineCommand({
     )]
 
     if (agent === 'none') {
-      const packages = [...new Set(rawInputs.flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      const packages = [...new Set(rawInputs.flatMap(s => s.split(COMMA_OR_WHITESPACE_RE)).map(s => s.trim()).filter(Boolean))]
       for (const pkg of packages)
         await exportPortablePrompts(pkg, { force: args.force, agent: 'none' })
       return
@@ -97,7 +98,7 @@ export const addCommandDef = defineCommand({
 
     if (gitSources.length > 0) {
       for (const source of gitSources) {
-        const skillFilter = args.skill ? args.skill.split(/[,\s]+/).map((s: string) => s.trim()).filter(Boolean) : undefined
+        const skillFilter = args.skill ? args.skill.split(COMMA_OR_WHITESPACE_RE).map((s: string) => s.trim()).filter(Boolean) : undefined
         await syncGitSkills({ source, global: args.global, agent, yes: args.yes, model: args.model as OptimizeModel | undefined, force: args.force, debug: args.debug, skillFilter })
       }
     }

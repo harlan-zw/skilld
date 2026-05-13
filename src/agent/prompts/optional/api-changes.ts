@@ -1,10 +1,13 @@
 import type { PromptSection, ReferenceWeight, SectionContext, SectionValidationWarning } from './types.ts'
+import { SEMVER_MAJOR_MINOR_RE } from '../../../core/regex.ts'
 import { resolveSkilldCommand } from '../../../core/skilld-command.ts'
 import { maxItems, maxLines, releaseBoost } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 
+const STATIC_REGEX_2 = /^## API Changes/im
+
 export function apiChangesSection({ packageName, version, hasReleases, hasChangelog, hasDocs, hasIssues, hasDiscussions, pkgFiles, features, enabledSectionCount, releaseCount, overheadLines }: SectionContext): PromptSection {
-  const [, major, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
+  const [, major, minor] = version?.match(SEMVER_MAJOR_MINOR_RE) ?? []
   const boost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
 
   const cmd = resolveSkilldCommand()
@@ -90,7 +93,7 @@ The "Older" column means ≤ v${Number(major) - 2}.x — these changes are NOT u
       if (detailedBullets > 2 && labeledBullets / (detailedBullets - alsoChangedItems || 1) < 0.8)
         warnings.push({ warning: `Only ${labeledBullets}/${detailedBullets} items have BREAKING/DEPRECATED/NEW labels` })
       // Heading required
-      if (!/^## API Changes/im.test(content))
+      if (!STATIC_REGEX_2.test(content))
         warnings.push({ warning: 'Missing required "## API Changes" heading' })
       return warnings
     },

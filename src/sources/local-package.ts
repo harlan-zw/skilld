@@ -5,12 +5,16 @@
 
 import type { LocalDependency, ResolvedPackage } from './types.ts'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
-import { resolvePathSync } from 'mlly'
 import { basename, dirname, join, resolve } from 'pathe'
 import { readPackageJsonSafe } from '../core/package-json.ts'
+import { README_FILENAME_RE, VERSION_RANGE_PREFIX_RE } from '../core/regex.ts'
 import { normalizeRepoUrl, parseGitHubUrl } from '../core/url.ts'
 import { fetchGitDocs, fetchReadme } from './github.ts'
+
+const STATIC_REGEX_1 = /^[\^~>=<\d]/
+const STATIC_REGEX_4 = /^version:\s*"?([^"\n]+)"?/m
 
 export function parseVersionSpecifier(
   name: string,
@@ -46,8 +50,8 @@ export function parseVersionSpecifier(
   if (installed)
     return { name, version: installed }
 
-  if (/^[\^~>=<\d]/.test(version))
-    return { name, version: version.replace(/^[\^~>=<]+/, '') }
+  if (STATIC_REGEX_1.test(version))
+    return { name, version: version.replace(VERSION_RANGE_PREFIX_RE, '') }
 
   if (version.startsWith('catalog:') || version.startsWith('workspace:'))
     return { name, version: '*' }
@@ -56,13 +60,19 @@ export function parseVersionSpecifier(
 }
 
 export function resolveInstalledVersion(name: string, cwd: string): string | null {
+  const directPackageJson = join(cwd, 'node_modules', ...name.split('/'), 'package.json')
+  const direct = readPackageJsonSafe(directPackageJson)
+  if (direct)
+    return (direct.parsed.version as string) || null
+
+  const req = createRequire(join(cwd, 'package.json'))
   try {
-    const resolved = resolvePathSync(`${name}/package.json`, { url: cwd })
+    const resolved = req.resolve(`${name}/package.json`)
     return (readPackageJsonSafe(resolved)?.parsed.version as string) || null
   }
   catch {
     try {
-      const entry = resolvePathSync(name, { url: cwd })
+      const entry = req.resolve(name)
       let dir = dirname(entry)
       while (dir && basename(dir) !== 'node_modules') {
         const pkg = readPackageJsonSafe(join(dir, 'package.json'))
@@ -166,7 +176,7 @@ export async function resolveLocalPackageDocs(localPath: string): Promise<Resolv
   }
 
   if (!result.readmeUrl && !result.gitDocsUrl) {
-    const readmeFile = readdirSync(localPath).find(f => /^readme\.md$/i.test(f))
+    const readmeFile = readdirSync(localPath).find(f => README_FILENAME_RE.test(f))
     if (readmeFile) {
       result.readmeUrl = pathToFileURL(join(localPath, readmeFile)).href
     }
@@ -185,7 +195,7 @@ export function getInstalledSkillVersion(skillDir: string): string | null {
     return null
 
   const content = readFileSync(skillPath, 'utf-8')
-  const match = content.match(/^version:\s*"?([^"\n]+)"?/m)
+  const match = content.match(STATIC_REGEX_4)
   return match?.[1] || null
 }
 

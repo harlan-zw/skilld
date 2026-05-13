@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it, vi } from 'vitest'
-import { appendToJsonArray, editJsonProperty, patchPackageJson, removeJsonProperty } from '../../src/core/package-json.ts'
+import { appendToJsonArray, editJsonProperty, patchPackageJson } from '../../src/core/package-json.ts'
 
 vi.mock('node:fs', () => ({
   readFileSync: vi.fn(),
@@ -39,21 +39,6 @@ describe('package-json', () => {
       const result = editJsonProperty(raw, ['version'], '1.0.0')
       expect(result).toContain('"version": "1.0.0"')
       expect(result).toContain('"name": "my-pkg"')
-    })
-  })
-
-  describe('removeJsonProperty', () => {
-    it('removes a property preserving formatting', () => {
-      const raw = `{
-  "name": "my-pkg",
-  "version": "1.0.0",
-  "private": true
-}
-`
-      const result = removeJsonProperty(raw, ['private'])
-      expect(result).not.toContain('"private"')
-      expect(result).toContain('"name": "my-pkg"')
-      expect(result).toContain('"version": "1.0.0"')
     })
   })
 

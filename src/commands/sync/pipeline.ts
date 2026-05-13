@@ -2,8 +2,8 @@ import type { SkillContext } from '../../agent/skill-builder.ts'
 import type { FeaturesConfig } from '../../core/config.ts'
 import type { IndexDoc } from '../../sources/content-resolver.ts'
 import type { ResolvedPackage } from '../../sources/index.ts'
-import { existsSync, readdirSync } from 'node:fs'
-import { join } from 'pathe'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { join, resolve } from 'pathe'
 import { createReferenceCache } from '../../cache/index.ts'
 import { defaultFeatures, readConfig } from '../../core/config.ts'
 import { buildPackageDirMap, readLock } from '../../core/lockfile.ts'
@@ -12,10 +12,32 @@ import { resolveContentDocs } from '../../sources/content-resolver.ts'
 import {
   fetchNpmPackage,
   generateDocsIndex,
+  resolveLocalPackageDocs,
 } from '../../sources/index.ts'
 import { resolveTimelineReferences } from '../../sources/timeline-resolver.ts'
 
 export type { IndexDoc } from '../../sources/content-resolver.ts'
+
+/** Compatibility helper for tests and older internal callers. */
+export async function resolveLocalDep(packageName: string, cwd: string): Promise<ResolvedPackage | null> {
+  const pkgPath = join(cwd, 'package.json')
+  if (!existsSync(pkgPath))
+    return null
+
+  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8')) as {
+    dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
+  }
+  const depVersion = {
+    ...pkg.dependencies,
+    ...pkg.devDependencies,
+  }[packageName]
+
+  if (!depVersion?.startsWith('link:'))
+    return null
+
+  return resolveLocalPackageDocs(resolve(cwd, depVersion.slice(5)))
+}
 
 export async function findRelatedSkills(packageName: string, skillsDir: string): Promise<string[]> {
   const related: string[] = []

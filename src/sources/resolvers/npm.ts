@@ -11,6 +11,8 @@ import { isGitHubRepoUrl, isUselessDocsUrl, normalizeRepoUrl, parseGitHubUrl } f
 import { fetchNpmPackage, fetchNpmRegistryMeta } from '../npm-registry.ts'
 import { defineResolver } from '../resolver-registry.ts'
 
+const STATIC_REGEX_1 = /^github:/
+
 export const npmResolver = defineResolver({
   id: 'npm',
   async run(ctx) {
@@ -62,7 +64,7 @@ export const npmResolver = defineResolver({
           result.repoUrl = `https://github.com/${gh.owner}/${gh.repo}`
       }
       else {
-        const repo = pkg.repository.replace(/^github:/, '')
+        const repo = pkg.repository.replace(STATIC_REGEX_1, '')
         if (repo.includes('/') && !repo.includes(':'))
           result.repoUrl = `https://github.com/${repo}`
       }

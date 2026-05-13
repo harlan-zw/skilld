@@ -9,6 +9,7 @@
 import { existsSync, readdirSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { join } from 'pathe'
+import { README_FILENAME_RE } from '../../core/regex.ts'
 import { defineResolver } from '../resolver-registry.ts'
 
 export const localReadmeResolver = defineResolver({
@@ -21,7 +22,7 @@ export const localReadmeResolver = defineResolver({
     const result = ctx.result!
     ctx.options.onProgress?.('local')
     const pkgDir = join(ctx.options.cwd!, 'node_modules', ctx.packageName)
-    const readmeFile = existsSync(pkgDir) && readdirSync(pkgDir).find(f => /^readme\.md$/i.test(f))
+    const readmeFile = existsSync(pkgDir) && readdirSync(pkgDir).find(f => README_FILENAME_RE.test(f))
     if (readmeFile) {
       const readmePath = join(pkgDir, readmeFile)
       result.readmeUrl = pathToFileURL(readmePath).href

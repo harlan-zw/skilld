@@ -6,6 +6,10 @@ import { rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { crawlAndGenerate } from '@mdream/crawl'
 import { join } from 'pathe'
+import { TRAILING_SLASH_RE } from '../core/regex.ts'
+
+const STATIC_REGEX_2 = /[_.:-]/
+const STATIC_REGEX_3 = /\/+$/
 
 /**
  * Crawl a URL pattern and return docs as cached doc format.
@@ -73,7 +77,7 @@ export async function fetchCrawledDocs(
     }
 
     const urlObj = new URL(result.url)
-    const urlPath = urlObj.pathname.replace(/\/$/, '') || '/index'
+    const urlPath = urlObj.pathname.replace(TRAILING_SLASH_RE, '') || '/index'
     const segments = urlPath.split('/').filter(Boolean)
 
     // Fallback: filter by URL path locale prefix when no lang tag was present
@@ -138,12 +142,12 @@ function isForeignPathPrefix(segment: string | undefined, userLang: string): boo
 /** Detect user's 2-letter language code from env (e.g. 'ja' from LANG=ja_JP.UTF-8) */
 function getUserLang(): string {
   const raw = process.env.LC_ALL || process.env.LANG || process.env.LANGUAGE || ''
-  const code = raw.split(/[_.:-]/)[0]?.toLowerCase() || ''
+  const code = raw.split(STATIC_REGEX_2)[0]?.toLowerCase() || ''
   return code.length >= 2 ? code.slice(0, 2) : 'en'
 }
 
 /** Append glob pattern to a docs URL for crawling */
 export function toCrawlPattern(docsUrl: string): string {
-  const cleaned = docsUrl.replace(/\/+$/, '')
+  const cleaned = docsUrl.replace(STATIC_REGEX_3, '')
   return `${cleaned}/**`
 }

@@ -23,7 +23,7 @@ vi.mock('ofetch', () => ({
 }))
 
 // Must import after vi.mock
-const { fetchGitDocs, fetchGitHubRepoMeta, fetchGitSource, fetchReadmeContent, isShallowGitDocs, MIN_GIT_DOCS, validateGitDocsWithLlms } = await import('../../src/sources/github')
+const { fetchGitDocs, fetchGitHubRepoMeta, fetchReadmeContent, isShallowGitDocs, MIN_GIT_DOCS, validateGitDocsWithLlms } = await import('../../src/sources/github')
 
 // Mock gh CLI as unavailable by default so tests exercise fetch path
 vi.mock('../../src/sources/issues', () => ({
@@ -262,28 +262,6 @@ describe('sources/github', () => {
 
       const result = await fetchGitDocs('owner', 'repo', '1.0.0')
       expect(result).toBeNull()
-    })
-  })
-
-  describe('fetchGitSource', () => {
-    it('reuses file list from findGitTag (no duplicate fetch)', async () => {
-      mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({
-        meta: { sha: 'abc' },
-        files: [
-          { path: 'src/index.ts', mode: '100644', sha: 'a', size: 100 },
-          { path: 'src/utils.ts', mode: '100644', sha: 'b', size: 200 },
-          { path: 'src/index.test.ts', mode: '100644', sha: 'c', size: 150 },
-          { path: 'README.md', mode: '100644', sha: 'd', size: 50 },
-        ],
-      }) })
-
-      const result = await fetchGitSource('owner', 'repo', '1.0.0')
-
-      expect(result).not.toBeNull()
-      expect(result!.ref).toBe('v1.0.0')
-      expect(result!.files).toEqual(['src/index.ts', 'src/utils.ts'])
-      // Only 1 fetch call — no duplicate for listSourceAtRef
-      expect(mockFetch).toHaveBeenCalledTimes(1)
     })
   })
 

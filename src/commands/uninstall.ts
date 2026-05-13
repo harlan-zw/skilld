@@ -13,6 +13,9 @@ import { readLock } from '../core/lockfile.ts'
 import { mapInsert } from '../core/map.ts'
 import { SHARED_SKILLS_DIR } from '../core/paths.ts'
 
+const STATIC_REGEX_1 = /\n+$/
+const STATIC_REGEX_2 = /^\n+/
+
 /**
  * Remove the skilld marker block from an agent's instruction file.
  * For .mdc files (dedicated skilld files), delete the entire file.
@@ -58,8 +61,8 @@ function removeMarkerBlock(filePath: string): boolean {
     return false
 
   // Remove marker block plus surrounding blank lines
-  const before = content.slice(0, startIdx).replace(/\n+$/, '')
-  const after = content.slice(endIdx + SKILLD_MARKER_END.length).replace(/^\n+/, '')
+  const before = content.slice(0, startIdx).replace(STATIC_REGEX_1, '')
+  const after = content.slice(endIdx + SKILLD_MARKER_END.length).replace(STATIC_REGEX_2, '')
   const updated = before + (before && after ? '\n' : '') + after
 
   if (updated.trim() === '') {

@@ -6,6 +6,9 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'pathe'
 import { readPackageJsonSafe } from './package-json.ts'
+import { GIT_PLUS_PREFIX_RE, GIT_SUFFIX_RE } from './regex.ts'
+
+const STATIC_REGEX_3 = /\/?\*+$/
 
 const QUOTE_PREFIX_RE = /^['"]/
 const QUOTE_SUFFIX_RE = /['"]$/
@@ -21,7 +24,7 @@ export interface MonorepoPackage {
 function readRepoUrl(pkg: Record<string, any>): string | undefined {
   return typeof pkg.repository === 'string'
     ? pkg.repository
-    : pkg.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
+    : pkg.repository?.url?.replace(GIT_PLUS_PREFIX_RE, '').replace(GIT_SUFFIX_RE, '')
 }
 
 function readWorkspacePatterns(cwd: string, pkg: Record<string, any>): string[] {
@@ -72,7 +75,7 @@ export function detectMonorepoPackages(cwd: string): MonorepoPackage[] | null {
   const packages: MonorepoPackage[] = []
 
   for (const pattern of patterns) {
-    const base = pattern.replace(/\/?\*+$/, '')
+    const base = pattern.replace(STATIC_REGEX_3, '')
     const scanDir = resolve(cwd, base)
     if (!existsSync(scanDir))
       continue

@@ -17,7 +17,10 @@ import {
   SECTION_OUTPUT_FILES,
   wrapSection,
 } from '../agent/index.ts'
+import { API_CHANGE_BULLET_RE, SECTION_HEADING_RE, SOURCE_LINK_RE } from '../core/regex.ts'
 import { iterateSkills } from '../core/skills.ts'
+
+const STATIC_REGEX_4 = /^## .+$/m
 
 const OUTPUT_FILE_SET = new Set(Object.values(SECTION_OUTPUT_FILES))
 
@@ -91,11 +94,11 @@ function assembleDir(targetDir: string, cwd: string): void {
     const cleaned = cleanSectionOutput(raw)
     if (!cleaned) {
       const missing: string[] = []
-      if (!/^##\s/m.test(raw))
+      if (!SECTION_HEADING_RE.test(raw))
         missing.push('h2 heading (## ...)')
-      if (!/^- (?:BREAKING|DEPRECATED|NEW): /m.test(raw))
+      if (!API_CHANGE_BULLET_RE.test(raw))
         missing.push('change label (- BREAKING/DEPRECATED/NEW: ...)')
-      if (!/\[source\]/.test(raw))
+      if (!SOURCE_LINK_RE.test(raw))
         missing.push('[source] link')
       p.log.warn(`${outputFile}: content rejected — missing ${missing.join(', ')}`)
       continue
@@ -153,7 +156,7 @@ function assembleDir(targetDir: string, cwd: string): void {
     const fmEnd = existingSkillMd.indexOf('\n---\n', 4)
     const afterFm = fmEnd !== -1 ? existingSkillMd.slice(fmEnd + 5) : existingSkillMd
 
-    const firstLlmHeading = body.match(/^## .+$/m)?.[0]
+    const firstLlmHeading = body.match(STATIC_REGEX_4)?.[0]
     let headerPart = afterFm
     if (firstLlmHeading) {
       const idx = afterFm.indexOf(firstLlmHeading)

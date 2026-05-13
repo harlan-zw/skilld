@@ -12,11 +12,12 @@
  */
 
 import { ofetch } from 'ofetch'
+import { TRAILING_SLASH_RE } from '../core/regex.ts'
 
 const DEFAULT_REGISTRY_URL = 'https://skilld.dev/api'
 
 export function getRegistryBase(): string {
-  return (process.env.SKILLD_REGISTRY_URL || DEFAULT_REGISTRY_URL).replace(/\/$/, '')
+  return (process.env.SKILLD_REGISTRY_URL || DEFAULT_REGISTRY_URL).replace(TRAILING_SLASH_RE, '')
 }
 
 export interface RegistrySkill {

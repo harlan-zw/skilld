@@ -9,9 +9,12 @@
 
 import type { LlmsLink } from './types.ts'
 import { mapInsert } from '../core/map.ts'
+import { LEADING_SLASH_RE, NPM_SCOPE_WITH_SLASH_RE } from '../core/regex.ts'
 import { extractBranchHint } from '../core/url.ts'
 import { findGitTag, listFilesAtRef } from './github-tags.ts'
 import { getDocOverride } from './package-registry.ts'
+
+const STATIC_REGEX_1 = /\.(?:md|mdx)$/
 
 /** Minimum git-doc file count to prefer over llms.txt */
 export const MIN_GIT_DOCS = 5
@@ -36,7 +39,7 @@ export interface GitDocsResult {
 
 /** Filter file paths by prefix and md/mdx extension */
 function filterDocFiles(files: string[], pathPrefix: string): string[] {
-  return files.filter(f => f.startsWith(pathPrefix) && /\.(?:md|mdx)$/.test(f))
+  return files.filter(f => f.startsWith(pathPrefix) && STATIC_REGEX_1.test(f))
 }
 
 const FRAMEWORK_NAMES = new Set(['vue', 'react', 'solid', 'angular', 'svelte', 'preact', 'lit', 'qwik'])
@@ -50,7 +53,7 @@ const FRAMEWORK_NAMES = new Set(['vue', 'react', 'solid', 'angular', 'svelte', '
 export function filterFrameworkDocs(files: string[], packageName?: string): string[] {
   if (!packageName)
     return files
-  const shortName = packageName.replace(/^@.*\//, '')
+  const shortName = packageName.replace(NPM_SCOPE_WITH_SLASH_RE, '')
   const targetFramework = [...FRAMEWORK_NAMES].find(fw => shortName.includes(fw))
   if (!targetFramework)
     return files
@@ -142,7 +145,7 @@ function scoreDocDir(dir: string, fileCount: number): number {
  */
 function discoverDocFiles(allFiles: string[], packageName?: string): DiscoveredDocs | null {
   const mdFiles = allFiles
-    .filter(f => /\.(?:md|mdx)$/.test(f))
+    .filter(f => STATIC_REGEX_1.test(f))
     .filter(f => !NOISE_PATTERNS.some(p => p.test(f)))
     .filter(f => f.includes('/'))
 
@@ -272,7 +275,7 @@ export async function fetchGitDocs(owner: string, repo: string, version: string,
 
 /** Strip file extension (.md, .mdx) and leading slash from a path */
 function normalizePath(p: string): string {
-  return p.replace(/^\//, '').replace(/\.(?:md|mdx)$/, '')
+  return p.replace(LEADING_SLASH_RE, '').replace(STATIC_REGEX_1, '')
 }
 
 /**

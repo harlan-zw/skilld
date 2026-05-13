@@ -11,6 +11,9 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, symlinkSync, unl
 import { basename, join } from 'pathe'
 import { getCacheDir } from '../cache/internal/version.ts'
 import { readPackageJsonSafe } from './package-json.ts'
+import { README_FILENAME_RE } from './regex.ts'
+
+const STATIC_REGEX_2 = /^changelog\.md$/i
 
 /** Map lockfile identity name to storage-safe cache key (crate:X → @skilld-crate/X) */
 function toStorageName(name: string): string {
@@ -143,7 +146,7 @@ export function getPkgKeyFiles(name: string, cwd: string, version?: string): str
   }
 
   const entries = readdirSync(pkgPath).filter(f =>
-    /^readme\.md$/i.test(f) || /^changelog\.md$/i.test(f),
+    README_FILENAME_RE.test(f) || STATIC_REGEX_2.test(f),
   )
   files.push(...entries)
 

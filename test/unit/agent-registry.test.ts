@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agents } from '../../src/agent/registry'
+import { agents } from '../../src/agent/targets/index.ts'
 
 describe('agent/registry', () => {
   it('defines all expected agents', () => {

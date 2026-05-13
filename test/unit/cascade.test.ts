@@ -8,9 +8,24 @@ interface TestCtx {
 
 describe('cascade walker', () => {
   it('runs steps in declared order, mutating shared ctx', async () => {
-    const a = defineStep<TestCtx>({ id: 'a', run: async (c) => { c.log.push('a') } })
-    const b = defineStep<TestCtx>({ id: 'b', run: async (c) => { c.log.push('b') } })
-    const c = defineStep<TestCtx>({ id: 'c', run: async (c) => { c.log.push('c') } })
+    const a = defineStep<TestCtx>({
+      id: 'a',
+      run: async (c) => {
+        c.log.push('a')
+      },
+    })
+    const b = defineStep<TestCtx>({
+      id: 'b',
+      run: async (c) => {
+        c.log.push('b')
+      },
+    })
+    const c = defineStep<TestCtx>({
+      id: 'c',
+      run: async (c) => {
+        c.log.push('c')
+      },
+    })
     const ctx: TestCtx = { log: [] }
     await walkSteps([a, b, c], ctx)
     expect(ctx.log).toEqual(['a', 'b', 'c'])
@@ -18,9 +33,19 @@ describe('cascade walker', () => {
 
   it('skips a step when canResolve returns false (run is not invoked)', async () => {
     const run = vi.fn()
-    const a = defineStep<TestCtx>({ id: 'a', run: async (c) => { c.log.push('a') } })
+    const a = defineStep<TestCtx>({
+      id: 'a',
+      run: async (c) => {
+        c.log.push('a')
+      },
+    })
     const b = defineStep<TestCtx>({ id: 'b', canResolve: () => false, run })
-    const c = defineStep<TestCtx>({ id: 'c', run: async (c) => { c.log.push('c') } })
+    const c = defineStep<TestCtx>({
+      id: 'c',
+      run: async (c) => {
+        c.log.push('c')
+      },
+    })
     const ctx: TestCtx = { log: [] }
     await walkSteps([a, b, c], ctx)
     expect(ctx.log).toEqual(['a', 'c'])
@@ -28,11 +53,18 @@ describe('cascade walker', () => {
   })
 
   it('canResolve sees mutations from earlier steps', async () => {
-    const set = defineStep<TestCtx>({ id: 'set', run: async (c) => { c.log.push('set') } })
+    const set = defineStep<TestCtx>({
+      id: 'set',
+      run: async (c) => {
+        c.log.push('set')
+      },
+    })
     const gated = defineStep<TestCtx>({
       id: 'gated',
       canResolve: c => c.log.length === 0,
-      run: async (c) => { c.log.push('gated') },
+      run: async (c) => {
+        c.log.push('gated')
+      },
     })
     const ctx: TestCtx = { log: [] }
     await walkSteps([set, gated] as StepResolver<TestCtx>[], ctx)
@@ -48,7 +80,12 @@ describe('cascade walker', () => {
         order.push('slow')
       },
     })
-    const fast = defineStep<TestCtx>({ id: 'fast', run: async () => { order.push('fast') } })
+    const fast = defineStep<TestCtx>({
+      id: 'fast',
+      run: async () => {
+        order.push('fast')
+      },
+    })
     await walkSteps([slow, fast], { log: [] })
     expect(order).toEqual(['slow', 'fast'])
   })

@@ -1,6 +1,9 @@
 import type { SearchSnippet } from '../retriv/index.ts'
 import * as p from '@clack/prompts'
 
+const STATIC_REGEX_1 = /https?:\/\/github\.com\//
+const STATIC_REGEX_2 = /^#+\s*$/
+
 export function todayIsoDate(): string {
   return new Date().toISOString().split('T')[0]!
 }
@@ -29,7 +32,7 @@ export function formatSource(source?: string): string {
   if (source.includes('llms.txt'))
     return 'llms.txt'
   if (source.includes('github.com'))
-    return source.replace(/https?:\/\/github\.com\//, '')
+    return source.replace(STATIC_REGEX_1, '')
   return source
 }
 
@@ -114,7 +117,7 @@ export function formatCompactSnippet(r: SearchSnippet, cols: number): { title: s
 
   // First meaningful line as preview (skip empty, frontmatter delimiters, headings-only)
   const maxPreview = cols - 6
-  const firstLine = r.content.split('\n').find(l => l.trim() && l.trim() !== '---' && !/^#+\s*$/.test(l.trim())) || ''
+  const firstLine = r.content.split('\n').find(l => l.trim() && l.trim() !== '---' && !STATIC_REGEX_2.test(l.trim())) || ''
   const preview = firstLine.length > maxPreview ? `${firstLine.slice(0, maxPreview - 1)}…` : firstLine
 
   return { title, path, preview }

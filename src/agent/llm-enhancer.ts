@@ -19,6 +19,12 @@ import { selectExecutor } from './clis/executors.ts'
 import { finalizeSection, prepareSection } from './clis/runner.ts'
 import { buildAllSectionPrompts, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES, wrapSection } from './prompts/index.ts'
 
+const STATIC_REGEX_1 = /\b429\b/
+const STATIC_REGEX_2 = /rate.?limit/i
+const STATIC_REGEX_3 = /exhausted.*capacity/i
+const STATIC_REGEX_4 = /quota.*reset/i
+const STATIC_REGEX_5 = /reset\s+after\s+(\d+)s/i
+
 // ── Per-section run ──────────────────────────────────────────────────
 
 interface OptimizeSectionOptions {
@@ -268,16 +274,16 @@ export async function optimizeDocs(opts: OptimizeDocsOptions): Promise<OptimizeR
 function isRateLimitError(error: string | undefined): boolean {
   if (!error)
     return false
-  return /\b429\b/.test(error)
-    || /rate.?limit/i.test(error)
-    || /exhausted.*capacity/i.test(error)
-    || /quota.*reset/i.test(error)
+  return STATIC_REGEX_1.test(error)
+    || STATIC_REGEX_2.test(error)
+    || STATIC_REGEX_3.test(error)
+    || STATIC_REGEX_4.test(error)
 }
 
 function parseRateLimitDelay(error: string | undefined): number | undefined {
   if (!error || !isRateLimitError(error))
     return undefined
-  const match = error.match(/reset\s+after\s+(\d+)s/i)
+  const match = error.match(STATIC_REGEX_5)
   return match ? Number(match[1]) : 10
 }
 

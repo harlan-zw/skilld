@@ -17,6 +17,7 @@ import { todayIsoDate } from '../core/formatting.ts'
 import { readLock, writeLock } from '../core/lockfile.ts'
 import { getSharedSkillsDir } from '../core/paths.ts'
 import { getShippedSkills, linkShippedSkill, restorePkgSymlink } from '../core/prepare.ts'
+import { VERSION_RANGE_PREFIX_RE } from '../core/regex.ts'
 import { getProjectState } from '../core/skills.ts'
 
 export const prepareCommandDef = defineCommand({
@@ -84,7 +85,7 @@ export const prepareCommandDef = defineCommand({
       mkdirSync(skillsDir, { recursive: true })
 
       for (const entry of state.shipped) {
-        const version = state.deps.get(entry.packageName)?.replace(/^[\^~>=<]+/, '') || '0.0.0'
+        const version = state.deps.get(entry.packageName)?.replace(VERSION_RANGE_PREFIX_RE, '') || '0.0.0'
 
         for (const skill of entry.skills) {
           linkShippedSkill(skillsDir, skill.skillName, skill.skillDir)

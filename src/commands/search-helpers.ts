@@ -8,6 +8,9 @@ import { readLock } from '../core/index.ts'
 import { getSharedSkillsDir } from '../core/paths.ts'
 import { toStoragePackageName } from '../core/prefix.ts'
 
+const STATIC_REGEX_1 = /[-_/]+/
+const STATIC_REGEX_2 = /^(issues?|docs?|releases?):(.+)$/i
+
 /** Collect search.db paths for packages installed in the current project (from skilld-lock.yaml) */
 export function findPackageDbs(packageFilter?: string): string[] {
   const cwd = process.cwd()
@@ -60,7 +63,7 @@ export function listLockPackages(cwd: string = process.cwd()): string[] {
 function filterLockDbs(lock: ReturnType<typeof readLock>, packageFilter?: string): string[] {
   if (!lock)
     return []
-  const tokenize = (s: string) => s.toLowerCase().replace(/@/g, '').split(/[-_/]+/).filter(Boolean)
+  const tokenize = (s: string) => s.toLowerCase().replace(/@/g, '').split(STATIC_REGEX_1).filter(Boolean)
 
   return Object.values(lock.skills)
     .filter((info) => {
@@ -120,7 +123,7 @@ function findAnyPackageDb(name: string): string | null {
 
 /** Parse filter prefix (e.g., "issues:bug" -> filter by type=issue, query="bug") */
 export function parseFilterPrefix(rawQuery: string): { query: string, filter?: SearchFilter } {
-  const prefixMatch = rawQuery.match(/^(issues?|docs?|releases?):(.+)$/i)
+  const prefixMatch = rawQuery.match(STATIC_REGEX_2)
   if (!prefixMatch)
     return { query: rawQuery }
 

@@ -4,6 +4,9 @@ import { join } from 'pathe'
 import { editJsonProperty, patchPackageJson, readPackageJsonSafe } from '../core/package-json.ts'
 import { isInteractive } from './env.ts'
 
+const STATIC_REGEX_1 = /[&|;]+\s*$/
+const STATIC_REGEX_2 = /npx|\.store|dlx/
+
 export function hasPrepareHook(cwd: string = process.cwd()): boolean {
   const pkg = readPackageJsonSafe(join(cwd, 'package.json'))
   if (!pkg)
@@ -65,7 +68,7 @@ export function buildPrepareScript(existing: string | undefined, cwd: string = p
     return cmd
 
   const trimmed = existing.trim()
-  const cleaned = trimmed.replace(/[&|;]+\s*$/, '').trim()
+  const cleaned = trimmed.replace(STATIC_REGEX_1, '').trim()
   if (!cleaned)
     return cmd
 
@@ -76,7 +79,7 @@ function isNpxExecution(): boolean {
   if (process.env.npm_command === 'exec')
     return true
   const execPath = process.env._ || ''
-  return /npx|\.store|dlx/.test(execPath)
+  return STATIC_REGEX_2.test(execPath)
 }
 
 function isSkilldDep(cwd: string): boolean {

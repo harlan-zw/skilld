@@ -22,6 +22,8 @@ import { createGithubResolver } from './sync/resolvers.ts'
 import { createSyncRun } from './sync/run.ts'
 import { bindClackUi } from './sync/ui/clack.ts'
 
+const STATIC_REGEX_1 = /-skilld$/
+
 export interface GitSyncOptions {
   source: GitSkillSource
   global: boolean
@@ -65,8 +67,8 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
   let selected = skills
 
   if (opts.skillFilter?.length) {
-    const filterSet = new Set(opts.skillFilter.map(s => s.toLowerCase().replace(/-skilld$/, '')))
-    selected = skills.filter(s => filterSet.has(s.name.toLowerCase().replace(/-skilld$/, '')))
+    const filterSet = new Set(opts.skillFilter.map(s => s.toLowerCase().replace(STATIC_REGEX_1, '')))
+    selected = skills.filter(s => filterSet.has(s.name.toLowerCase().replace(STATIC_REGEX_1, '')))
     if (selected.length === 0) {
       p.log.warn(`No skills matched: ${opts.skillFilter.join(', ')}`)
       p.log.message(`Available: ${skills.map(s => s.name).join(', ')}`)
@@ -80,7 +82,7 @@ export async function syncGitSkills(opts: GitSyncOptions): Promise<void> {
     const choices = await p.autocompleteMultiselect({
       message: `Select skills to install from ${label}`,
       options: skills.map(s => ({
-        label: s.name.replace(/-skilld$/, ''),
+        label: s.name.replace(STATIC_REGEX_1, ''),
         value: s.name,
         hint: s.description || s.path,
       })),

@@ -15,6 +15,8 @@
 import type { GitSkillSource } from '../sources/git-skills.ts'
 import { parseGitSkillInput } from '../sources/git-skills.ts'
 
+const STATIC_REGEX_1 = /^[\w.-]+\/[\w.-]+/
+
 export type SkillSource
   = | { type: 'npm', package: string, tag?: string }
     | { type: 'crate', package: string, version?: string }
@@ -54,7 +56,7 @@ export function parseSkillInput(input: string): SkillSource {
     if (gitSource)
       return { type: 'git', source: gitSource }
     // If gh: prefix used but can't parse as git, treat as github shorthand
-    if (/^[\w.-]+\/[\w.-]+/.test(rest)) {
+    if (STATIC_REGEX_1.test(rest)) {
       const [owner, repo] = rest.split('/')
       return { type: 'git', source: { type: 'github', owner, repo } }
     }

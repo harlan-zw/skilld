@@ -3,7 +3,10 @@ import type { ProjectState } from '../core/skills.ts'
 import { join } from 'pathe'
 import { agents, detectInstalledAgents, getAgentVersion, getModelName } from '../agent/index.ts'
 import { readPackageJsonSafe } from '../core/package-json.ts'
+import { GIT_PLUS_PREFIX_RE, GIT_PROTOCOL_PREFIX_RE, GIT_SUFFIX_RE, GITHUB_SSH_URL_PREFIX_RE } from '../core/regex.ts'
 import { version } from '../version.ts'
+
+const STATIC_REGEX_5 = /^https?:\/\/(www\.)?github\.com\//
 
 export interface IntroOptions {
   state: ProjectState
@@ -90,9 +93,9 @@ export function getRepoHint(name: string, cwd: string): string | undefined {
   if (!url)
     return undefined
   return url
-    .replace(/^git\+/, '')
-    .replace(/\.git$/, '')
-    .replace(/^git:\/\//, 'https://')
-    .replace(/^ssh:\/\/git@github\.com/, 'https://github.com')
-    .replace(/^https?:\/\/(www\.)?github\.com\//, '')
+    .replace(GIT_PLUS_PREFIX_RE, '')
+    .replace(GIT_SUFFIX_RE, '')
+    .replace(GIT_PROTOCOL_PREFIX_RE, 'https://')
+    .replace(GITHUB_SSH_URL_PREFIX_RE, 'https://github.com')
+    .replace(STATIC_REGEX_5, '')
 }

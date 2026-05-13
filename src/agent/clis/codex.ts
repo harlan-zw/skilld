@@ -13,6 +13,8 @@
 import type { CliAdapter, CliEvent } from './types.ts'
 import { buildModels } from './model-registry.ts'
 
+const STATIC_REGEX_1 = /^cat\s*>|>/
+
 function buildArgs(model: string, _skillDir: string, _symlinkDirs: string[]): string[] {
   return [
     'exec',
@@ -39,7 +41,7 @@ function parseEvent(line: string): CliEvent {
         return { kind: 'text', full: item.text }
       if (item.type === 'command_execution' && item.aggregated_output) {
         const cmd = item.command || ''
-        const writeContent = (/^cat\s*>|>/.test(cmd)) ? item.aggregated_output : undefined
+        const writeContent = (STATIC_REGEX_1.test(cmd)) ? item.aggregated_output : undefined
         return { kind: 'tool-call', tool: 'Bash', hint: `(${item.aggregated_output.length} chars output)`, writeContent }
       }
       if (item.type === 'file_change' && item.changes?.length) {

@@ -9,6 +9,12 @@ import { spawnSync } from 'node:child_process'
 import { mapInsert } from '../core/map.ts'
 import { BOT_USERS, buildFrontmatter, COMMENT_NOISE_RE, hasCodeBlock, isoDate, truncateBody } from './github-common.ts'
 
+const STATIC_REGEX_1 = /\b(?:love|thank|awesome|great work)\b/i
+const STATIC_REGEX_2 = /\broadmap\b/i
+const STATIC_REGEX_3 = /roadmap/i
+const STATIC_REGEX_4 = /(?:fixed|landed|released|available|shipped|resolved|included)\s+in\s+v?(\d+\.\d+(?:\.\d+)?)/i
+const STATIC_REGEX_5 = /\bv?(\d+\.\d+\.\d+)\b/
+
 export type IssueType = 'bug' | 'question' | 'docs' | 'feature' | 'other'
 
 export interface IssueComment {
@@ -165,7 +171,7 @@ export function isNonTechnical(issue: { body: string, title: string, reactions: 
   if (body.length < 200 && !hasCodeBlock(body) && issue.reactions > 50)
     return true
   // Sentiment patterns (love letters, fan mail)
-  if (/\b(?:love|thank|awesome|great work)\b/i.test(issue.title) && !hasCodeBlock(body))
+  if (STATIC_REGEX_1.test(issue.title) && !hasCodeBlock(body))
     return true
   return false
 }
@@ -309,7 +315,7 @@ function fetchIssuesByState(
     .filter(issue => !isNonTechnical(issue))
     .map(({ user: _, userType: __, authorAssociation, ...issue }) => {
       const isMaintainer = ['OWNER', 'MEMBER', 'COLLABORATOR'].includes(authorAssociation)
-      const isRoadmap = /\broadmap\b/i.test(issue.title) || issue.labels.some(l => /roadmap/i.test(l))
+      const isRoadmap = STATIC_REGEX_2.test(issue.title) || issue.labels.some(l => STATIC_REGEX_3.test(l))
       return {
         ...issue,
         type: classifyIssue(issue.labels),
@@ -414,12 +420,12 @@ function detectResolvedVersion(comments: IssueComment[]): string | undefined {
   // Check from last to first (fix announcements tend to be later)
   for (const c of maintainerComments.reverse()) {
     // "Fixed in v5.2", "landed in 4.1.0", "released in v3.0", "available in 2.1"
-    const match = c.body.match(/(?:fixed|landed|released|available|shipped|resolved|included)\s+in\s+v?(\d+\.\d+(?:\.\d+)?)/i)
+    const match = c.body.match(STATIC_REGEX_4)
     if (match)
       return match[1]
     // "v5.2.0" or "5.2.0" at start of a short comment (release note style)
     if (c.body.length < 100) {
-      const vMatch = c.body.match(/\bv?(\d+\.\d+\.\d+)\b/)
+      const vMatch = c.body.match(STATIC_REGEX_5)
       if (vMatch)
         return vMatch[1]
     }

@@ -1,6 +1,10 @@
 import type { StreamProgress } from './types.ts'
 import { TOOL_NAMES } from './types.ts'
 
+const STATIC_REGEX_1 = /^\[(?:starting|retrying|cached)/
+const STATIC_REGEX_2 = /^\[([^:[\]]+)(?::\s(.+))?\]$/
+const STATIC_REGEX_3 = /skilld search\s+"([^"]+)"/
+
 interface ToolProgressLog {
   message: (msg: string) => void
 }
@@ -43,14 +47,14 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       return
 
     // Handle status messages like [starting...], [retrying...], [cached]
-    if (/^\[(?:starting|retrying|cached)/.test(chunk)) {
+    if (STATIC_REGEX_1.test(chunk)) {
       const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
       emit(`${prefix}${chunk.slice(1, -1)}`)
       return
     }
 
     // Parse individual tool names and hints from "[Read: path]" or "[Read, Glob: path1, path2]"
-    const match = chunk.match(/^\[([^:[\]]+)(?::\s(.+))?\]$/)
+    const match = chunk.match(STATIC_REGEX_2)
     if (!match)
       return
 
@@ -64,7 +68,7 @@ export function createToolProgress(log: ToolProgressLog): (progress: StreamProgr
       const prefix = section ? `\x1B[90m[${section}]\x1B[0m ` : ''
 
       if ((rawName === 'Bash' || rawName === 'run_shell_command') && hint) {
-        const searchMatch = hint.match(/skilld search\s+"([^"]+)"/)
+        const searchMatch = hint.match(STATIC_REGEX_3)
         if (searchMatch) {
           emit(`${prefix}Searching \x1B[36m"${searchMatch[1]}"\x1B[0m`)
         }

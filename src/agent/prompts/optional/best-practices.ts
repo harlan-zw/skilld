@@ -1,10 +1,13 @@
 import type { PromptSection, ReferenceWeight, SectionContext, SectionValidationWarning } from './types.ts'
+import { SEMVER_MAJOR_MINOR_RE } from '../../../core/regex.ts'
 import { resolveSkilldCommand } from '../../../core/skilld-command.ts'
 import { maxItems, maxLines, releaseBoost } from './budget.ts'
 import { checkAbsolutePaths, checkLineCount, checkSourceCoverage, checkSourcePaths, checkSparseness } from './validate.ts'
 
+const STATIC_REGEX_2 = /^## Best Practices/im
+
 export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles, features, enabledSectionCount, releaseCount, version, overheadLines }: SectionContext): PromptSection {
-  const [,, minor] = version?.match(/^(\d+)\.(\d+)/) ?? []
+  const [,, minor] = version?.match(SEMVER_MAJOR_MINOR_RE) ?? []
   // Dampened boost — best practices are less directly tied to releases than API changes
   const rawBoost = releaseBoost(releaseCount, minor ? Number(minor) : undefined)
   const boost = 1 + (rawBoost - 1) * 0.5
@@ -54,7 +57,7 @@ export function bestPracticesSection({ packageName, hasIssues, hasDiscussions, h
       if (bullets > 2 && codeBlocks / bullets > 0.5)
         warnings.push({ warning: `${Math.round(codeBlocks)}/${bullets} items have code blocks — prefer concise descriptions with source links` })
       // Heading required
-      if (!/^## Best Practices/im.test(content))
+      if (!STATIC_REGEX_2.test(content))
         warnings.push({ warning: 'Missing required "## Best Practices" heading' })
       return warnings
     },

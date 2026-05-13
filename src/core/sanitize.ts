@@ -1,3 +1,7 @@
+const STATIC_REGEX_1 = /^(`{3,}|~{3,})/
+const STATIC_REGEX_2 = /^(`{3,}|~{3,})\s*$/
+const STATIC_REGEX_3 = /^(`{3,}|~{3,})\S/
+
 /**
  * Markdown sanitizer for prompt injection defense.
  *
@@ -138,7 +142,7 @@ export function processOutsideCodeBlocks(content: string, fn: (text: string) => 
     const trimmed = line.trimStart()
 
     if (!inCodeBlock) {
-      const match = trimmed.match(/^(`{3,}|~{3,})/)
+      const match = trimmed.match(STATIC_REGEX_1)
       if (match) {
         flushNonCode()
         inCodeBlock = true
@@ -150,7 +154,7 @@ export function processOutsideCodeBlocks(content: string, fn: (text: string) => 
       nonCodeBuffer.push(line)
     }
     else {
-      const match = trimmed.match(/^(`{3,}|~{3,})\s*$/)
+      const match = trimmed.match(STATIC_REGEX_2)
       if (match && match[1]![0] === fenceChar && match[1]!.length >= fenceLen) {
         // Properly closed — emit code block as-is
         result.push(codeBuffer.join('\n'))
@@ -266,7 +270,7 @@ function closeUnclosedCodeBlocks(content: string): string {
   for (const line of lines) {
     const trimmed = line.trimStart()
     if (!inCodeBlock) {
-      const match = trimmed.match(/^(`{3,}|~{3,})/)
+      const match = trimmed.match(STATIC_REGEX_1)
       if (match) {
         inCodeBlock = true
         fence = match[1]![0]!.repeat(match[1]!.length)
@@ -274,7 +278,7 @@ function closeUnclosedCodeBlocks(content: string): string {
     }
     else {
       // Check for closing fence (same char, at least same length)
-      const match = trimmed.match(/^(`{3,}|~{3,})\s*$/)
+      const match = trimmed.match(STATIC_REGEX_2)
       if (match && match[1]![0] === fence[0] && match[1]!.length >= fence.length) {
         inCodeBlock = false
         fence = ''
@@ -282,7 +286,7 @@ function closeUnclosedCodeBlocks(content: string): string {
       else {
         // New fence opener inside unclosed block (same char, same length, with lang tag)
         // LLMs commonly forget to close a code block before starting a new one
-        const openMatch = trimmed.match(/^(`{3,}|~{3,})\S/)
+        const openMatch = trimmed.match(STATIC_REGEX_3)
         if (openMatch && openMatch[1]![0] === fence[0] && openMatch[1]!.length === fence.length) {
           result.push(fence)
           // fence char/length stays the same since both match
@@ -322,7 +326,7 @@ function cleanupCodeBlocks(content: string): string {
 
   while (i < lines.length) {
     const trimmed = lines[i]!.trimStart()
-    const fm = trimmed.match(/^(`{3,}|~{3,})/)
+    const fm = trimmed.match(STATIC_REGEX_1)
     if (!fm) {
       // Non-blank text between code blocks resets dedup tracking
       if (trimmed)
@@ -339,7 +343,7 @@ function cleanupCodeBlocks(content: string): string {
     let closeIdx = -1
     while (i < lines.length) {
       const ct = lines[i]!.trimStart()
-      const cm = ct.match(/^(`{3,}|~{3,})\s*$/)
+      const cm = ct.match(STATIC_REGEX_2)
       if (cm && cm[1]![0] === fChar && cm[1]!.length >= fLen) {
         closeIdx = i
         i++
@@ -383,7 +387,7 @@ function closeUnclosedInlineCode(content: string): string {
   return lines.map((line) => {
     const trimmed = line.trimStart()
     if (!inFence) {
-      const m = trimmed.match(/^(`{3,}|~{3,})/)
+      const m = trimmed.match(STATIC_REGEX_1)
       if (m) {
         inFence = true
         fenceChar = m[1]![0]!
@@ -392,7 +396,7 @@ function closeUnclosedInlineCode(content: string): string {
       }
     }
     else {
-      const m = trimmed.match(/^(`{3,}|~{3,})\s*$/)
+      const m = trimmed.match(STATIC_REGEX_2)
       if (m && m[1]![0] === fenceChar && m[1]!.length >= fenceLen) {
         inFence = false
       }

@@ -9,6 +9,7 @@ import type { ResolvedPackage } from './types.ts'
 import { spawnSync } from 'node:child_process'
 import { existsSync as fsExistsSync, readFileSync as fsReadFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { NPM_SCOPE_PREFIX_RE, NPM_SCOPE_WITH_SLASH_RE, V_PREFIX_RE } from '../core/regex.ts'
 import { parseGitHubUrl } from '../core/url.ts'
 import { getGitHubToken, ghApi, isKnownPrivateRepo, markRepoPrivate } from './github-common.ts'
 import { fetchGitDocs } from './github-docs.ts'
@@ -28,11 +29,11 @@ export { fetchGitDocs, filterFrameworkDocs, isShallowGitDocs, MIN_GIT_DOCS, vali
  */
 async function verifyNpmRepo(owner: string, repo: string, packageName: string): Promise<boolean> {
   const base = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD`
-  const shortName = packageName.replace(/^@.*\//, '')
+  const shortName = packageName.replace(NPM_SCOPE_WITH_SLASH_RE, '')
   const paths = [
     'package.json',
     `packages/${shortName}/package.json`,
-    `packages/${packageName.replace(/^@/, '').replace('/', '-')}/package.json`,
+    `packages/${packageName.replace(NPM_SCOPE_PREFIX_RE, '').replace('/', '-')}/package.json`,
   ]
   for (const path of paths) {
     const text = await fetchGitHubRaw(`${base}/${path}`)
@@ -50,8 +51,8 @@ async function verifyNpmRepo(owner: string, repo: string, packageName: string): 
 
 export async function searchGitHubRepo(packageName: string): Promise<string | null> {
   // Try ungh heuristic first — check if repo name matches package name
-  const shortName = packageName.replace(/^@.*\//, '')
-  for (const candidate of [packageName.replace(/^@/, '').replace('/', '/'), shortName]) {
+  const shortName = packageName.replace(NPM_SCOPE_WITH_SLASH_RE, '')
+  for (const candidate of [packageName.replace(NPM_SCOPE_PREFIX_RE, '').replace('/', '/'), shortName]) {
     if (!candidate.includes('/')) {
       const unghRes = await $fetch.raw(`https://ungh.cc/repos/${shortName}/${shortName}`).catch(() => null)
       if (unghRes?.ok)
@@ -64,7 +65,7 @@ export async function searchGitHubRepo(packageName: string): Promise<string | nu
   }
 
   // Try gh CLI — strip @ to avoid GitHub search syntax issues
-  const searchTerm = packageName.replace(/^@/, '')
+  const searchTerm = packageName.replace(NPM_SCOPE_PREFIX_RE, '')
   if (isGhAvailable()) {
     try {
       const { stdout: json } = spawnSync('gh', ['search', 'repos', searchTerm, '--json', 'fullName', '--limit', '5'], {
@@ -245,7 +246,7 @@ export async function resolveGitHubRepo(
   let releasedAt: string | undefined
   const latestRelease = releases[0]
   if (latestRelease) {
-    version = latestRelease.tag.replace(/^v/, '')
+    version = latestRelease.tag.replace(V_PREFIX_RE, '')
     releasedAt = latestRelease.publishedAt
   }
 

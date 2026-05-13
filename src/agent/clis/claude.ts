@@ -11,7 +11,10 @@ import type { CliAdapter, CliEvent } from './types.ts'
 import { buildModels } from './model-registry.ts'
 import { extractToolHint } from './types.ts'
 
-const stripClaude = (n: string): string => n.replace(/^Claude\s+/, '').replace(/\s*\(latest\)\s*$/i, '')
+const STATIC_REGEX_1 = /^Claude\s+/
+const STATIC_REGEX_2 = /\s*\(latest\)\s*$/i
+
+const stripClaude = (n: string): string => n.replace(STATIC_REGEX_1, '').replace(STATIC_REGEX_2, '')
 
 function buildArgs(model: string, skillDir: string, symlinkDirs: string[]): string[] {
   const allowedTools = [

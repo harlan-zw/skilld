@@ -7,6 +7,8 @@ import { spawnSync } from 'node:child_process'
 import { isWindows } from 'std-env'
 import { agents } from './targets/index.ts'
 
+const STATIC_REGEX_1 = /v?(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)/
+
 /**
  * Detect which agents are installed on the system
  */
@@ -73,7 +75,7 @@ export function getAgentVersion(agentType: AgentType): string | null {
 
     // Extract version number from output
     // Common formats: "v1.2.3", "1.2.3", "cli 1.2.3", "name v1.2.3"
-    const match = output.match(/v?(\d+\.\d+\.\d+(?:-[a-z0-9.]+)?)/)
+    const match = output.match(STATIC_REGEX_1)
     return match ? match[1]! : output.split('\n')[0]!
   }
   catch {

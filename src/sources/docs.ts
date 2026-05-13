@@ -4,6 +4,8 @@
 
 import { extractDescription, extractTitle } from '../core/markdown.ts'
 
+const STATIC_REGEX_1 = /\.md$/
+
 /**
  * Generate a _INDEX.md for a docs/ directory.
  * Input: array of cached docs with paths like `docs/api/reactivity.md`.
@@ -47,7 +49,7 @@ export function generateDocsIndex(docs: Array<{ path: string, content: string }>
   // Root-level files first (no directory header)
   for (const file of rootFiles) {
     const rel = file.path.slice('docs/'.length)
-    const title = extractTitle(file.content) || rel.replace(/\.md$/, '')
+    const title = extractTitle(file.content) || rel.replace(STATIC_REGEX_1, '')
     const desc = extractDescription(file.content)
     const descPart = desc ? `: ${desc}` : ''
     sections.push(`- [${title}](./${rel})${descPart}`)
@@ -61,7 +63,7 @@ export function generateDocsIndex(docs: Array<{ path: string, content: string }>
 
     for (const file of files) {
       const rel = file.path.slice('docs/'.length)
-      const title = extractTitle(file.content) || rel.replace(/\.md$/, '').split('/').pop()!
+      const title = extractTitle(file.content) || rel.replace(STATIC_REGEX_1, '').split('/').pop()!
       const desc = extractDescription(file.content)
       const descPart = desc ? `: ${desc}` : ''
       sections.push(`- [${title}](./${rel})${descPart}`)

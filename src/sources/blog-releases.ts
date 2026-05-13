@@ -11,6 +11,9 @@ import { getBlogPreset } from './package-registry.ts'
 import { compareSemver, parseSemver } from './releases.ts'
 import { $fetch } from './utils.ts'
 
+const STATIC_REGEX_1 = /<h1[^>]*>([^<]+)<\/h1>/
+const STATIC_REGEX_2 = /<title>([^<]+)<\/title>/
+
 export interface BlogReleasePost {
   version: string
   title: string
@@ -52,12 +55,12 @@ async function fetchBlogPost(entry: BlogRelease): Promise<BlogReleasePost | null
 
     // Extract title from <h1> or <title>, fallback to preset title
     let title = ''
-    const titleMatch = html.match(/<h1[^>]*>([^<]+)<\/h1>/)
+    const titleMatch = html.match(STATIC_REGEX_1)
     if (titleMatch)
       title = titleMatch[1]!.trim()
 
     if (!title) {
-      const metaTitleMatch = html.match(/<title>([^<]+)<\/title>/)
+      const metaTitleMatch = html.match(STATIC_REGEX_2)
       if (metaTitleMatch)
         title = metaTitleMatch[1]!.trim()
     }

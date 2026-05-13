@@ -1,3 +1,11 @@
+import { GIT_PLUS_PREFIX_RE, GIT_PROTOCOL_PREFIX_RE, GIT_SUFFIX_RE, GITHUB_SSH_URL_PREFIX_RE } from './regex.ts'
+
+const STATIC_REGEX_1 = /github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:[/#]|$)/
+const STATIC_REGEX_3 = /#.*$/
+const STATIC_REGEX_7 = /^git@github\.com:/
+const STATIC_REGEX_8 = /^(?:127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/
+const STATIC_REGEX_9 = /^\[(?:f[cd]|fe[89ab]|::ffff:)/i
+
 /**
  * Pure URL and package-spec parsers (no fetching, no I/O).
  *
@@ -9,7 +17,7 @@
  * Parse owner/repo from GitHub URL
  */
 export function parseGitHubUrl(url: string): { owner: string, repo: string } | null {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+?)(?:\.git)?(?:[/#]|$)/)
+  const match = url.match(STATIC_REGEX_1)
   if (!match)
     return null
   return { owner: match[1]!, repo: match[2]! }
@@ -50,13 +58,13 @@ export function parsePackageSpec(spec: string): { name: string, tag?: string } {
  */
 export function normalizeRepoUrl(url: string): string {
   return url
-    .replace(/^git\+/, '')
-    .replace(/#.*$/, '')
-    .replace(/\.git$/, '')
-    .replace(/^git:\/\//, 'https://')
-    .replace(/^ssh:\/\/git@github\.com/, 'https://github.com')
+    .replace(GIT_PLUS_PREFIX_RE, '')
+    .replace(STATIC_REGEX_3, '')
+    .replace(GIT_SUFFIX_RE, '')
+    .replace(GIT_PROTOCOL_PREFIX_RE, 'https://')
+    .replace(GITHUB_SSH_URL_PREFIX_RE, 'https://github.com')
     // SSH format: git@github.com:owner/repo
-    .replace(/^git@github\.com:/, 'https://github.com/')
+    .replace(STATIC_REGEX_7, 'https://github.com/')
 }
 
 /**
@@ -132,10 +140,10 @@ export function isSafeUrl(url: string): boolean {
     // Reject private/link-local/loopback
     if (host === 'localhost' || host === '0.0.0.0' || host === '[::1]')
       return false
-    if (/^(?:127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/.test(host))
+    if (STATIC_REGEX_8.test(host))
       return false
     // IPv6 private/link-local — hostname keeps brackets in Node.js
-    if (/^\[(?:f[cd]|fe[89ab]|::ffff:)/i.test(host))
+    if (STATIC_REGEX_9.test(host))
       return false
     return true
   }

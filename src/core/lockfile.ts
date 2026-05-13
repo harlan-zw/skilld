@@ -3,6 +3,8 @@ import { parseFrontmatter } from './markdown.ts'
 import { lockfilePath } from './paths.ts'
 import { yamlEscape, yamlParseKV } from './yaml.ts'
 
+const STATIC_REGEX_1 = /^ {2}(\S+):$/
+
 export interface SkillInfo {
   packageName?: string
   version?: string
@@ -88,7 +90,7 @@ export function readLock(skillsDir: string): SkilldLock | null {
   let currentSkill: string | null = null
 
   for (const line of content.split('\n')) {
-    const skillMatch = line.match(/^ {2}(\S+):$/)
+    const skillMatch = line.match(STATIC_REGEX_1)
     if (skillMatch) {
       currentSkill = skillMatch[1]!
       skills[currentSkill] = {}

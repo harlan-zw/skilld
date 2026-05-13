@@ -7,6 +7,7 @@ import * as p from '@clack/prompts'
 import { defineCommand } from 'citty'
 import { join, relative, resolve } from 'pathe'
 import {
+
   computeSkillDirName,
   getModelLabel,
   writeGeneratedSkillMd,
@@ -19,6 +20,7 @@ import { timedSpinner } from '../core/formatting.ts'
 import { detectMonorepoPackages } from '../core/monorepo.ts'
 import { appendToJsonArray, patchPackageJson, readPackageJsonSafe } from '../core/package-json.ts'
 import { skillInternalDir } from '../core/paths.ts'
+import { GIT_PLUS_PREFIX_RE, GIT_SUFFIX_RE, README_FILENAME_RE } from '../core/regex.ts'
 import { sanitizeMarkdown } from '../core/sanitize.ts'
 import { parseGitHubUrl } from '../core/url.ts'
 import {
@@ -34,6 +36,8 @@ import {
 import { selectLlmConfig } from './llm-prompts.ts'
 import { detectChangelog } from './sync/pipeline.ts'
 
+const STATIC_REGEX_1 = /\.mdx?$/
+
 // ── Docs resolution ──
 
 function walkMarkdownFiles(dir: string, base = ''): Array<{ path: string, content: string }> {
@@ -47,7 +51,7 @@ function walkMarkdownFiles(dir: string, base = ''): Array<{ path: string, conten
     if (entry.isDirectory()) {
       results.push(...walkMarkdownFiles(full, rel))
     }
-    else if (/\.mdx?$/.test(entry.name)) {
+    else if (STATIC_REGEX_1.test(entry.name)) {
       results.push({ path: rel, content: readFileSync(full, 'utf-8') })
     }
   }
@@ -115,7 +119,7 @@ function resolveLocalDocs(
 
   // 4. README.md (package dir, then monorepo root)
   for (const dir of [packageDir, monorepoRoot].filter(Boolean) as string[]) {
-    const readmeFile = readdirSync(dir).find(f => /^readme\.md$/i.test(f))
+    const readmeFile = readdirSync(dir).find(f => README_FILENAME_RE.test(f))
     if (readmeFile) {
       cachedDocs.push({ path: 'docs/README.md', content: sanitizeMarkdown(readFileSync(join(dir, readmeFile), 'utf-8')) })
       cache.write(cachedDocs)
@@ -430,7 +434,7 @@ async function authorCommand(opts: {
     const rootPkg = rootPkgResult?.parsed as Record<string, any> | undefined
     const rootRepoUrl = typeof rootPkg?.repository === 'string'
       ? rootPkg.repository
-      : rootPkg?.repository?.url?.replace(/^git\+/, '').replace(/\.git$/, '')
+      : rootPkg?.repository?.url?.replace(GIT_PLUS_PREFIX_RE, '').replace(GIT_SUFFIX_RE, '')
 
     const results: Array<{ name: string, outDir: string }> = []
 

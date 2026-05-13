@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 /**
  * Ultra-fast prepare entry point for package.json "prepare" hook.
  *
@@ -13,6 +14,8 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { readLock } from './core/lockfile.ts'
 import { getShippedSkills, linkShippedSkill, restorePkgSymlink } from './core/prepare.ts'
+
+const STATIC_REGEX_1 = /^agent:\s*(.+)/m
 
 // Duplicated from core/paths.ts: this entry point stays under 20 ms and avoids transitive deps.
 const SHARED_SKILLS_DIR = '.skills'
@@ -62,7 +65,7 @@ function findSkillsDir(cwd: string): string | null {
   const configPath = join(homedir(), '.skilld', 'config.yaml')
   if (existsSync(configPath)) {
     const content = readFileSync(configPath, 'utf-8')
-    const match = content.match(/^agent:\s*(.+)/m)
+    const match = content.match(STATIC_REGEX_1)
     if (match) {
       const dir = AGENT_DIR_MAP[match[1]!.trim()]
       if (dir)

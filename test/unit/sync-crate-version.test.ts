@@ -16,8 +16,8 @@ vi.mock('../../src/cache/index.ts', async (importOriginal) => {
   }
 })
 
-vi.mock('../../src/sources/resolver.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/sources/resolver')>()
+vi.mock('../../src/sources/resolver-registry.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/sources/resolver-registry')>()
   return {
     ...actual,
     resolvePackageDocsWithAttempts: vi.fn().mockResolvedValue({

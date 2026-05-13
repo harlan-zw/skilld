@@ -7,6 +7,7 @@ import { isInteractive } from '../../cli/env.ts'
 import { getInstalledGenerators, introLine } from '../../cli/intro.ts'
 import { readConfig } from '../../core/config.ts'
 import { resolveSkillName } from '../../core/prefix.ts'
+import { COMMA_OR_WHITESPACE_RE } from '../../core/regex.ts'
 import { getProjectState } from '../../core/skills.ts'
 import { syncCommand } from '../sync.ts'
 import { exportPortablePrompts } from './portable.ts'
@@ -55,7 +56,7 @@ export const updateCommandDef = defineCommand({
       const state = await getProjectState(cwd)
       const packages = args.package
         ? Array.from(
-            new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean)),
+            new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(COMMA_OR_WHITESPACE_RE)).map(s => s.trim()).filter(Boolean)),
             s => resolveSkillName(s),
           ).filter((s): s is string => s !== null)
         : state.outdated.map(s => s.packageName || s.name)
@@ -78,7 +79,7 @@ export const updateCommandDef = defineCommand({
     }
 
     if (args.package) {
-      const raw = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(/[,\s]+/)).map(s => s.trim()).filter(Boolean))]
+      const raw = [...new Set([args.package, ...((args as any)._ || [])].flatMap(s => s.split(COMMA_OR_WHITESPACE_RE)).map(s => s.trim()).filter(Boolean))]
       const packages: string[] = []
       for (const r of raw) {
         const name = resolveSkillName(r)

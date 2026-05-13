@@ -20,11 +20,14 @@ import { runWizard } from './commands/wizard.ts'
 import { timedSpinner } from './core/formatting.ts'
 import { getProjectState, hasCompletedWizard, isOutdated, readConfig, semverGt } from './core/index.ts'
 import { readPackageJsonSafe } from './core/package-json.ts'
+import { COMMA_OR_WHITESPACE_RE, VERSION_RANGE_PREFIX_RE } from './core/regex.ts'
 import { iterateSkills } from './core/skills.ts'
 import { fetchLatestVersion, fetchNpmRegistryMeta } from './sources/index.ts'
-import { brandLoader } from './ui.ts'
 
+import { brandLoader } from './ui.ts'
 import { version } from './version.ts'
+
+const STATIC_REGEX_3 = /^[\^~>=<]/
 
 // Suppress node:sqlite ExperimentalWarning (loaded lazily by retriv)
 const _emit = process.emit
@@ -254,7 +257,7 @@ const main = defineCommand({
         if (source === 'shipped') {
           const { handleShippedSkills: installShipped } = await import('./agent/skill-installer.ts')
           for (const pkg of state.shipped) {
-            const version = state.deps.get(pkg.packageName)?.replace(/^[\^~>=<]+/, '') || '0.0.0'
+            const version = state.deps.get(pkg.packageName)?.replace(VERSION_RANGE_PREFIX_RE, '') || '0.0.0'
             installShipped(pkg.packageName, version, cwd, agent, false)
             for (const sk of pkg.skills)
               p.log.success(`Installed shipped skill: ${sk.skillName}`)
@@ -282,7 +285,7 @@ const main = defineCommand({
             p.log.warn('No packages entered')
             continue
           }
-          selected = input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
+          selected = input.split(COMMA_OR_WHITESPACE_RE).map(s => s.trim()).filter(Boolean)
           if (selected.length === 0) {
             p.log.warn('No valid packages entered')
             continue
@@ -336,7 +339,7 @@ const main = defineCommand({
           const choice = await p.multiselect({
             message: `Select packages (${packages.length} found)`,
             options: packages.map((name) => {
-              const ver = state.deps.get(name)?.replace(/^[\^~>=<]/, '') || ''
+              const ver = state.deps.get(name)?.replace(STATIC_REGEX_3, '') || ''
               const repo = getRepoHint(name, cwd)
               const hint = sourceMap.get(name) === 'preset' ? 'nuxt module' : undefined
               const pad = ' '.repeat(maxLen - name.length + 2)
@@ -494,7 +497,7 @@ const main = defineCommand({
               if (seen.has(s.packageName))
                 continue
               seen.add(s.packageName)
-              const version = state.deps.get(s.packageName)?.replace(/^[\^~>=<]+/, '') || '0.0.0'
+              const version = state.deps.get(s.packageName)?.replace(VERSION_RANGE_PREFIX_RE, '') || '0.0.0'
               installShipped(s.packageName, version, cwd, agent, false)
             }
             p.log.success(`Installed ${selected.length} shipped skill${selected.length > 1 ? 's' : ''}`)
@@ -530,7 +533,7 @@ const main = defineCommand({
               }))
               if (!input)
                 return
-              selected = input.split(/[,\s]+/).map(s => s.trim()).filter(Boolean)
+              selected = input.split(COMMA_OR_WHITESPACE_RE).map(s => s.trim()).filter(Boolean)
               if (selected.length === 0)
                 return
             }
@@ -580,7 +583,7 @@ const main = defineCommand({
               const choice = guard(await p.multiselect({
                 message: `Select packages your agent struggles with or that are new to you (${packages.length} found)`,
                 options: packages.map((name) => {
-                  const ver = state.deps.get(name)?.replace(/^[\^~>=<]/, '') || ''
+                  const ver = state.deps.get(name)?.replace(STATIC_REGEX_3, '') || ''
                   const repo = getRepoHint(name, cwd)
                   const src = sourceMap.get(name)
                   const hint = src === 'preset'

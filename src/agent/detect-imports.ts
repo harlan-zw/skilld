@@ -1,12 +1,17 @@
 /**
  * Detect directly-used npm packages by scanning source files
- * Uses mlly for proper ES module parsing + tinyglobby for file discovery
  */
 
-import { readFile } from 'node:fs/promises'
-import { findDynamicImports, findStaticImports } from 'mlly'
-import { glob } from 'tinyglobby'
+import { glob, readFile } from 'node:fs/promises'
+import { join } from 'pathe'
 import { detectPresetPackages } from './detect-presets.ts'
+
+// Static: import x from '...' | export ... from '...'
+const FROM_STATIC_IMPORT_RE = /\bfrom\s*['"]([^'"\n]+)['"]/g
+// Side-effect: import '...'
+const SIDE_EFFECT_IMPORT_RE = /\bimport\s*['"]([^'"\n]+)['"]/g
+// Dynamic: import('...')
+const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*['"]([^'"\n]+)['"]\s*\)/g
 
 export interface PackageUsage {
   name: string
@@ -20,7 +25,7 @@ export interface DetectResult {
 }
 
 const PATTERNS = ['**/*.{ts,js,vue,mjs,cjs,tsx,jsx,mts,cts}']
-const IGNORE = ['**/node_modules/**', '**/dist/**', '**/.nuxt/**', '**/.output/**', '**/coverage/**']
+const IGNORE_DIRS = ['node_modules', 'dist', '.nuxt', '.output', 'coverage']
 
 function addPackage(counts: Map<string, number>, specifier: string | undefined) {
   if (!specifier || specifier.startsWith('.') || specifier.startsWith('/'))
@@ -44,28 +49,25 @@ export async function detectImportedPackages(cwd: string = process.cwd()): Promi
   try {
     const counts = new Map<string, number>()
 
-    const files = await glob(PATTERNS, {
+    const files: string[] = []
+    for await (const file of glob(PATTERNS, {
       cwd,
-      ignore: IGNORE,
-      absolute: true,
-      expandDirectories: false,
-    })
+      exclude: (p: string) => IGNORE_DIRS.some(dir => p === dir || p.endsWith(`/${dir}`)),
+    })) {
+      files.push(join(cwd, file))
+    }
 
     await Promise.all(files.map(async (file) => {
       const content = await readFile(file, 'utf8')
 
-      // Static: import x from 'pkg'
-      for (const imp of findStaticImports(content)) {
-        addPackage(counts, imp.specifier)
-      }
+      for (const m of content.matchAll(FROM_STATIC_IMPORT_RE))
+        addPackage(counts, m[1])
 
-      // Dynamic: import('pkg') - expression is the string literal
-      for (const imp of findDynamicImports(content)) {
-        // expression includes quotes, extract string value
-        const match = imp.expression.match(/^['"]([^'"]+)['"]$/)
-        if (match)
-          addPackage(counts, match[1]!)
-      }
+      for (const m of content.matchAll(SIDE_EFFECT_IMPORT_RE))
+        addPackage(counts, m[1])
+
+      for (const m of content.matchAll(DYNAMIC_IMPORT_RE))
+        addPackage(counts, m[1])
     }))
 
     // Sort by usage count (descending), then alphabetically

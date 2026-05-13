@@ -22,10 +22,6 @@ vi.mock('ofetch', () => ({
   ofetch: { create: () => createMockFetch() },
 }))
 
-vi.mock('mlly', () => ({
-  resolvePathSync: vi.fn(),
-}))
-
 vi.mock('node:fs', async () => {
   const actual = await vi.importActual<typeof import('node:fs')>('node:fs')
   return {
@@ -121,10 +117,8 @@ describe('version resolution stability gaps', () => {
 
   describe('parseVersionSpecifier - catalog/workspace fallback', () => {
     it('catalog: without node_modules falls back to wildcard', async () => {
-      const { resolvePathSync } = await import('mlly')
-      vi.mocked(resolvePathSync).mockImplementation(() => {
-        throw new Error('not found')
-      })
+      const { existsSync } = await import('node:fs')
+      vi.mocked(existsSync).mockReturnValue(false)
 
       const result = parseVersionSpecifier('some-pkg', 'catalog:deps', '/test')
 
@@ -133,35 +127,19 @@ describe('version resolution stability gaps', () => {
     })
 
     it('workspace: without node_modules falls back to wildcard', async () => {
-      const { resolvePathSync } = await import('mlly')
-      vi.mocked(resolvePathSync).mockImplementation(() => {
-        throw new Error('not found')
-      })
+      const { existsSync } = await import('node:fs')
+      vi.mocked(existsSync).mockReturnValue(false)
 
       const result = parseVersionSpecifier('some-pkg', 'workspace:*', '/test')
 
       expect(result).toEqual({ name: 'some-pkg', version: '*' })
     })
-
-    it('catalog: resolves from node_modules when available', async () => {
-      const { resolvePathSync } = await import('mlly')
-      const { existsSync, readFileSync } = await import('node:fs')
-      vi.mocked(resolvePathSync).mockReturnValue('/test/node_modules/some-pkg/package.json')
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: '2.1.0' }))
-
-      const result = parseVersionSpecifier('some-pkg', 'catalog:deps', '/test')
-
-      expect(result).toEqual({ name: 'some-pkg', version: '2.1.0' })
-    })
   })
 
   describe('resolveInstalledVersion - edge cases', () => {
     it('handles scoped packages correctly', async () => {
-      const { resolvePathSync } = await import('mlly')
       const { existsSync, readFileSync } = await import('node:fs')
-      vi.mocked(resolvePathSync).mockReturnValue('/test/node_modules/@vue/compiler-core/package.json')
-      vi.mocked(existsSync).mockReturnValue(true)
+      vi.mocked(existsSync).mockImplementation(p => String(p) === '/test/node_modules/@vue/compiler-core/package.json')
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ version: '3.4.0' }))
 
       const result = resolveInstalledVersion('@vue/compiler-core', '/test')
@@ -170,9 +148,8 @@ describe('version resolution stability gaps', () => {
     })
 
     it('handles package.json with no version field', async () => {
-      const { resolvePathSync } = await import('mlly')
-      const { readFileSync } = await import('node:fs')
-      vi.mocked(resolvePathSync).mockReturnValue('/test/node_modules/pkg/package.json')
+      const { existsSync, readFileSync } = await import('node:fs')
+      vi.mocked(existsSync).mockImplementation(p => String(p) === '/test/node_modules/pkg/package.json')
       vi.mocked(readFileSync).mockReturnValue(JSON.stringify({ name: 'pkg' }))
 
       const result = resolveInstalledVersion('pkg', '/test')

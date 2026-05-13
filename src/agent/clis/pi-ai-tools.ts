@@ -12,7 +12,13 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { join } from 'pathe'
 import { Type } from 'typebox'
+import { TRAILING_SLASH_RE } from '../../core/regex.ts'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
+
+const STATIC_REGEX_1 = /^\.\/\.skilld\//
+const STATIC_REGEX_2 = /^\.skilld\//
+const STATIC_REGEX_3 = /^\.\//
+const STATIC_REGEX_5 = /\s+/
 
 export const TOOLS = [
   {
@@ -50,7 +56,7 @@ const SHELL_META_RE = /[;&|`$()<>]/
 
 /** Resolve a path safely within skilldDir, blocking traversal. */
 function resolveSandboxedPath(p: string, skilldDir: string): string {
-  const cleaned = String(p).replace(/^\.\/\.skilld\//, './').replace(/^\.skilld\//, './').replace(/^\.\//, '')
+  const cleaned = String(p).replace(STATIC_REGEX_1, './').replace(STATIC_REGEX_2, './').replace(STATIC_REGEX_3, '')
   const resolved = resolve(skilldDir, cleaned)
   if (!resolved.startsWith(`${skilldDir}/`) && resolved !== skilldDir)
     throw new Error(`Path traversal blocked: ${p}`)
@@ -123,7 +129,7 @@ export function executeTool(toolCall: ToolCall, skilldDir: string): string {
       return sanitizeMarkdown(readFileSync(filePath, 'utf-8'))
     }
     case 'Glob': {
-      const pattern = String(args.pattern).replace(/^\.\/\.skilld\//, './').replace(/^\.skilld\//, './').replace(/^\.\//, '')
+      const pattern = String(args.pattern).replace(STATIC_REGEX_1, './').replace(STATIC_REGEX_2, './').replace(STATIC_REGEX_3, '')
       const results: string[] = []
       const walkDir = (dir: string, prefix: string) => {
         if (!existsSync(dir))
@@ -135,9 +141,9 @@ export function executeTool(toolCall: ToolCall, skilldDir: string): string {
           else results.push(`./.skilld/${relPath}`)
         }
       }
-      const baseDir = pattern.split('*')[0]?.replace(/\/$/, '') ?? ''
+      const baseDir = pattern.split('*')[0]?.replace(TRAILING_SLASH_RE, '') ?? ''
       walkDir(join(skilldDir, baseDir), baseDir)
-      const matched = results.filter(r => globMatch(r.replace(/^\.\/\.skilld\//, ''), pattern))
+      const matched = results.filter(r => globMatch(r.replace(STATIC_REGEX_1, ''), pattern))
       return matched.length > 0 ? matched.join('\n') : `No files matching: ${args.pattern}`
     }
     case 'Write': {
@@ -147,7 +153,7 @@ export function executeTool(toolCall: ToolCall, skilldDir: string): string {
     }
     case 'Bash': {
       const cmd = String(args.command).trim()
-      const parts = cmd.split(/\s+/)
+      const parts = cmd.split(STATIC_REGEX_5)
       const bin = parts[0] ?? ''
       if (!SAFE_COMMANDS.has(bin) || SHELL_META_RE.test(cmd))
         return `Error: command not allowed. Only skilld, ls, cat, find commands are permitted.`

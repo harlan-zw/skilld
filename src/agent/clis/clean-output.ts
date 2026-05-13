@@ -1,4 +1,13 @@
+import { API_CHANGE_BULLET_RE, SECTION_HEADING_RE, SOURCE_LINK_RE } from '../../core/regex.ts'
 import { sanitizeMarkdown } from '../../core/sanitize.ts'
+
+const STATIC_REGEX_1 = /^```(?:markdown|md)?[^\S\n]*\n([\s\S]+)\n```[^\S\n]*$/
+const STATIC_REGEX_2 = /^```(?:markdown|md)/
+const STATIC_REGEX_5 = /^-{3,}\n/
+const STATIC_REGEX_6 = /\n-{3,}/
+const STATIC_REGEX_7 = /^(##\s|- (?:BREAKING|DEPRECATED|NEW): )/m
+const STATIC_REGEX_8 = /^(## .+)\n/
+const STATIC_REGEX_9 = /^\.\/(?:\.skilld\/|references\/)/
 
 /** Clean a single section's LLM output: strip markdown fences, frontmatter, sanitize */
 export function cleanSectionOutput(content: string): string {
@@ -6,12 +15,12 @@ export function cleanSectionOutput(content: string): string {
 
   // Strip wrapping fences if output is wrapped in ```markdown, ```md, or bare ```
   // Requires matched open+close pair to avoid stripping internal code blocks
-  const wrapMatch = cleaned.match(/^```(?:markdown|md)?[^\S\n]*\n([\s\S]+)\n```[^\S\n]*$/)
+  const wrapMatch = cleaned.match(STATIC_REGEX_1)
   if (wrapMatch) {
     const inner = wrapMatch[1]!.trim()
     // For bare ``` wrappers (no markdown/md tag), verify inner looks like section output
-    const isExplicitWrapper = /^```(?:markdown|md)/.test(cleaned)
-    if (isExplicitWrapper || /^##\s/m.test(inner) || /^- (?:BREAKING|DEPRECATED|NEW): /m.test(inner)) {
+    const isExplicitWrapper = STATIC_REGEX_2.test(cleaned)
+    if (isExplicitWrapper || SECTION_HEADING_RE.test(inner) || API_CHANGE_BULLET_RE.test(inner)) {
       cleaned = inner
     }
   }
@@ -20,10 +29,10 @@ export function cleanSectionOutput(content: string): string {
   cleaned = cleaned.replace(/^# (?!#)/gm, '## ')
 
   // Strip accidental frontmatter or leading horizontal rules
-  const fmMatch = cleaned.match(/^-{3,}\n/)
+  const fmMatch = cleaned.match(STATIC_REGEX_5)
   if (fmMatch) {
     const afterOpen = fmMatch[0].length
-    const closeMatch = cleaned.slice(afterOpen).match(/\n-{3,}/)
+    const closeMatch = cleaned.slice(afterOpen).match(STATIC_REGEX_6)
     if (closeMatch) {
       cleaned = cleaned.slice(afterOpen + closeMatch.index! + closeMatch[0].length).trim()
     }
@@ -34,14 +43,14 @@ export function cleanSectionOutput(content: string): string {
 
   // Strip preamble before first section marker (LLM reasoning, fake tool calls, code dumps)
   // Section markers: ## heading, BREAKING/DEPRECATED/NEW labels
-  const firstMarker = cleaned.match(/^(##\s|- (?:BREAKING|DEPRECATED|NEW): )/m)
+  const firstMarker = cleaned.match(STATIC_REGEX_7)
   if (firstMarker?.index && firstMarker.index > 0) {
     cleaned = cleaned.slice(firstMarker.index).trim()
   }
 
   // Strip duplicate section headings (LLM echoing the format example before real content)
   // Handles headings separated by blank lines or boilerplate text
-  const headingMatch = cleaned.match(/^(## .+)\n/)
+  const headingMatch = cleaned.match(STATIC_REGEX_8)
   if (headingMatch) {
     const heading = headingMatch[1]!
     const afterFirst = headingMatch[0].length
@@ -60,7 +69,7 @@ export function cleanSectionOutput(content: string): string {
     /\(?\[`?\.\/(?:\.skilld\/|references\/)[^)\]]*\]\(([^)]+)\)\)?/g,
     (match, url: string) => {
       // Only normalize if the URL points to a reference path
-      if (/^\.\/(?:\.skilld\/|references\/)/.test(url))
+      if (STATIC_REGEX_9.test(url))
         return `[source](${url})`
       return match
     },
@@ -77,7 +86,7 @@ export function cleanSectionOutput(content: string): string {
 
   // Reject content that lacks any section structure — likely leaked LLM reasoning/narration
   // Valid sections contain headings (##), API change labels, or source-linked items
-  if (!/^##\s/m.test(cleaned) && !/^- (?:BREAKING|DEPRECATED|NEW): /m.test(cleaned) && !/\[source\]/.test(cleaned)) {
+  if (!SECTION_HEADING_RE.test(cleaned) && !API_CHANGE_BULLET_RE.test(cleaned) && !SOURCE_LINK_RE.test(cleaned)) {
     return ''
   }
 

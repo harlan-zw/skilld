@@ -10,6 +10,11 @@ import { resolveSkilldCommand } from '../../core/skilld-command.ts'
 import { getPackageRules } from '../../sources/package-registry.ts'
 import { getSectionModule, SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from './optional/registry.ts'
 
+const STATIC_REGEX_1 = /v\d+\.(\d+)\.(\d+)\.md$/
+const STATIC_REGEX_2 = /[^`]*\/\.skilld\//
+const STATIC_REGEX_3 = /\n## Output\n[\s\S]*$/
+const STATIC_REGEX_4 = /\n## Search\n[\s\S]*?(?=\n\n(?:\||## |<|\*\*))/
+
 export type { SkillSection } from './optional/registry.ts'
 export { SECTION_MERGE_ORDER, SECTION_OUTPUT_FILES } from './optional/registry.ts'
 
@@ -191,7 +196,7 @@ export function buildSectionPrompt(opts: BuildSkillPromptOptions & { section: Sk
   const releaseCount = opts.docFiles?.filter((f) => {
     if (!f.includes('/releases/'))
       return false
-    const m = f.match(/v\d+\.(\d+)\.(\d+)\.md$/)
+    const m = f.match(STATIC_REGEX_1)
     return m && (m[1] === '0' || m[2] === '0') // major (x.0.y) or minor (x.y.0)
   }).length
   const ctx: SectionContext = { packageName, version, hasIssues, hasDiscussions, hasReleases, hasChangelog, hasDocs, pkgFiles: opts.pkgFiles, features: opts.features, enabledSectionCount: opts.enabledSectionCount, releaseCount, overheadLines: opts.overheadLines }
@@ -268,17 +273,17 @@ export function portabilizePrompt(prompt: string, section?: SkillSection): strin
   let out = prompt
 
   // Rewrite absolute and relative .skilld/ paths → ./references/
-  out = out.replace(/`[^`]*\/\.skilld\//g, m => m.replace(/[^`]*\/\.skilld\//, './references/'))
+  out = out.replace(/`[^`]*\/\.skilld\//g, m => m.replace(STATIC_REGEX_2, './references/'))
   out = out.replace(/\(\.\/\.skilld\//g, '(./references/')
   out = out.replace(/`\.\/\.skilld\//g, '`./references/')
   out = out.replace(/\.skilld\//g, './references/')
 
   // Strip ## Output section entirely (Write tool, validate instructions)
-  out = out.replace(/\n## Output\n[\s\S]*$/, '')
+  out = out.replace(STATIC_REGEX_3, '')
 
   // Strip ## Search section (skilld search instructions)
   // Stop at table (|), next heading (##), XML tag (<), or **IMPORTANT
-  out = out.replace(/\n## Search\n[\s\S]*?(?=\n\n(?:\||## |<|\*\*))/, '')
+  out = out.replace(STATIC_REGEX_4, '')
 
   // Strip skilld search/validate references in rules
   out = out.replace(/^- .*`skilld search`.*$/gm, '')

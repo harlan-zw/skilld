@@ -43,6 +43,8 @@ import { resolvePackageDocs } from '../sources/index.ts'
 import { selectLlmConfig } from './llm-prompts.ts'
 import { buildSkillContext, fetchAndCacheResources, prepareSkillReferences } from './sync/pipeline.ts'
 
+const STATIC_REGEX_1 = /ungh:\/\/([^/]+)\/(.+)/
+
 export interface InstallOptions {
   global: boolean
   agent: AgentType
@@ -290,7 +292,7 @@ function copyFromExistingAgent(skillDir: string, name: string, allSkillsDirs: st
 /** Try to recover original package name from sanitized name + source */
 function unsanitizeName(sanitized: string, source?: string): string {
   if (source?.includes('ungh://')) {
-    const match = source.match(/ungh:\/\/([^/]+)\/(.+)/)
+    const match = source.match(STATIC_REGEX_1)
     if (match)
       return `@${match[1]}/${match[2]}`
   }

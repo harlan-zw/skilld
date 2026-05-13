@@ -6,6 +6,9 @@ import { spawnSync } from 'node:child_process'
 import { ofetch } from 'ofetch'
 import { yamlEscape } from '../core/yaml.ts'
 
+const STATIC_REGEX_1 = /```[\s\S]*?```/
+const STATIC_REGEX_2 = /`[^`]+`/
+
 export const BOT_USERS = new Set([
   'renovate[bot]',
   'dependabot[bot]',
@@ -32,7 +35,7 @@ export function buildFrontmatter(fields: Record<string, string | number | boolea
 
 /** Check if body contains a code block */
 export function hasCodeBlock(text: string): boolean {
-  return /```[\s\S]*?```/.test(text) || /`[^`]+`/.test(text)
+  return STATIC_REGEX_1.test(text) || STATIC_REGEX_2.test(text)
 }
 
 /** Noise patterns in comments — filter these out */

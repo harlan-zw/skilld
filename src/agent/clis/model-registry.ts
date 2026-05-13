@@ -10,13 +10,17 @@ import type { KnownProvider, Model } from '@mariozechner/pi-ai'
 import type { CliModelEntry } from './types.ts'
 import { getModels } from '@mariozechner/pi-ai'
 
+const STATIC_REGEX_1 = /-\d{8}$/
+const STATIC_REGEX_2 = /-\d{4}-\d{2}-\d{2}$/
+const STATIC_REGEX_3 = /-preview/
+
 /** Strip dated aliases (claude-opus-4-5-20251101) and preview tags. */
 function isStableId(id: string): boolean {
-  if (/-\d{8}$/.test(id))
+  if (STATIC_REGEX_1.test(id))
     return false
-  if (/-\d{4}-\d{2}-\d{2}$/.test(id))
+  if (STATIC_REGEX_2.test(id))
     return false
-  if (/-preview/.test(id))
+  if (STATIC_REGEX_3.test(id))
     return false
   return true
 }

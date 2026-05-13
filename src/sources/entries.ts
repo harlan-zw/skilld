@@ -3,8 +3,8 @@
  * Only types — source code is too verbose.
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { glob } from 'node:fs/promises'
 import { join } from 'pathe'
-import { glob } from 'tinyglobby'
 
 export interface EntryFile {
   path: string
@@ -49,17 +49,30 @@ export async function resolveEntryFiles(packageDir: string): Promise<EntryFile[]
   if (!existsSync(join(packageDir, 'package.json')))
     return []
 
-  const ignore = [
-    ...SKIP_DIRS.map(d => `**/${d}/**`),
-    ...SKIP_PATTERNS,
-  ]
+  const skipDirSet = new Set(SKIP_DIRS)
+  const isSkipPattern = (name: string): boolean =>
+    SKIP_PATTERNS.some((p) => {
+      const star = p.indexOf('*')
+      if (star === -1)
+        return name === p
+      const prefix = p.slice(0, star)
+      const suffix = p.slice(star + 1)
+      return name.startsWith(prefix) && name.endsWith(suffix)
+    })
 
-  const files = await glob(['**/*.d.{ts,mts,cts}'], {
+  const files: string[] = []
+  for await (const file of glob(['**/*.d.{ts,mts,cts}'], {
     cwd: packageDir,
-    ignore,
-    absolute: false,
-    expandDirectories: false,
-  })
+    exclude: (p: string) => {
+      const segs = p.split('/')
+      const last = segs[segs.length - 1]!
+      if (isSkipPattern(last))
+        return true
+      return segs.some(s => skipDirSet.has(s))
+    },
+  })) {
+    files.push(file)
+  }
 
   const entries: EntryFile[] = []
 

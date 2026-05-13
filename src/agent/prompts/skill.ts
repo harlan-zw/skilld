@@ -6,11 +6,14 @@ import type { FeaturesConfig } from '../../core/config.ts'
 import { writeFileSync } from 'node:fs'
 import { join } from 'pathe'
 import { todayIsoDate } from '../../core/formatting.ts'
+import { NPM_SCOPE_PREFIX_RE } from '../../core/regex.ts'
 import { repairMarkdown, sanitizeMarkdown } from '../../core/sanitize.ts'
 import { resolveSkilldCommand } from '../../core/skilld-command.ts'
 import { yamlEscape } from '../../core/yaml.ts'
 import { getFilePatterns } from '../../sources/package-registry.ts'
 import { computeSkillDirName } from '../install.ts'
+
+const STATIC_REGEX_2 = /\.?\s*$/
 
 export interface SkillOptions {
   name: string
@@ -140,14 +143,14 @@ function generatePackageHeader({ name, version, distTags, repoUrl, hasIssues, ha
 function expandPackageName(name: string): string[] {
   const variants = new Set<string>()
   // Strip scope for matching: @nuxt/ui → nuxt/ui → nuxt ui
-  const unscoped = name.replace(/^@/, '')
+  const unscoped = name.replace(NPM_SCOPE_PREFIX_RE, '')
   if (unscoped !== name) {
     variants.add(unscoped) // nuxt/ui
     variants.add(unscoped.replace(/\//g, ' ')) // nuxt ui
   }
   // Hyphen → space: vue-router → vue router
   if (name.includes('-')) {
-    const spaced = name.replace(/^@/, '').replace(/\//g, ' ').replace(/-/g, ' ')
+    const spaced = name.replace(NPM_SCOPE_PREFIX_RE, '').replace(/\//g, ' ').replace(/-/g, ' ')
     variants.add(spaced)
   }
   // Remove the original name itself from variants (it's already in the description)
@@ -183,7 +186,7 @@ function generateFrontmatter({ name, version, description: pkgDescription, globs
 
   // Strip angle brackets from npm description (forbidden in frontmatter per Agent Skills spec)
   // Cap at 200 chars so the npm description doesn't crowd out our triggering prompt
-  const rawDesc = pkgDescription?.replace(/[<>]/g, '').replace(/\.?\s*$/, '')
+  const rawDesc = pkgDescription?.replace(/[<>]/g, '').replace(STATIC_REGEX_2, '')
   const cleanDesc = rawDesc && rawDesc.length > 200 ? `${rawDesc.slice(0, 197)}...` : rawDesc
 
   const editHint = globHint

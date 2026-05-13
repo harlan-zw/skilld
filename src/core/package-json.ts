@@ -51,6 +51,13 @@ export function invalidatePackageJson(pkgPath: string): void {
   cache.delete(pkgPath)
 }
 
+/**
+ * Drop all cached entries. Useful for tests.
+ */
+export function clearPackageJsonCache(): void {
+  cache.clear()
+}
+
 // ── JSON editing helpers ───────────────────────────────────────
 
 /**

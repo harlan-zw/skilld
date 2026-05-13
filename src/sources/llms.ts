@@ -5,8 +5,12 @@
 import type { FetchedDoc, LlmsContent, LlmsLink } from './types.ts'
 import pLimit from 'p-limit'
 import { extractLinks } from '../core/markdown.ts'
+import { TRAILING_SLASH_RE } from '../core/regex.ts'
 import { isSafeUrl } from '../core/url.ts'
 import { fetchText, verifyUrl } from './utils.ts'
+
+const STATIC_REGEX_2 = /\n---\n/
+const STATIC_REGEX_3 = /^url: *(\S.*)$/m
 
 /**
  * Check for llms.txt at a docs URL, returns the llms.txt URL if found
@@ -52,7 +56,7 @@ export async function downloadLlmsDocs(
     llmsContent.links.map(link => limit(async () => {
       const url = link.url.startsWith('http')
         ? link.url
-        : `${baseUrl.replace(/\/$/, '')}${link.url.startsWith('/') ? '' : '/'}${link.url}`
+        : `${baseUrl.replace(TRAILING_SLASH_RE, '')}${link.url.startsWith('/') ? '' : '/'}${link.url}`
 
       if (!isSafeUrl(url))
         return null
@@ -80,7 +84,7 @@ export function normalizeLlmsLinks(content: string, baseUrl?: string): string {
 
   // Handle absolute URLs: https://example.com/docs/foo.md → ./docs/foo.md
   if (baseUrl) {
-    const base = baseUrl.replace(/\/$/, '')
+    const base = baseUrl.replace(TRAILING_SLASH_RE, '')
     const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     normalized = normalized.replace(
       new RegExp(`\\]\\(${escaped}(/[^)]+\\.md)\\)`, 'g'),
@@ -100,10 +104,10 @@ export function normalizeLlmsLinks(content: string, baseUrl?: string): string {
  */
 export function extractSections(content: string, patterns: string[]): string | null {
   const sections: string[] = []
-  const parts = content.split(/\n---\n/)
+  const parts = content.split(STATIC_REGEX_2)
 
   for (const part of parts) {
-    const urlMatch = part.match(/^url: *(\S.*)$/m)
+    const urlMatch = part.match(STATIC_REGEX_3)
     if (!urlMatch)
       continue
 

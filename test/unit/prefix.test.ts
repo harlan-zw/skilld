@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseSkillInput, parseSkillInputs, resolveSkillName } from '../../src/core/prefix'
+import { parseSkillInput, resolveSkillName } from '../../src/core/prefix'
 
 describe('prefix parser', () => {
   describe('npm: prefix', () => {
@@ -144,13 +144,6 @@ describe('prefix parser', () => {
     it('detects local paths as git', () => {
       const result = parseSkillInput('./my-skills')
       expect(result.type).toBe('git')
-    })
-  })
-
-  describe('parseSkillInputs (batch)', () => {
-    it('classifies mixed inputs', () => {
-      const results = parseSkillInputs(['npm:vue', 'gh:owner/repo', '@antfu', 'nuxt'])
-      expect(results.map(r => r.type)).toEqual(['npm', 'git', 'curator', 'bare'])
     })
   })
 

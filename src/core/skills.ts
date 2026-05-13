@@ -8,6 +8,7 @@ import { readLocalDependencies } from '../sources/index.ts'
 import { parsePackages, parseSkillFrontmatter, readLock } from './lockfile.ts'
 import { getSharedSkillsDir, LOCK_FILENAME, skillInternalFile } from './paths.ts'
 import { getShippedSkills } from './prepare.ts'
+import { NPM_SCOPE_PREFIX_RE, VERSION_RANGE_PREFIX_RE } from './regex.ts'
 import { semverGt, semverValid } from './semver.ts'
 
 export interface SkillEntry {
@@ -127,7 +128,7 @@ export function isOutdated(skill: SkillEntry, depVersion: string): boolean {
   if (!skill.info?.version)
     return true
 
-  const depClean = depVersion.replace(/^[\^~>=<]+/, '')
+  const depClean = depVersion.replace(VERSION_RANGE_PREFIX_RE, '')
 
   // Non-semver versions (e.g. '*' from catalog:/workspace: specifiers) can't be compared
   if (!semverValid(depClean))
@@ -173,7 +174,7 @@ export async function getProjectState(cwd: string = process.cwd()): Promise<Proj
 
   for (const [pkgName, version] of deps) {
     // Normalize package name (e.g., @scope/pkg -> scope-pkg)
-    const normalizedName = pkgName.replace(/^@/, '').replace(/\//g, '-')
+    const normalizedName = pkgName.replace(NPM_SCOPE_PREFIX_RE, '').replace(/\//g, '-')
     // Prefer packageName-based lookup (handles duplicates correctly), fall back to name-based
     const skill = skillByPkgName.get(pkgName) || skillByName.get(`${normalizedName}-skilld`) || skillByName.get(normalizedName) || skillByName.get(pkgName)
 
