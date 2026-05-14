@@ -43,6 +43,7 @@ catalogs:
     obuild: ^0.4.35
   dev-lint:
     '@antfu/eslint-config': ^9.0.0
+    eslint: ^9.39.2
   dev-test:
     '@vitest/coverage-v8': ^4.1.6
     vitest: ^4.1.6

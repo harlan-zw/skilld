@@ -52,6 +52,7 @@
     "@antfu/eslint-config": "catalog:dev-lint",
     "@arethetypeswrong/cli": "catalog:",
     "@types/node": "catalog:dev-build",
+    "eslint": "catalog:dev-lint",
     "obuild": "catalog:dev-build",
     "publint": "catalog:",
     "typescript": "catalog:",

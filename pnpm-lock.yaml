@@ -102,6 +102,9 @@ catalogs:
     '@antfu/eslint-config':
       specifier: ^9.0.0
       version: 9.0.0
+    eslint:
+      specifier: ^9.39.2
+      version: 9.39.2
   dev-test:
     '@vitest/coverage-v8':
       specifier: ^4.1.6
@@ -202,6 +205,9 @@ importers:
       bumpp:
         specifier: 'catalog:'
         version: 11.1.0
+      eslint:
+        specifier: catalog:dev-lint
+        version: 9.39.2(jiti@2.6.1)
       obuild:
         specifier: catalog:dev-build
         version: 0.4.35(chokidar@5.0.0)(dotenv@17.3.1)(giget@3.2.0)(jiti@2.6.1)(magicast@0.5.2)(typescript@6.0.3)
@@ -231,6 +237,9 @@ importers:
       '@types/node':
         specifier: catalog:dev-build
         version: 25.7.0
+      eslint:
+        specifier: catalog:dev-lint
+        version: 9.39.2(jiti@2.6.1)
       obuild:
         specifier: catalog:dev-build
         version: 0.4.35(chokidar@5.0.0)(dotenv@17.3.1)(giget@3.2.0)(jiti@2.6.1)(magicast@0.5.2)(typescript@6.0.3)
